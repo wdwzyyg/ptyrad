@@ -1,0 +1,3 @@
+# Directories that don't need to backup
+data/
+output/
