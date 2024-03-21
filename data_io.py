@@ -240,3 +240,20 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me = True, simpl
     except Exception as e:
         print(f"Error processing file {file_path}: {str(e)}")
         return [None] * len(target_fields)
+
+# This is quite similar to `load_hdf5` and might be combined in the future
+# While `load_hdf5` is designed to read dataset as numpy array, 
+# `read_matv7_3` is intended to read the .mat file as a dict.
+def read_matv7_3(file_path, target_field):
+    try:
+        with h5py.File(file_path, 'r') as file:
+            # Accessing the target field and assigning it to a variable
+            if target_field in file:
+                target_data = file[target_field][()]
+                return target_data
+            else:
+                print(f"Error: Target field '{target_field}' not found in the file.")
+
+    except IOError:
+        print("Error: File not found or could not be opened.")
+        return None
