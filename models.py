@@ -5,7 +5,7 @@ from utils import cplx_from_np, prepare_stack_transform, imshift_batch
 import torch
 from torchvision.transforms import v2
 
-# This is a current working version (2024.03.20) implementation of the PtychoAD class
+# This is a current working version (2024.03.21) implementation of the PtychoAD class
 # It applies the sub-px shift using a Fourier shift theorem approach for the probes.
 # Complex probe is naturally supported and the phase is smoothly rolled without issue.
 # This implementation also pre-calculates the grid, and simultaneously process all the probe shifts in a single batch.
@@ -22,7 +22,7 @@ class PtychoAD(torch.nn.Module):
             self.shift_probes = (lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
             
             Ny, Nx = init_probe.shape[-2:]
-            ry, rx = torch.meshgrid(torch.arange(Ny, device=device), torch.arange(Nx, device=device), indexing='ij')
+            ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
             self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0)
             # Create the grid for obj_ROI in a vectorized approach
             # ry is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
@@ -31,11 +31,11 @@ class PtychoAD(torch.nn.Module):
                                              rx[None,:,:] + torch.tensor(init_crop_pos[:, None, None, 1], device=device)], dim=-1)
                         
             # Create a dictionary to store the optimizable tensors
-            self.optimizable_tensors = {
+            self.optimizable_tensors = torch.nn.ParameterDict({
                 'obj': self.opt_obj,
                 'probe': self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts
-            }
+            })
 
             self.optimizer_params = []
             if lr_params:
@@ -50,7 +50,7 @@ class PtychoAD(torch.nn.Module):
             print('PtychoAD major variables:')
             for name, tensor in self.optimizable_tensors.items():
                 print(f"{name}: {tensor.shape}, {tensor.dtype}, device:{tensor.device}, grad:{tensor.requires_grad}, lr:{lr_params[name]:.0e}")
-            
+       
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """
         # It's strongly recommended to do integer version of get_obj_ROI
@@ -70,7 +70,6 @@ class PtychoAD(torch.nn.Module):
             probes = imshift_batch(self.opt_probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
         else:
             probes = self.opt_probe[None,...] # Extend a singleton N dimension, essentially using same probe for all samples
-        
         return probes
         
     def forward(self, indices):
@@ -80,7 +79,6 @@ class PtychoAD(torch.nn.Module):
         object_patches = self.get_obj_ROI(indices)
         probes = self.get_probes(indices)
         dp_fwd = multislice_forward_model_batch_all(object_patches, probes, self.H)
-        
         return dp_fwd
 
 # This is a temporary archive version (2024.03.20) implementation of the PtychoAD class
