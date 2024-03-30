@@ -51,6 +51,7 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H):
     # |psi_k|^2 = psi_k.abs().square()
     # weighted_psi_k = |psi_k|^2 * omode_occu
     # dp_fwd = sum(weighted_psi_k)
+    # Note that norm = 'ortho' is needed to ensure the for each sample, sum(|psi|^2) and sum(dp) has the same scale (should be 1) 
     
-    dp_fwd = torch.sum(torch.square(torch.abs(fftshift(fft2(psi, dim=(-2, -1)), dim=(-2, -1)))) * omode_occu[:,None,None], dim=(1, 2))
+    dp_fwd = torch.sum(torch.square(torch.abs(fftshift(fft2(psi, dim=(-2, -1), norm='ortho'), dim=(-2, -1)))) * omode_occu[:,None,None], dim=(1, 2))
     return dp_fwd

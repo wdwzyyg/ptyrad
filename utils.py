@@ -1,5 +1,6 @@
 import torch
 import warnings
+import numpy as np
 from torch.fft import fft2, ifft2, ifftshift, fftshift
 
 
@@ -203,6 +204,35 @@ def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
 
 ###################################### ARCHIVE ##################################################
 
+def Fresnel_propagator(probe, z_distances, lambd, extent):
+    # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more
+    
+    # Example usage
+    # dfs = np.linspace(0,200,100)
+    # prop_probes = Fresnel_propagator(probe_data, dfs, lambd, extent)
+    # print(f"probe_data.shape = {probe_data.shape}, prop_probes.shape = {prop_probes.shape}")
+    # print(f"sum(abs(probe)**2) = {np.sum(np.abs(probe_data)**2)}, \nsum(abs(prop_probes)**2) = {np.sum(np.abs(prop_probes)**2, axis=(-3,-2,-1))}")
+    
+    
+    # dfs = [-3,-2,-1,0]
+    # prop_probes = Fresnel_propagator(probe_data, dfs, lambd, extent)
+    # print(f"probe_data.shape = {probe_data.shape}, prop_probes.shape = {prop_probes.shape}")
+    # print(f"sum(abs(probe)**2) = {np.sum(np.abs(probe_data)**2)}, \nsum(abs(prop_probes)**2) = {np.sum(np.abs(prop_probes)**2, axis=(-3,-2,-1))}")
+
+    # plt.figure()
+    # plt.title("probe int x-z")
+    # plt.imshow(np.abs(prop_probes[:,0,prop_probes.shape[-2]//2,:])**2, aspect=10)
+    # plt.yticks(np.arange(0, prop_probes.shape[0]), dfs)
+    # plt.ylabel('Ang along z')
+    # plt.colorbar()
+    # plt.show()
+    
+    prop_probes = np.zeros((len(z_distances), *probe.shape)).astype(probe.dtype)
+    for i, z_distance in enumerate(z_distances):
+        _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np')
+        prop_probes[i] = np.fft.ifft2(H * np.fft.fft2(probe, axes=(-2, -1)), axes=(-2, -1))
+    
+    return prop_probes
 
 def prepare_stack_transform(pos, imgshape):
     """ Generating a stack of 3D affine transformaitons """
