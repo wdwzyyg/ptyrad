@@ -1,7 +1,19 @@
 import torch
 import warnings
 import numpy as np
+from time import time
 from torch.fft import fft2, ifft2, ifftshift, fftshift
+
+
+def time_sync():
+    torch.cuda.synchronize()
+    t = time()
+    return t
+    
+def make_batches(N_scans, num_batch):
+    shuffled_indices = np.random.choice(N_scans, size=N_scans, replace=False) # Creates a shuffled 1D array of indices
+    batches = np.array_split(shuffled_indices, num_batch)                     # return a list of `num_batch` arrays, or [batch0, batch1, ...]
+    return batches
 
 
 def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='np'):
@@ -122,7 +134,7 @@ def imshift_batch(img, shifts, grid):
     
     return shifted_img
 
-def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=False, use_np_or_cp='np'):
+def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_or_cp='np'):
 #  FUNCTION  [u_1, H, h, dH] = near_field_evolution(u_0, z, lambda, extent, use_ASM_only)
 #  Description: nearfield evolution function, it automatically switch
 #  between ASM and Fraunhofer propagation 
@@ -201,6 +213,37 @@ def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
         warnings.warn("cplx_type {} not implemented. Defaulting to 'amp_phase'.".format(cplx_type))
         return torch.stack([torch.from_numpy(a).abs(), torch.from_numpy(a).angle()], ndim)
 
+def test_loss_fn(model, indices, loss_fn):
+    """ Print loss values for each term for convenient weight tuning """
+    # model: PtychoAD model
+    # indices: array-like indices indicating which probe position to evaluate
+    # measurements: 4D-STEM data that's already passed to DEVICE
+    # loss_fn: loss function object created from CombinedLoss
+    
+    with torch.no_grad():
+        model_CBEDs, objp_patches = model(indices)
+        measured_CBEDs = model.get_measurements(indices)
+        _, losses = loss_fn(model_CBEDs, measured_CBEDs, objp_patches, model.omode_occu)
+
+        # Print loss_name and loss_value with padding
+        for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
+            print(f"{loss_name.ljust(11)}: {loss_value.detach().cpu().numpy():.8f}")
+    return
+
+def kv2wavelength(acceleration_voltage):
+    # Physical Constants
+    PLANCKS = 6.62607015E-34 # m^2*kg / s
+    REST_MASS_E = 9.1093837015E-31 # kg
+    CHARGE_E = 1.602176634E-19 # coulomb 
+    SPEED_OF_LIGHT = 299792458 # m/s
+
+    # Useful constants in EM unit 
+    hc = PLANCKS * SPEED_OF_LIGHT / CHARGE_E*1E-3*1E10 # 12.398 keV-Ang, h*c
+    REST_ENERGY_E = REST_MASS_E*SPEED_OF_LIGHT**2/CHARGE_E*1E-3 # 511 keV, m0c^2
+    
+    wavelength = hc/np.sqrt((2*REST_ENERGY_E + acceleration_voltage)*acceleration_voltage) # Angstrom, lambda = hc/sqrt((2*m0c^2 + e*V)*e*V))
+
+    return wavelength
 
 ###################################### ARCHIVE ##################################################
 
@@ -234,19 +277,3 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
     
     return prop_probes
 
-def prepare_stack_transform(pos, imgshape):
-    """ Generating a stack of 3D affine transformaitons """
-    # Useful info: https://www.brainvoyager.com/bv/doc/UsersGuide/CoordsAndTransforms/SpatialTransformationMatrices.html
-
-    # Each affine transform corresponds to an input probe position
-    # M is a stack that contains all (N, 3, 4) transformations, while N corresponds to omode
-    # M_stack.shape (len(pos), N, 3, 4)
-
-    M_stack = torch.zeros(len(pos), imgshape[0], 3, 4)
-    
-    for ii, (cy, cx) in enumerate(pos): # Note that there's no cz because we don't need translation in z 
-        # The affine transformation Mn is constructed as x,y,z or (W, H, D)
-        Mn = torch.tensor([[1., 0, 0, cx*2/imgshape[-1]], [0, 1., 0, cy*2/imgshape[-2]], [0, 0, 1., 0], [0, 0, 0, 1.]]) # Note that normalization is needed
-        Mn = Mn[:3] # Only the first 3 rows of the 4x4 affine transformation is needed
-        M_stack[ii] = Mn.unsqueeze(0)
-    return M_stack

@@ -1,9 +1,12 @@
-## Defining the loss function class, with loss and regularizations
+## Define the loss function class with loss and regularizations
+## Define the optimization loop related functions
 
+from utils import time_sync
+import numpy as np
 from torchmetrics.image import TotalVariation
 import torch
 
-# This is a current working version (2024.03.23) of the CombinedLoss class
+# This is a current working version (2024.04.02) of the CombinedLoss class
 # I cleaned up the archived versions and slightly renamed the objects and variables for clarity
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
@@ -104,3 +107,87 @@ class CombinedLoss(torch.nn.Module):
         
         total_loss = sum(losses)
         return total_loss, losses
+    
+def batch_update(batch, model, optimizer, loss_fn):
+    start_batch_t = time_sync()
+    optimizer.zero_grad()
+    model_CBEDs, objp_patches = model(batch)
+    measured_CBEDs = model.get_measurements(batch)
+    loss_batch, losses = loss_fn(model_CBEDs, measured_CBEDs, objp_patches, model.omode_occu)
+    loss_batch.backward()
+    optimizer.step() # batch update
+    batch_t = time_sync() - start_batch_t
+    return losses, batch_t
+
+def ptycho_recon(batches, model, optimizer, loss_fn):
+    batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
+    start_iter_t = time_sync()
+    for batch_idx, batch in enumerate(batches):
+        losses, batch_t = batch_update(batch, model, optimizer, loss_fn)
+
+        for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
+            batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
+
+        if batch_idx in np.linspace(0, len(batches) - 1, num=6, dtype=int):
+            print(f"Done batch {batch_idx} in {batch_t:.3f} sec")
+            
+    iter_t = time_sync() - start_iter_t
+    return batch_losses, iter_t
+
+def loss_logger(batch_losses, iter, iter_t):
+    avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
+    loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
+    print(f"Iter: {iter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
+          f"in {iter_t // 60} min {iter_t % 60:03f} sec")
+    loss_iter = sum(avg_losses.values())
+    return loss_iter    
+
+# Although I implemented this to be consistent with PtychoShelves, looks like it could introduce some probe artifact such that the intensity is spread all over the place
+# Would need more check.
+
+def orthogonalize_modes(modes):
+    ''' orthogonalize the modes using SVD'''
+    # Input:
+    #   modes: input function with multiple modes
+    # Output:
+    #   ortho_modes: 
+    # Note:
+    #   This function is a highly vectorized PyTorch implementation of `ptycho\+core\probe_modes_ortho.m` from PtychoShelves
+    #   Most indexings arr converted from Matlab (start from 1) to Python (start from 0)
+    #   The expected shape of `modes` input is modified into (pmode, Ny, Nx) to be consistent with ptyrad
+    #   If you check the orthoganality of each mode, make sure to change the input into complex128 or to modify the default tolerance of torch.allclose.
+    #   Lastly, this operation could probably be so much faster with some proper vectorization
+    
+    # # Execute iter-wise constraints
+    # if model.opt_probe.size(0) >1 and model.optimizable_tensors['probe'].requires_grad:
+    #     with torch.no_grad():
+    #         print("Orthogonalizing probe modes")
+    #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
+    
+    # # Calculate the dot product between each pair of orthogonalized modes
+    # probe_ortho = orthogonalize_modes(probes)
+    # for i in range(probe_ortho.shape[0]):
+    #     for j in range(i + 1, probe_ortho.shape[0]):
+    #         dot_product = torch.dot(probe_ortho[i].view(-1), probe_ortho[j].view(-1))
+    #         print(dot_product)
+    #         if torch.allclose(dot_product, torch.tensor(0., dtype=dot_product.dtype, device=dot_product.device), atol=2e-5):
+    #             print(f"Modes {i} and {j} are orthogonal")
+    #         else:
+    #             print(f"Modes {i} and {j} are not orthogonal")
+
+    (N,Y,X) = modes.shape
+    modes_reshaped = modes.view(N, -1) # Reshape modes to have a shape of (Nmode, X*Y)
+    A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
+    
+    evals, evecs = torch.linalg.eig(A)
+
+    # sort modes by their contribution
+    evals_abs = torch.abs(evals)
+    _, indices = torch.sort(evals_abs, descending=True)
+    evecs = evecs[:, indices]
+
+    # Vectorized sum of the modes
+    ortho_modes_reshaped = modes_reshaped[:,None,:] * evecs[:, :, None] # modes_reshaped[:,None,:] = (N,1,YX), evecs[:, :, None] = (N,N,1)
+    ortho_modes = torch.sum(ortho_modes_reshaped.view(N,N,Y,X), dim=0) # Reshape ortho_modes_reshaped from (N,N,YX) to (N, N, Y, X), and sum along the first dimension to get the final orthogonalized modes
+    
+    return ortho_modes

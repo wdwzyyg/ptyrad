@@ -4,7 +4,7 @@ from forward import  multislice_forward_model_vec_all
 from utils import imshift_batch
 import torch
 
-# This is a current working version (2024.03.23) of the PtychoAD class
+# This is a current working version (2024.04.02) of the PtychoAD class
 # I cleaned up the archived versiosn and slightly renamed the objects and variables for clarity
 
 # set_optimizer function is called at the end of the initializaiton, while this can also be called if you want to update the optimizer params without initializing the object
@@ -19,10 +19,10 @@ import torch
 
 class PtychoAD(torch.nn.Module):
     """ Main optimization class for the ptycho reconstruction using AD """
-    # Including initialization, get_obj_ROI, get_probes, and forward methods
+    # Including initialization, set_optimizer, get_obj_ROI, get_probes, and forward methods
     
     # Example usage:
-    # model = PtychoAD(init_obj, init_omode_occu, init_probe, init_crop_pos, init_probe_pos_shifts, H, 
+    # model = PtychoAD(init_variables, 
     #                  lr_params={'obja': 0,
     #                             'objp': 3e-4,
     #                             'probe': 1e-5, 
@@ -30,26 +30,29 @@ class PtychoAD(torch.nn.Module):
     #                  device=DEVICE)
     # optimizer = torch.optim.Adam(model.optimizer_params)
 
-    def __init__(self, init_obj, init_omode_occu, init_probe, init_crop_pos, init_probe_pos_shifts, H, lr_params=None, device='cuda:0'):
+    def __init__(self, init_variables, lr_params=None, device='cuda:0'):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device = device
-            self.opt_obja  = torch.abs(torch.tensor(init_obj, dtype=torch.complex64, device=device))
-            self.opt_objp  = torch.angle(torch.tensor(init_obj, dtype=torch.complex64, device=device))
-            self.opt_probe = torch.tensor(init_probe, dtype=torch.complex64, device=device)  
-            self.opt_probe_pos_shifts = torch.tensor(init_probe_pos_shifts, device=device)
-            self.omode_occu = torch.tensor(init_omode_occu, dtype=torch.float32, device=device) 
-            self.H = torch.tensor(H, dtype=torch.complex64, device=device)
-            self.shift_probes = (lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
+            self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
+            self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
+            self.opt_probe              = torch.tensor(init_variables['probe'], dtype=torch.complex64, device=device)  
             
-            Ny, Nx = init_probe.shape[-2:]
+            self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'], device=device)
+            self.omode_occu             = torch.tensor(init_variables['omode_occu'], dtype=torch.float32, device=device) 
+            self.H                      = torch.tensor(init_variables['H'], dtype=torch.complex64, device=device)
+            self.measurements           = torch.tensor(init_variables['measurements'], dtype=torch.float32, device=device)
+            self.crop_pos               = torch.tensor(init_variables['crop_pos'], dtype=torch.int16, device=device)
+            self.shift_probes           = (lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
+            
+            Ny, Nx = init_variables['probe'].shape[-2:]
             ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
             self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0)
             # Create the grid for obj_ROI in a vectorized approach
             # ry is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
             # Stacking the modified ry and rx at the last dimension, we get obj_ROI_grid = (N,Ny,Nx,2)
-            self.obj_ROI_grid = torch.stack([ry[None,:,:] + torch.tensor(init_crop_pos[:, None, None, 0], device=device), 
-                                             rx[None,:,:] + torch.tensor(init_crop_pos[:, None, None, 1], device=device)], dim=-1)
+            self.obj_ROI_grid = torch.stack([ry[None,:,:] + self.crop_pos[:, None, None, 0], 
+                                             rx[None,:,:] + self.crop_pos[:, None, None, 1]], dim=-1)
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
                 'obja'            : self.opt_obja,
@@ -98,7 +101,17 @@ class PtychoAD(torch.nn.Module):
         else:
             probes = self.opt_probe[None,...] # Extend a singleton N dimension, essentially using same probe for all samples
         return probes
+    
+    def get_measurements(self, indices=None):
+        """ Get measurements for each position """
+        # Return the selected measurements based on input indices
+        # If no indices are passed, return the entire measurements
         
+        if indices is not None:
+            return self.measurements[indices]
+        else:
+            return self.measurements
+    
     def forward(self, indices):
         """ Doing the forward pass and get an output diffraction pattern for each input index """
         # The indices are passed in as an array and representing the whole batch

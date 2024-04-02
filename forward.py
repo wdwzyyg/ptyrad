@@ -3,7 +3,7 @@
 from torch.fft import fft2, ifft2, fftshift
 import torch
 
-# This is a current working version (2024.03.23) of the multislice forward model
+# This is a current working version (2024.04.03) of the multislice forward model
 # I cleaned up the archived versiosn and slightly renamed the objects and variables for clarity
 
 # The forward model takes a batch of object patches and probes with their mixed states
@@ -53,5 +53,5 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H):
     # dp_fwd = sum(weighted_psi_k)
     # Note that norm = 'ortho' is needed to ensure the for each sample, sum(|psi|^2) and sum(dp) has the same scale (should be 1) 
     
-    dp_fwd = torch.sum(torch.square(torch.abs(fftshift(fft2(psi, dim=(-2, -1), norm='ortho'), dim=(-2, -1)))) * omode_occu[:,None,None], dim=(1, 2))
+    dp_fwd = torch.sum(torch.square(torch.abs(fftshift(fft2(psi, dim=(-2, -1), norm='ortho'), dim=(-2, -1)))) * omode_occu[:,None,None], dim=(1, 2)) + 1e-20 # Add 1e-20 for numerical stability
     return dp_fwd
