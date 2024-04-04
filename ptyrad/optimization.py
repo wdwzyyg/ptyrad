@@ -1,7 +1,7 @@
 ## Define the loss function class with loss and regularizations
 ## Define the optimization loop related functions
 
-from utils import time_sync
+from .utils import time_sync
 import numpy as np
 from torchmetrics.image import TotalVariation
 import torch
@@ -37,7 +37,7 @@ class CombinedLoss(torch.nn.Module):
         super(CombinedLoss, self).__init__()
         self.device = device
         self.loss_params = loss_params
-        self.mse = torch.nn.MSELoss()
+        self.mse = torch.nn.MSELoss(reduction='mean')
         self.tv = TotalVariation(reduction='mean').to(device)
 
     def forward(self, model_CBEDs, measured_CBEDs, objp_patches, omode_occu):
@@ -145,7 +145,7 @@ def loss_logger(batch_losses, iter, iter_t):
 # Although I implemented this to be consistent with PtychoShelves, looks like it could introduce some probe artifact such that the intensity is spread all over the place
 # Would need more check.
 
-def orthogonalize_modes(modes):
+def orthogonalize_modes_vec(modes):
     ''' orthogonalize the modes using SVD'''
     # Input:
     #   modes: input function with multiple modes
@@ -153,6 +153,7 @@ def orthogonalize_modes(modes):
     #   ortho_modes: 
     # Note:
     #   This function is a highly vectorized PyTorch implementation of `ptycho\+core\probe_modes_ortho.m` from PtychoShelves
+    #   It's numerically equivalent with the following for-loop version but is ~ 10x faster on small complex64 tensors (10,164,164) 
     #   Most indexings arr converted from Matlab (start from 1) to Python (start from 0)
     #   The expected shape of `modes` input is modified into (pmode, Ny, Nx) to be consistent with ptyrad
     #   If you check the orthoganality of each mode, make sure to change the input into complex128 or to modify the default tolerance of torch.allclose.
@@ -163,17 +164,6 @@ def orthogonalize_modes(modes):
     #     with torch.no_grad():
     #         print("Orthogonalizing probe modes")
     #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
-    
-    # # Calculate the dot product between each pair of orthogonalized modes
-    # probe_ortho = orthogonalize_modes(probes)
-    # for i in range(probe_ortho.shape[0]):
-    #     for j in range(i + 1, probe_ortho.shape[0]):
-    #         dot_product = torch.dot(probe_ortho[i].view(-1), probe_ortho[j].view(-1))
-    #         print(dot_product)
-    #         if torch.allclose(dot_product, torch.tensor(0., dtype=dot_product.dtype, device=dot_product.device), atol=2e-5):
-    #             print(f"Modes {i} and {j} are orthogonal")
-    #         else:
-    #             print(f"Modes {i} and {j} are not orthogonal")
 
     (N,Y,X) = modes.shape
     modes_reshaped = modes.view(N, -1) # Reshape modes to have a shape of (Nmode, X*Y)
@@ -186,8 +176,42 @@ def orthogonalize_modes(modes):
     _, indices = torch.sort(evals_abs, descending=True)
     evecs = evecs[:, indices]
 
-    # Vectorized sum of the modes
-    ortho_modes_reshaped = modes_reshaped[:,None,:] * evecs[:, :, None] # modes_reshaped[:,None,:] = (N,1,YX), evecs[:, :, None] = (N,N,1)
-    ortho_modes = torch.sum(ortho_modes_reshaped.view(N,N,Y,X), dim=0) # Reshape ortho_modes_reshaped from (N,N,YX) to (N, N, Y, X), and sum along the first dimension to get the final orthogonalized modes
+    # # Vectorized sum version 
+    # ortho_modes_reshaped = modes_reshaped[:,None,:] * evecs[:, :, None] # modes_reshaped[:,None,:] = (N,1,YX), evecs[:, :, None] = (N,N,1)
+    # ortho_modes = torch.sum(ortho_modes_reshaped.view(N,N,Y,X), dim=0) # Reshape ortho_modes_reshaped from (N,N,YX) to (N, N, Y, X), and sum along the first dimension to get the final orthogonalized modes
     
+    # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
+    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(N,Y,X)
+
+    
+    return ortho_modes
+
+
+def orthogonalize_modes_loop(modes):
+    ''' Similar implementation of SVD decomposition with PtychoShelves'''
+    # (N,Y,X) = modes.shape
+    # modes_reshaped = modes.view(N, -1) # Reshape modes to have a shape of (Nmode, X*Y)
+    # A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
+    
+        # calculate M M* and its eigenvectors
+    N = modes.size(0)
+    A = torch.zeros(N, N, dtype=modes.dtype, device=modes.device)
+    for ii in range(N):
+        p2 = modes[ii]
+        for jj in range(N):
+            p1 = modes[jj]
+            A[ii, jj] = torch.sum(torch.dot(p2.view(-1), p1.view(-1)))
+    
+    evals, evecs = torch.linalg.eig(A)
+
+    # sort modes by their contribution
+    evals_abs = torch.abs(evals)
+    _, indices = torch.sort(evals_abs, descending=True)
+    evecs = evecs[:, indices]
+
+    # orthogonalize modes
+    ortho_modes = torch.zeros_like(modes)
+    for jj in range(N):
+        for ii in range(N):
+            ortho_modes[jj] += modes[ii] * evecs[ii, jj]
     return ortho_modes

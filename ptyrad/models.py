@@ -1,7 +1,7 @@
 ## Defining PtychoAD class for the optimization object
 
-from forward import  multislice_forward_model_vec_all
-from utils import imshift_batch
+from .forward import  multislice_forward_model_vec_all
+from .utils import imshift_batch
 import torch
 
 # This is a current working version (2024.04.02) of the PtychoAD class
@@ -30,10 +30,13 @@ class PtychoAD(torch.nn.Module):
     #                  device=DEVICE)
     # optimizer = torch.optim.Adam(model.optimizer_params)
 
-    def __init__(self, init_variables, lr_params=None, device='cuda:0'):
+    def __init__(self, model_params, device='cuda:0'):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device = device
+            self.lr_params = model_params['lr_params']
+            init_variables = model_params['init_variables'] # Don't need to save this because eveything is parsed into the following tensors
+            
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
             self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
             self.opt_probe              = torch.tensor(init_variables['probe'], dtype=torch.complex64, device=device)  
@@ -42,8 +45,8 @@ class PtychoAD(torch.nn.Module):
             self.omode_occu             = torch.tensor(init_variables['omode_occu'], dtype=torch.float32, device=device) 
             self.H                      = torch.tensor(init_variables['H'], dtype=torch.complex64, device=device)
             self.measurements           = torch.tensor(init_variables['measurements'], dtype=torch.float32, device=device)
-            self.crop_pos               = torch.tensor(init_variables['crop_pos'], dtype=torch.int16, device=device)
-            self.shift_probes           = (lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
+            self.crop_pos               = torch.tensor(init_variables['crop_pos'], dtype=torch.int16, device=device) # Saving this for reference, the cropping is based on self.obh_ROI_grid.
+            self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
             
             Ny, Nx = init_variables['probe'].shape[-2:]
             ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
@@ -53,13 +56,14 @@ class PtychoAD(torch.nn.Module):
             # Stacking the modified ry and rx at the last dimension, we get obj_ROI_grid = (N,Ny,Nx,2)
             self.obj_ROI_grid = torch.stack([ry[None,:,:] + self.crop_pos[:, None, None, 0], 
                                              rx[None,:,:] + self.crop_pos[:, None, None, 1]], dim=-1)
+            
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
                 'obja'            : self.opt_obja,
                 'objp'            : self.opt_objp,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
-            self.set_optimizer(lr_params)
+            self.set_optimizer(self.lr_params)
     
     def set_optimizer(self, lr_params):
         self.optimizer_params = []
