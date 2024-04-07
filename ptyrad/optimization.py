@@ -51,7 +51,7 @@ class CombinedLoss(torch.nn.Module):
             loss_single = self.mse(model_CBEDs.pow(dp_pow), measured_CBEDs.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes it quite stable between dp_pow 0.2-0.5.
             loss_single *= single_params['weight']
         else:
-            loss_single = torch.tensor(0, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
+            loss_single = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         losses.append(loss_single)
 
         # Calculate loss_pacbed
@@ -61,7 +61,7 @@ class CombinedLoss(torch.nn.Module):
             loss_pacbed = self.mse(model_CBEDs.mean(0).pow(dp_pow), measured_CBEDs.mean(0).pow(dp_pow))**0.5
             loss_pacbed *= pacbed_params['weight']
         else:
-            loss_pacbed = torch.tensor(0, device=self.device)
+            loss_pacbed = torch.tensor(0, dtype=torch.float32, device=self.device)
         losses.append(loss_pacbed)
         
         # For obj-dependent regularization terms, the omode contribution should be weighting the individual loss for each omode.
@@ -77,7 +77,7 @@ class CombinedLoss(torch.nn.Module):
             # Do the weighted sum along omode and normalize by number of z slices because the TV is summing over C and averaging over N.
             loss_tv = tv_params['weight'] * sum([self.tv(objp_patches[:,i])*omode_occu[i] for i in range(len(omode_occu))]) / objp_patches.shape[2] 
         else:
-            loss_tv = torch.tensor(0, device=self.device)
+            loss_tv = torch.tensor(0, dtype=torch.float32, device=self.device)
         losses.append(loss_tv)
 
         # Calculate loss_l1
@@ -85,7 +85,7 @@ class CombinedLoss(torch.nn.Module):
         if l1_params['state']:
             loss_l1 = l1_params['weight'] * (torch.mean(objp_patches.abs(), dim=(0,2,3,4)) * omode_occu).sum()
         else:
-            loss_l1 = torch.tensor(0, device=self.device)
+            loss_l1 = torch.tensor(0, dtype=torch.float32, device=self.device)
         losses.append(loss_l1)
 
         # Calculate loss_l2
@@ -93,7 +93,7 @@ class CombinedLoss(torch.nn.Module):
         if l2_params['state']:
             loss_l2 = l2_params['weight'] * (torch.mean(objp_patches.pow(2), dim=(0,2,3,4)) * omode_occu).sum()
         else:
-            loss_l2 = torch.tensor(0, device=self.device)
+            loss_l2 = torch.tensor(0, dtype=torch.float32, device=self.device)
         losses.append(loss_l2)
 
         # Calculate loss_postiv
@@ -101,7 +101,7 @@ class CombinedLoss(torch.nn.Module):
         if postiv_params['state']:
             loss_postiv = postiv_params['weight'] * (torch.mean(torch.relu(-objp_patches), dim=(0,2,3,4)) * omode_occu).sum()
         else:
-            loss_postiv = torch.tensor(0, device=self.device)
+            loss_postiv = torch.tensor(0, dtype=torch.float32, device=self.device)
         losses.append(loss_postiv)
 
         
@@ -128,8 +128,8 @@ def ptycho_recon(batches, model, optimizer, loss_fn):
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
 
-        if batch_idx in np.linspace(0, len(batches) - 1, num=6, dtype=int):
-            print(f"Done batch {batch_idx} in {batch_t:.3f} sec")
+        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
+            print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
             
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t

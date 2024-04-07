@@ -5,6 +5,7 @@ import numpy as np
 from .data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
 from .utils import kv2wavelength, near_field_evolution, hermite_like, make_stem_probe, make_mixed_probe, get_default_probe_simu_params
 
+
 class Initializer:
     def __init__(self, exp_params, source_params):
         self.init_params = {'exp_params':exp_params, 'source_params':source_params}
@@ -33,7 +34,14 @@ class Initializer:
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', or 'hdf5'!!")
         
-        # Postprocess
+        # Correct negative values if any
+        if (cbeds < 0).any():
+            print(f"Imported meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
+            min_value = cbeds.min()
+            cbeds -= min_value
+            print(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements")
+        
+        # Permute, reshape, and flip
         if self.init_params['exp_params']['cbeds_permute'] is not None:
             permute_order = self.init_params['exp_params']['cbeds_permute']
             print("Permuting measurements")
@@ -44,9 +52,17 @@ class Initializer:
             print("Reshaping measurements")
             cbeds = cbeds.reshape(cbeds_shape)
             
+        if self.init_params['exp_params']['cbeds_flip'] is not None:
+            flip_axes = self.init_params['exp_params']['cbeds_flip']
+            print("Flipping measurements")
+            cbeds = np.flip(cbeds, flip_axes)
+            
         # Normalizing cbeds
+        print("Normalizing measurements so the averaged measurement has max intensity at 1")
         cbeds = cbeds / (np.mean(cbeds, 0).max()) # Normalizing the cbeds_data so that the averaged CBED has max at 1. This will make each CBED has max somewhere ~ 1
         cbeds = cbeds.astype('float32')
+        # Print out some measurements statistics
+        print(f"meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
         print(f"measurements                      (N, Ky, Kx) = {cbeds.dtype}, {cbeds.shape}")
         self.init_variables['measurements'] = cbeds
         
@@ -74,7 +90,10 @@ class Initializer:
                 obj = obj[None,].transpose(0,3,1,2)
         elif source == 'simu':
             obj_shape = params
-            obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
+            if len(obj_shape) != 4:
+                raise ValueError(f"Input `obj_shape` = {obj_shape}, please provide a total dimension of 4 as (omode, Nz, Ny, Nx) instead!")
+            else:
+                obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
         

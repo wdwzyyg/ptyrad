@@ -1,19 +1,102 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning
 import torch
 import warnings
 import numpy as np
 from time import time
 from torch.fft import fft2, ifft2, ifftshift, fftshift
-
+from sklearn.cluster import MiniBatchKMeans
+from scipy.spatial.distance import cdist
 
 def time_sync():
     torch.cuda.synchronize()
     t = time()
     return t
-    
-def make_batches(N_scans, num_batch):
-    shuffled_indices = np.random.choice(N_scans, size=N_scans, replace=False) # Creates a shuffled 1D array of indices
-    batches = np.array_split(shuffled_indices, num_batch)                     # return a list of `num_batch` arrays, or [batch0, batch1, ...]
-    return batches
+
+def select_center_rectangle_indices(matrix_height, matrix_width, height_rec, width_rec):
+    # Calculate the coordinates of the center rectangle
+    start_row = (matrix_height - height_rec) // 2
+    end_row = start_row + height_rec
+    start_col = (matrix_width - width_rec) // 2
+    end_col = start_col + width_rec
+
+    # Generate flattened indices for the center rectangle
+    indices = []
+    for row in range(start_row, end_row):
+        for col in range(start_col, end_col):
+            indices.append(row * matrix_width + col)
+
+    return indices
+
+from sklearn.cluster import MiniBatchKMeans
+from scipy.spatial.distance import cdist
+
+def make_batches(indices, pos, batch_size, group='random'):
+    ''' Make batches from input indices '''
+    # Input:
+    #   indices: int, (Ns,) array. indices could be a subset of all indices.
+    #   pos: int/float (N,2) array. Always pass in the full positions.
+    #   batch_size: int. The number of indices of each mini-batch
+    #   group: str. Choose between 'random', 'compact', or 'sparse' grouping.
+    # Output:
+    #   batches: A list of `num_batch` arrays, or [batch0, batch1, ...]
+    # Note:
+    #   The actual batch size would only be "close" if it's not divisible by len(indices) for 'random' grouping
+    #   For 'compact' or 'sparse', it's generally fluctuating around the specified batch size
+
+    num_batch = len(indices) // batch_size   
+
+    if group == 'random':
+        rng = np.random.default_rng()
+        shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
+        random_batches = np.array_split(shuffled_indices, num_batch) 
+        return random_batches
+        
+    else:
+        # Choose the selected pos from indices
+        pos_s = pos[indices]
+        # Kmeans for clustering
+        kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_batch, max_iter=10, batch_size=3072)
+        kmeans.fit(pos_s)
+        labels = kmeans.labels_
+        
+        # Separate data points into groups
+        compact_batches = []
+        for batch_idx in range(num_batch):
+            batch_indices_s = np.where(labels == batch_idx)[0]
+            compact_batches.append(indices[batch_indices_s])
+
+        if group == 'compact':
+            return compact_batches
+
+        else:
+            # Initialize the list to store groups
+            sparse_batches = [[] for _ in range(num_batch)]
+            # Calculate the centroid for each compact group as initial start for sparse groups
+            centroids = np.array([np.mean(pos[cbatch], axis=0) for cbatch in compact_batches])
+            pairwise_distances = cdist(pos, pos) # Calculae the dist for all pos can keep the absolute index and skip the conversion
+            
+            # Start with the first point as a seed for each group
+            for batch_idx in range(num_batch):
+                distances = np.linalg.norm(pos_s - centroids[batch_idx], axis=1)
+                closest_idx_s = np.argmin(distances)
+                closest_idx = indices[closest_idx_s]
+                sparse_batches[batch_idx].append(closest_idx)
+
+            # Iterate through points
+            for i in range(num_batch, len(pos_s)):
+                min_distances = []
+                # Iterate through groups
+                for batch_idx in range(num_batch):
+                    distances = pairwise_distances[sparse_batches[batch_idx], indices[i]]
+                    min_distances.append(np.min(distances))
+                
+                max_group_index = np.argmax(min_distances)
+
+                # Add the point to the group with the farthest minimal distance
+                sparse_batches[max_group_index].append(indices[i])
+            
+            return sparse_batches
 
 def imshift_batch(img, shifts, grid):
     """
@@ -114,8 +197,6 @@ def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_
     # Do the ifftshift inside the function so the output has zero frequency at the center
     H = xp.fft.ifftshift(H)
     return u_1, H, h, dH
-
-
 
 def test_loss_fn(model, indices, loss_fn):
     """ Print loss values for each term for convenient weight tuning """
@@ -373,7 +454,42 @@ def check_modes_ortho(tensor, atol = 2e-5):
                 print(f"Modes {i} and {j} are orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
             else:
                 print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
+
 ###################################### ARCHIVE ##################################################
+
+def make_compact_batches(pos, num_groups):
+    from sklearn.cluster import MiniBatchKMeans
+    # Fit K-Means clustering algorithm
+    kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_groups, max_iter=10, batch_size=3072)
+    kmeans.fit(pos)
+
+    # Get cluster labels
+    labels = kmeans.labels_
+
+    # Separate data points into groups
+    groups = []
+    for i in range(num_groups):
+        group_indices = np.where(labels == i)[0]
+        groups.append(group_indices)
+
+    return groups
+
+def make_random_batches(indices, batch_size):
+    ''' Make random batches from input indices and batch_size '''
+    # Input:
+    #   indices: int or array_like. If indices is an integer, randomly permute np.arange(indices). If indices is an array, make a copy and shuffle the elements randomly.
+    #   batch_size: int. The number of indices of each mini-batch
+    # Output:
+    #   batches: A list of `num_batch` arrays, or [batch0, batch1, ...]
+    # Note:
+    # The actual batch size would only be "close" if it's not divisible by len(indices)
+    if isinstance(indices, int):
+        indices = range(indices)
+    num_batch = len(indices) / batch_size                 
+    rng = np.random.default_rng()
+    shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
+    batches = np.array_split(shuffled_indices, num_batch) 
+    return batches
 
 def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
     """ Transform a complex numpy array in a "pseudo-complex" tensor"""
