@@ -4,9 +4,10 @@ from .forward import  multislice_forward_model_vec_all
 from .utils import imshift_batch
 import torch
 
-# This is a current working version (2024.04.02) of the PtychoAD class
+# This is a current working version (2024.04.07) of the PtychoAD class
 # I cleaned up the archived versiosn and slightly renamed the objects and variables for clarity
 
+# Added create_grids and print_model_summary for readability and decoupling
 # set_optimizer function is called at the end of the initializaiton, while this can also be called if you want to update the optimizer params without initializing the object
 # obj optimization is now split into objp and obja
 # mixed object modes are normalized by the init_omode_occu. By design this is a fixed value because optimizing omode_occu with obj simultaneously could be unstable
@@ -19,15 +20,18 @@ import torch
 
 class PtychoAD(torch.nn.Module):
     """ Main optimization class for the ptycho reconstruction using AD """
-    # Including initialization, set_optimizer, get_obj_ROI, get_probes, and forward methods
+    # Including initialization, set_optimizer, get_obj_ROI, get_probes, get_measurements, and forward methods
     
     # Example usage:
-    # model = PtychoAD(init_variables, 
-    #                  lr_params={'obja': 0,
-    #                             'objp': 3e-4,
-    #                             'probe': 1e-5, 
-    #                             'probe_pos_shifts': 0},
-    #                  device=DEVICE)
+    # model_params = {
+    # 'init_variables': init.init_variables,
+    # 'lr_params':{
+    #     'obja': 0,
+    #     'objp': 1e-3,
+    #     'probe': 1e-3, 
+    #     'probe_pos_shifts': 1e-3}}
+    #                 
+    # model = PtychoAD(model_params, device=DEVICE)
     # optimizer = torch.optim.Adam(model.optimizer_params)
 
     def __init__(self, model_params, device='cuda:0'):
@@ -37,25 +41,15 @@ class PtychoAD(torch.nn.Module):
             self.lr_params = model_params['lr_params']
             init_variables = model_params['init_variables'] # Don't need to save this because eveything is parsed into the following tensors
             
-            self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
-            self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'], dtype=torch.complex64, device=device))
-            self.opt_probe              = torch.tensor(init_variables['probe'], dtype=torch.complex64, device=device)  
-            
-            self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'], device=device)
-            self.omode_occu             = torch.tensor(init_variables['omode_occu'], dtype=torch.float32, device=device) 
-            self.H                      = torch.tensor(init_variables['H'], dtype=torch.complex64, device=device)
-            self.measurements           = torch.tensor(init_variables['measurements'], dtype=torch.float32, device=device)
-            self.crop_pos               = torch.tensor(init_variables['crop_pos'], dtype=torch.int16, device=device) # Saving this for reference, the cropping is based on self.obh_ROI_grid.
+            self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
+            self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
+            self.opt_probe              = torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)  
+            self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device)
+            self.omode_occu             = torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device) 
+            self.H                      = torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device)
+            self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
+            self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
-            
-            Ny, Nx = init_variables['probe'].shape[-2:]
-            ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
-            self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0)
-            # Create the grid for obj_ROI in a vectorized approach
-            # ry is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
-            # Stacking the modified ry and rx at the last dimension, we get obj_ROI_grid = (N,Ny,Nx,2)
-            self.obj_ROI_grid = torch.stack([ry[None,:,:] + self.crop_pos[:, None, None, 0], 
-                                             rx[None,:,:] + self.crop_pos[:, None, None, 1]], dim=-1)
             
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
@@ -63,26 +57,49 @@ class PtychoAD(torch.nn.Module):
                 'objp'            : self.opt_objp,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
+            
+            self.create_grids()
             self.set_optimizer(self.lr_params)
     
+    def create_grids(self):
+        """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
+        device = self.device
+        Ny, Nx = self.opt_probe.shape[-2:]
+        ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), 
+                                torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
+        self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0)
+
+        # ry is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
+        # Stacking the modified ry and rx at the last dimension, we get obj_ROI_grid = (N,Ny,Nx,2)
+        self.obj_ROI_grid = torch.stack([ry[None,:,:] + self.crop_pos[:, None, None, 0], 
+                                         rx[None,:,:] + self.crop_pos[:, None, None, 1]], dim=-1)
+    
     def set_optimizer(self, lr_params):
+        self.lr_params = lr_params
         self.optimizer_params = []
-        if lr_params:
-            for param_name, lr in lr_params.items():
-                if param_name in self.optimizable_tensors:
-                    self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
-                    if lr != 0:
-                        self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})
-                else:
-                    print(f"Warning: '{param_name}' is not a valid parameter name.")
+        for param_name, lr in lr_params.items():
+            if param_name not in self.optimizable_tensors:
+                raise KeyError(f"Warning: '{param_name}' is not a valid parameter name, check your lr_params.")
+            else:
+                self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
+                if lr != 0:
+                    self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})
+                
         # Declaring it as a ParameterDict so that I can use model.state_dict()
         # Note that when I wrap the former dict directly with ParameterDict it disables their grad_fn for unknown reason
         self.nn_params = torch.nn.ParameterDict(self.optimizable_tensors)
+        self.print_model_summary()
         
+    def print_model_summary(self):
         print('PtychoAD optimizable variables:')
         for name, tensor in self.optimizable_tensors.items():
-            print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{lr_params[name]:.0e}")
-        print('\nMake sure to pass the optimizer_params to optimizer object using "optimizer = torch.optim.Adam(model.optimizer_params)"')
+            print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
+        total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)
+        print('\nMake sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"')
+
+        print(f'\nTotal measurement values:    {self.measurements.numel():,d}\
+                \nTotal optimizing variables:  {total_var:,d}\
+                \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """

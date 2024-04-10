@@ -1,5 +1,6 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning
+from random import shuffle
 import torch
 import warnings
 import numpy as np
@@ -28,8 +29,39 @@ def select_center_rectangle_indices(matrix_height, matrix_width, height_rec, wid
 
     return indices
 
-from sklearn.cluster import MiniBatchKMeans
-from scipy.spatial.distance import cdist
+def make_save_dict(model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
+    ''' Make a dict to save relevant paramerers '''
+    
+    avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
+    
+    save_dict = {'state_dict':model.state_dict(),
+             'exp_params':exp_params,
+             'source_params':source_params,
+             'loss_params':loss_params,
+             'constraint_params':constraint_params,
+             'model_params':
+                {'lr_params':model.lr_params,
+                 'omode_occu':model.omode_occu,
+                 'H':model.H,
+                 'crop_pos':model.crop_pos,
+                 'shift_probes':model.shift_probes},
+             'recon_params':recon_params,
+             'loss_iters': loss_iters,
+             'iter_t': iter_t,
+             'iter': iter,
+             'avg_losses': avg_losses}
+    
+    return save_dict
+
+def make_recon_params_dict(NITER, BATCH_SIZE, GROUP, batches, output_path):
+    recon_params = {
+        'NITER':       NITER,
+        'BATCH_SIZE':  BATCH_SIZE,
+        'GROUP':       GROUP,
+        'batches':     batches,
+        'output_path': output_path
+    }
+    return recon_params
 
 def make_batches(indices, pos, batch_size, group='random'):
     ''' Make batches from input indices '''
@@ -97,6 +129,25 @@ def make_batches(indices, pos, batch_size, group='random'):
                 sparse_batches[max_group_index].append(indices[i])
             
             return sparse_batches
+
+def shuffle_batches(batches, batch_size, group):
+    ''' Shuffle the sequence of batches '''
+    # Note: This will only shuffle the sequence of batches for "sparse" and "compact"
+    # For random grouping, generate an entirely new random batches should be more appropriate for the purpose of randomness
+
+    if group =='random':
+        indices = np.concatenate(batches)        
+        num_batch = len(indices) // batch_size   
+        rng = np.random.default_rng()
+        shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
+        shuffled_batches = np.array_split(shuffled_indices, num_batch)
+        return shuffled_batches 
+    else:
+        shuffled_batches = batches.copy()
+        # In-place shuffling
+        shuffle(shuffled_batches)
+    
+    return shuffled_batches
 
 def imshift_batch(img, shifts, grid):
     """

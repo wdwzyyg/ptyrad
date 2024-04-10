@@ -1,7 +1,9 @@
 ## Define the loss function class with loss and regularizations
+## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
 from .utils import time_sync
+from math import ceil, floor
 import numpy as np
 from torchmetrics.image import TotalVariation
 import torch
@@ -108,7 +110,48 @@ class CombinedLoss(torch.nn.Module):
         total_loss = sum(losses)
         return total_loss, losses
     
+class CombinedConstraint(torch.nn.Module):
+    ''' Apply iteration-wise in-place constraints on the optimizable tensors '''
+    def __init__(self, constraint_params, device='cuda:0'):
+        super(CombinedConstraint, self).__init__()
+        self.device = device
+        self.constraint_params = constraint_params
+
+    def forward(self, model, iter):
+        
+        # Apply in-place constraints 
+        with torch.no_grad():
+
+            # Apply positivity constraint
+            postiv_freq = self.constraint_params['postiv']['freq']
+            if postiv_freq is not None and iter % postiv_freq == 0: # Check if iter % freq == 0. Since iter starts at 1 
+                print(f"Apply postiv constraint at iter {iter}")
+                model.opt_objp.clamp_(min=0)
+            
+            # Apply orthogonality constraint to probe modes
+            ortho_pmode_freq = self.constraint_params['ortho_pmode']['freq']
+            if ortho_pmode_freq is not None and iter % ortho_pmode_freq == 0:
+                print(f"Apply ortho pmode constraint at iter {iter}")
+                model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe)
+
+            # Apply orthogonality constraint to pmode
+            ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
+            if ortho_omode_freq is not None and iter % ortho_omode_freq == 0:
+                print(f"Apply ortho omode constraint at iter {iter}")
+                model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp)
+                
+            # Apply kz filter constraint
+            kz_filter_freq = self.constraint_params['kz_filter']['freq']
+            beta_regularize_layers = self.constraint_params['kz_filter']['beta']
+            alpha_gaussian = self.constraint_params['kz_filter']['alpha']
+            z_pad = self.constraint_params['kz_filter']['z_pad']
+            if kz_filter_freq is not None and iter % kz_filter_freq == 0:
+                print(f"Apply kz_filter constraint at iter {iter}")
+                model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad)
+        return
+
 def batch_update(batch, model, optimizer, loss_fn):
+    ''' Optimization closure that performs 1 mini-batch update '''
     start_batch_t = time_sync()
     optimizer.zero_grad()
     model_CBEDs, objp_patches = model(batch)
@@ -119,9 +162,12 @@ def batch_update(batch, model, optimizer, loss_fn):
     batch_t = time_sync() - start_batch_t
     return losses, batch_t
 
-def ptycho_recon(batches, model, optimizer, loss_fn):
+def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, iter):
+    ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
+    
+    # Start mini-batch optimization
     for batch_idx, batch in enumerate(batches):
         losses, batch_t = batch_update(batch, model, optimizer, loss_fn)
 
@@ -130,7 +176,10 @@ def ptycho_recon(batches, model, optimizer, loss_fn):
 
         if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
             print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
-            
+    
+    # Apply iter-wise constraint
+    constraint_fn(model, iter)
+    
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t
 
@@ -142,8 +191,36 @@ def loss_logger(batch_losses, iter, iter_t):
     loss_iter = sum(avg_losses.values())
     return loss_iter    
 
-# Although I implemented this to be consistent with PtychoShelves, looks like it could introduce some probe artifact such that the intensity is spread all over the place
-# Would need more check.
+def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None):
+    # Calculate force of regularization based on the idea that DoF = resolution^2/lambda
+    
+    # Pad the tensor with zeros
+    if z_pad is not None:
+        obj = torch.nn.functional.pad(obj.permute(0,2,3,1), (z_pad,z_pad)).permute(0,3,1,2) # The padding only applies to dimensions from last to front so permute is needed
+    
+    device = obj.device
+    
+    # Generate 1D grids along each dimension
+    Npix = obj.shape[1:]
+    kz = torch.fft.fftfreq(Npix[0]).to(device) 
+    ky = torch.fft.fftfreq(Npix[1]).to(device) 
+    kx = torch.fft.fftfreq(Npix[2]).to(device) 
+    
+    # Generate 3D coordinate grid using meshgrid
+    grid_kz, grid_ky, grid_kx = torch.meshgrid(kz, ky, kx, indexing='ij')
+
+    # Create the filter function Wa
+    W = 1 - torch.atan((beta_regularize_layers * torch.abs(grid_kz) / torch.sqrt(grid_kx**2 + grid_ky**2 + 1e-20))**2) / (torch.pi/2)
+    Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
+
+    # Filter the obj with filter funciton Wa    
+    fobj = torch.real(torch.fft.ifftn(torch.fft.fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
+    
+    # Select the original z-range before padding
+    if z_pad is not None:
+        fobj = fobj[:,z_pad:-z_pad,:,:]
+    
+    return fobj
 
 def orthogonalize_modes_vec(modes):
     ''' orthogonalize the modes using SVD'''
@@ -165,8 +242,12 @@ def orthogonalize_modes_vec(modes):
     #         print("Orthogonalizing probe modes")
     #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
 
-    (N,Y,X) = modes.shape
-    modes_reshaped = modes.view(N, -1) # Reshape modes to have a shape of (Nmode, X*Y)
+    #input_shape = modes.shape # input_shape could be either (N,Y,X) or (N,Z,Y,X)
+    
+    if modes.dtype != torch.complex64:
+        modes = torch.complex(modes, torch.zeros_like(modes))
+    input_shape = modes.shape
+    modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
     A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
     
     evals, evecs = torch.linalg.eig(A)
@@ -181,11 +262,9 @@ def orthogonalize_modes_vec(modes):
     # ortho_modes = torch.sum(ortho_modes_reshaped.view(N,N,Y,X), dim=0) # Reshape ortho_modes_reshaped from (N,N,YX) to (N, N, Y, X), and sum along the first dimension to get the final orthogonalized modes
     
     # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
-    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(N,Y,X)
-
+    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(input_shape)
     
     return ortho_modes
-
 
 def orthogonalize_modes_loop(modes):
     ''' Similar implementation of SVD decomposition with PtychoShelves'''

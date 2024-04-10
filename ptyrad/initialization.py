@@ -131,7 +131,7 @@ class Initializer:
         elif source == 'simu':
             probe_simu_params = params
             if probe_simu_params is None or type(probe_simu_params) == str:
-                print(f"exp_params[`probe_simu_params`] is incorrecly set to `{probe_simu_params}`, use exp_params and default values instead for simulation")
+                print(f"exp_params[`probe_simu_params`] is set to `{probe_simu_params}`, use exp_params and default values instead for simulation")
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params)
             probe = make_mixed_probe(probe, probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'])
