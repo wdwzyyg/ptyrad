@@ -8,7 +8,7 @@ import numpy as np
 from torchmetrics.image import TotalVariation
 import torch
 
-# This is a current working version (2024.04.02) of the CombinedLoss class
+# This is a current working version (2024.04.13) of the CombinedLoss class
 # I cleaned up the archived versions and slightly renamed the objects and variables for clarity
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
@@ -122,23 +122,18 @@ class CombinedConstraint(torch.nn.Module):
         # Apply in-place constraints 
         with torch.no_grad():
 
-            # Apply positivity constraint
-            postiv_freq = self.constraint_params['postiv']['freq']
-            if postiv_freq is not None and iter % postiv_freq == 0: # Check if iter % freq == 0. Since iter starts at 1 
-                print(f"Apply postiv constraint at iter {iter}")
-                model.opt_objp.clamp_(min=0)
-            
             # Apply orthogonality constraint to probe modes
             ortho_pmode_freq = self.constraint_params['ortho_pmode']['freq']
             if ortho_pmode_freq is not None and iter % ortho_pmode_freq == 0:
-                print(f"Apply ortho pmode constraint at iter {iter}")
-                model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe)
+                model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
+                probe_int = model.opt_probe.abs().pow(2)
+                print(f"Apply ortho pmode constraint at iter {iter}, relative pmode power = {(probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)}")
 
             # Apply orthogonality constraint to pmode
             ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
             if ortho_omode_freq is not None and iter % ortho_omode_freq == 0:
+                model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp, sort=False)
                 print(f"Apply ortho omode constraint at iter {iter}")
-                model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp)
                 
             # Apply kz filter constraint
             kz_filter_freq = self.constraint_params['kz_filter']['freq']
@@ -146,8 +141,23 @@ class CombinedConstraint(torch.nn.Module):
             alpha_gaussian = self.constraint_params['kz_filter']['alpha']
             z_pad = self.constraint_params['kz_filter']['z_pad']
             if kz_filter_freq is not None and iter % kz_filter_freq == 0:
-                print(f"Apply kz_filter constraint at iter {iter}")
                 model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad)
+                print(f"Apply kz_filter constraint at iter {iter}")
+
+            # Apply positivity constraint
+            postiv_freq = self.constraint_params['postiv']['freq']
+            if postiv_freq is not None and iter % postiv_freq == 0: 
+                model.opt_objp.clamp_(min=0)
+                print(f"Apply hard positivity objp constraint at iter {iter}")
+            
+            # Apply probe int constraint
+            fix_probe_int_freq = self.constraint_params['fix_probe_int']['freq']
+            if fix_probe_int_freq is not None and iter % fix_probe_int_freq == 0: 
+                current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
+                target_amp  = model.probe_int_sum**0.5 
+                model.opt_probe.data = model.opt_probe * target_amp/current_amp
+                print(f"Apply fix probe int constraint at iter {iter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+            
         return
 
 def batch_update(batch, model, optimizer, loss_fn):
@@ -222,7 +232,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None):
     
     return fobj
 
-def orthogonalize_modes_vec(modes):
+def orthogonalize_modes_vec(modes, sort = False):
     ''' orthogonalize the modes using SVD'''
     # Input:
     #   modes: input function with multiple modes
@@ -249,20 +259,17 @@ def orthogonalize_modes_vec(modes):
     input_shape = modes.shape
     modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
     A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
-    
-    evals, evecs = torch.linalg.eig(A)
 
-    # sort modes by their contribution
-    evals_abs = torch.abs(evals)
-    _, indices = torch.sort(evals_abs, descending=True)
-    evecs = evecs[:, indices]
-
-    # # Vectorized sum version 
-    # ortho_modes_reshaped = modes_reshaped[:,None,:] * evecs[:, :, None] # modes_reshaped[:,None,:] = (N,1,YX), evecs[:, :, None] = (N,N,1)
-    # ortho_modes = torch.sum(ortho_modes_reshaped.view(N,N,Y,X), dim=0) # Reshape ortho_modes_reshaped from (N,N,YX) to (N, N, Y, X), and sum along the first dimension to get the final orthogonalized modes
-    
+    _, evecs = torch.linalg.eig(A)
+   
     # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
     ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(input_shape)
+
+    # sort modes by their contribution
+    if sort:
+        modes_int =  ortho_modes.abs().pow(2).sum((-2,-1))
+        _, indices = torch.sort(modes_int, descending=True)
+        ortho_modes = ortho_modes[indices]
     
     return ortho_modes
 

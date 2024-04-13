@@ -62,7 +62,7 @@ def load_empad_as_4D(file_path, dim_x, dim_y, N_scan_x, N_scan_y, order):
 
                 print(f"Loaded .raw before cropping extra DP rows has flags \n{data_reshape.flags}")
                 print(f"Imported data dimension with {order} order {shape_str} = {data4D.shape} after cropping")
-                print("Success! File path =", file_path)
+                print("Success! .raw file path =", file_path)
                 
                 return data4D
         else:
@@ -98,20 +98,22 @@ def load_hdf5(file_path, dataset_key='ds'):
         raise FileNotFoundError("Error: The specified file does not exist.")
 
     with h5py.File(file_path, 'r') as hf:
-        data = np.array(hf[dataset_key])
-        print("Success! hdf5 File path =", file_path)
-        print("Imported hdf5 data shape =", data.shape)
+        data = np.array(hf[dataset_key], dtype='float32')
+        print("Success! .hdf5 file path =", file_path)
+        print("Imported .hdf5 data shape =", data.shape)
         return data
-
 
 def load_tif(file_path):
     from tifffile import imread
     data = imread(file_path)
+    print("Success! .tif file path =", file_path)
+    print("Imported .tif data shape =", data.shape)
     return data
 
 def load_pt(file_path):
     import torch
     data = torch.load(file_path)
+    print("Success! .pt file path =", file_path)
     return data
 
 def save_4D_as_hdf5(data4D, file_path, final_shape=None, options=None, overwrite=False, source_metadata=None):
@@ -221,7 +223,7 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplif
             with h5py.File(file_path, 'r') as hdf_file:
                 for key in hdf_file.keys():
                     mat_contents[key] = hdf_file[key][()]
-            print("Success! .mat File path =", file_path)
+            print("Success! .mat file path =", file_path)
             return mat_contents
 
     # Check target_field type
@@ -259,7 +261,7 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplif
             print(f"Can't load .mat v7.3 with scipy. Switching to h5py.")
             with h5py.File(file_path, 'r') as hdf_file:
                 result_list.append(hdf_file[name][()])
-    print("Success! .mat File path =", file_path)
+    print("Success! .mat file path =", file_path)
     return result_list
 
 

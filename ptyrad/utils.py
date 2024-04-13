@@ -1,5 +1,5 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning
+os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning from make_batches
 from random import shuffle
 import torch
 import warnings
@@ -9,12 +9,30 @@ from torch.fft import fft2, ifft2, ifftshift, fftshift
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
+def get_size_bytes(x):
+    
+    print(f"Input tensor has shape {x.shape}, dtype {x.dtype}, and live on {x.device}")
+    size_bytes = torch.numel(x) * x.element_size()
+    size_mib = size_bytes / (1024 * 1024)
+    size_gib = size_bytes / (1024 * 1024 * 1024)
+    
+    if size_bytes < 128 * 1024 * 1024:
+        print(f"The size of the tensor is {size_mib:.2f} MiB")
+    else:
+        print(f"The size of the tensor is {size_gib:.2f} GiB")
+    return size_bytes
+
 def time_sync():
     torch.cuda.synchronize()
     t = time()
     return t
 
 def select_center_rectangle_indices(matrix_height, matrix_width, height_rec, width_rec):
+    ''' Select the indices from the center part of the 4D-STEM data '''
+    # Thie is useful if you only want to reconstruct a small part of the data
+    # Example
+    # #indices = np.array(select_center_rectangle_indices(87,82,32,32))
+    
     # Calculate the coordinates of the center rectangle
     start_row = (matrix_height - height_rec) // 2
     end_row = start_row + height_rec
@@ -34,22 +52,24 @@ def make_save_dict(model, exp_params, source_params, loss_params, constraint_par
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     
-    save_dict = {'state_dict':model.state_dict(),
-             'exp_params':exp_params,
-             'source_params':source_params,
-             'loss_params':loss_params,
-             'constraint_params':constraint_params,
-             'model_params':
-                {'lr_params':model.lr_params,
-                 'omode_occu':model.omode_occu,
-                 'H':model.H,
-                 'crop_pos':model.crop_pos,
-                 'shift_probes':model.shift_probes},
-             'recon_params':recon_params,
-             'loss_iters': loss_iters,
-             'iter_t': iter_t,
-             'iter': iter,
-             'avg_losses': avg_losses}
+    save_dict = {
+                'optimizable_tensors':model.optimizable_tensors,
+                'exp_params':exp_params,
+                'source_params':source_params,
+                'loss_params':loss_params,
+                'constraint_params':constraint_params,
+                'model_params':
+                    {'lr_params':model.lr_params,
+                    'omode_occu':model.omode_occu,
+                    'H':model.H,
+                    'crop_pos':model.crop_pos,
+                    'shift_probes':model.shift_probes},
+                'recon_params':recon_params,
+                'loss_iters': loss_iters,
+                'iter_t': iter_t,
+                'iter': iter,
+                'avg_losses': avg_losses
+                }
     
     return save_dict
 
@@ -288,7 +308,7 @@ def get_default_probe_simu_params(exp_params):
                     "Npix"           : exp_params['Npix'],
                     "rbf"            : exp_params['rbf'], # dk = conv_angle/1e3/rbf/wavelength
                     "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                    "print_info"     : True,
+                    "print_info"     : False,
                     "pmodes"         : exp_params['pmode_max'],
                     "pmode_init_pows": exp_params['pmode_init_pows'],
                     ## Aberration coefficients
@@ -393,6 +413,7 @@ def make_stem_probe(params_dict):
         print(f'Npix        = {Npix} px')
         print(f'dk          = {dk:.4f} Ang^-1')
         print(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
+        print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
         print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
         print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
         print(f'Real space extent = {dx*Npix:.4f} Ang')

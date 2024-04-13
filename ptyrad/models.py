@@ -4,9 +4,11 @@ from .forward import  multislice_forward_model_vec_all
 from .utils import imshift_batch
 import torch
 
-# This is a current working version (2024.04.07) of the PtychoAD class
+# This is a current working version (2024.04.13) of the PtychoAD class
 # I cleaned up the archived versiosn and slightly renamed the objects and variables for clarity
 
+# The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
+# It has very little performance impact but saves lots of memory for large 4D-STEM data
 # Added create_grids and print_model_summary for readability and decoupling
 # set_optimizer function is called at the end of the initializaiton, while this can also be called if you want to update the optimizer params without initializing the object
 # obj optimization is now split into objp and obja
@@ -50,6 +52,7 @@ class PtychoAD(torch.nn.Module):
             self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
             self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
+            self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
             
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
@@ -67,12 +70,10 @@ class PtychoAD(torch.nn.Module):
         Ny, Nx = self.opt_probe.shape[-2:]
         ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), 
                                 torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
-        self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0)
 
-        # ry is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
-        # Stacking the modified ry and rx at the last dimension, we get obj_ROI_grid = (N,Ny,Nx,2)
-        self.obj_ROI_grid = torch.stack([ry[None,:,:] + self.crop_pos[:, None, None, 0], 
-                                         rx[None,:,:] + self.crop_pos[:, None, None, 1]], dim=-1)
+        self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0) # (2,Ny,Nx)
+        self.ry_grid = ry
+        self.rx_grid = rx
     
     def set_optimizer(self, lr_params):
         self.lr_params = lr_params
@@ -83,11 +84,8 @@ class PtychoAD(torch.nn.Module):
             else:
                 self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
                 if lr != 0:
-                    self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})
-                
-        # Declaring it as a ParameterDict so that I can use model.state_dict()
-        # Note that when I wrap the former dict directly with ParameterDict it disables their grad_fn for unknown reason
-        self.nn_params = torch.nn.ParameterDict(self.optimizable_tensors)
+                    self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
+
         self.print_model_summary()
         
     def print_model_summary(self):
@@ -107,8 +105,14 @@ class PtychoAD(torch.nn.Module):
         # opt_obj.shape = (B,D,H,W,C) = (omode,D,H,W,2)
         # object_patches = (N,B,D,H,W,2), N is the additional sample index within the input batch, B is now used for omode.
         
+        # ry_grid is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
+        # obj_ROI_grid_y = (N,Ny,Nx)
+        
         opt_obj = torch.stack([self.opt_obja, self.opt_objp], dim=-1)
-        object_patches = opt_obj[:,:,self.obj_ROI_grid[indices,...,0],self.obj_ROI_grid[indices,...,1],:].permute(2,0,1,3,4,5)
+        obj_ROI_grid_y = self.ry_grid[None,:,:] + self.crop_pos[indices, None, None, 0]
+        obj_ROI_grid_x = self.rx_grid[None,:,:] + self.crop_pos[indices, None, None, 1]
+        
+        object_patches = opt_obj[:,:,obj_ROI_grid_y,obj_ROI_grid_x,:].permute(2,0,1,3,4,5)
         return object_patches
     
     def get_probes(self, indices):
