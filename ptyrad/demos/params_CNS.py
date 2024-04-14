@@ -1,7 +1,7 @@
 # CNS
 
-ptycho_output_path = 'data/CNS_from_Hari/Niter10000.mat'
 exp_CBED_path      = 'data/CNS_from_Hari/240327_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_2configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
+ptycho_output_path = 'data/CNS_from_Hari/Niter10000.mat'
 
 exp_params = {
     'kv'                : 300,  # kV
@@ -14,6 +14,11 @@ exp_params = {
     'z_distance'        : 1.25, # Ang
     'Nlayer'            : 8,
     'N_scans'           : 7134,
+    'N_scan_slow'       : 87,
+    'N_scan_fast'       : 82,
+    'scan_step_size'    : 0.28, # Ang
+    'scan_flip'         : (2),
+    'scan_affine'       : None,#(1, 0, 1, 0),# #None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 2,
     'pmode_init_pows'   : [0.02],
@@ -28,12 +33,12 @@ exp_params = {
 source_params = {
     'measurements_source': 'mat',
     'measurements_params': [exp_CBED_path, 'cbed'],
-    'obj_source'         : 'simu',
-    'obj_params'         : (1,8,391,403),
+    'obj_source'         : 'simu', #'PtyShv',
+    'obj_params'         : None, #ptycho_output_path, #(1,8,391,403),
     'probe_source'       : 'simu',
     'probe_params'       : None, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    'pos_source'         : 'simu',
+    'pos_params'         : None,
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

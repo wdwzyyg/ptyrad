@@ -44,3 +44,65 @@ def plot_forward_pass(model, indices, dp_power, object_data):
         axs[1, 1].set_title(f"Data CBED {idx}")
         fig.colorbar(im11)
         plt.show()
+        
+def plot_scan_positions(pos, img=None, offset=None, show_arrow=True):
+    """ Plot the scan positions given an array of (N,2) """
+    # The array is expected to have shape (N,2)
+    # Each row is rendered as (y, x), or equivalently (height, width)
+    # The dots are plotted with asending size and color changes to represent the relative order
+    
+    plt.figure(figsize = (8,8))
+    plt.title("Scan positions")
+    
+    if img is not None:
+        plt.imshow(img)
+        pos = np.array(pos) + np.array(offset)
+        plt.gca().invert_yaxis()  # Pre-flip y-axis so the y-axis is image-like no matter what
+    
+    plt.scatter(x = pos[:,1], y = pos[:,0], c=np.arange(len(pos)), s=0.001*np.arange(len(pos)))
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
+        
+    plt.xlabel('X (obj coord, px)')
+    plt.ylabel('Y (obj coord, px)')
+    
+    # Draw arrow from 1st position to 10th position
+    if show_arrow:
+        plt.arrow(pos[0, 1], pos[0, 0], pos[9, 1] - pos[0, 1], pos[9, 0] - pos[0, 0],
+                color='red', head_width=2.5, head_length=5)
+    plt.show()
+    
+def plot_affine_transformation(scale, asymmetry, rotation, shear):
+    from .utils import compose_affine_matrix
+    # Example
+    # plot_affine_transformation(2,0,45,0)
+    A = np.eye(2)
+    Af = compose_affine_matrix(scale, asymmetry, rotation, shear)
+    
+    plt.figure()
+    plt.title("Visualize affine transformation")
+
+    # Add origin and scatter points
+    plt.scatter(0, 0, color='gray', marker='o', s=3)
+    plt.scatter(A[:,1], A[:,0], label='Original')
+    plt.scatter(Af[:,1], Af[:,0], label='Transformed')
+
+    # Adding arrows
+    plt.quiver(A[0,1], A[0,0], angles='xy', scale_units='xy', scale=1, color='C0', alpha=0.5)
+    plt.quiver(A[1,1], A[1,0], angles='xy', scale_units='xy', scale=1, color='C0', alpha=0.5)
+    plt.quiver(Af[0,1], Af[0,0], angles='xy', scale_units='xy', scale=1, color='C1', alpha=0.5)
+    plt.quiver(Af[1,1], Af[1,0], angles='xy', scale_units='xy', scale=1, color='C1', alpha=0.5)
+
+    # Adding grid lines
+    plt.grid(True, linestyle='--', color='gray', linewidth=0.5)
+
+    plt.ylim(-2,2)
+    plt.xlim(-2,2)
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
+    
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    
+    plt.legend()
+    plt.show()

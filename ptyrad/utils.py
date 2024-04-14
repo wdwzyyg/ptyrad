@@ -27,6 +27,21 @@ def time_sync():
     t = time()
     return t
 
+def compose_affine_matrix(scale, asymmetry, rotation, shear):
+    # Adapted from PtychoShelves +math/compose_affine_matrix.m
+    # The input rotation and shear is in unit of degree
+    rotation_rad = np.radians(rotation)
+    shear_rad = np.radians(shear)
+    
+    A1 = np.array([[scale, 0], [0, scale]])
+    A2 = np.array([[1 + asymmetry/2, 0], [0, 1 - asymmetry/2]])
+    A3 = np.array([[np.cos(rotation_rad), np.sin(rotation_rad)], [-np.sin(rotation_rad), np.cos(rotation_rad)]])
+    A4 = np.array([[1, 0], [np.tan(shear_rad), 1]])
+    
+    affine_mat = A1 @ A2 @ A3 @ A4
+
+    return affine_mat
+
 def select_center_rectangle_indices(matrix_height, matrix_width, height_rec, width_rec):
     ''' Select the indices from the center part of the 4D-STEM data '''
     # Thie is useful if you only want to reconstruct a small part of the data
@@ -59,11 +74,12 @@ def make_save_dict(model, exp_params, source_params, loss_params, constraint_par
                 'loss_params':loss_params,
                 'constraint_params':constraint_params,
                 'model_params':
-                    {'lr_params':model.lr_params,
-                    'omode_occu':model.omode_occu,
-                    'H':model.H,
-                    'crop_pos':model.crop_pos,
-                    'shift_probes':model.shift_probes},
+                    {'detector_blur_std': model.detector_blur_std,
+                     'lr_params':model.lr_params,
+                     'omode_occu':model.omode_occu,
+                     'H':model.H,
+                     'crop_pos':model.crop_pos,
+                     'shift_probes':model.shift_probes},
                 'recon_params':recon_params,
                 'loss_iters': loss_iters,
                 'iter_t': iter_t,

@@ -2,6 +2,7 @@
 
 from .forward import  multislice_forward_model_vec_all
 from .utils import imshift_batch
+from torchvision.transforms.functional import gaussian_blur
 import torch
 
 # This is a current working version (2024.04.13) of the PtychoAD class
@@ -40,6 +41,7 @@ class PtychoAD(torch.nn.Module):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device = device
+            self.detector_blur_std = model_params['detector_blur_std']
             self.lr_params = model_params['lr_params']
             init_variables = model_params['init_variables'] # Don't need to save this because eveything is parsed into the following tensors
             
@@ -144,4 +146,7 @@ class PtychoAD(torch.nn.Module):
         object_patches = self.get_obj_ROI(indices)
         probes = self.get_probes(indices)
         dp_fwd = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, self.H)
+        
+        if self.detector_blur_std is not None:
+            dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
         return dp_fwd, object_patches[...,1]
