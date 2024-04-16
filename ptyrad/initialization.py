@@ -2,7 +2,7 @@
 
 import numpy as np
 from .data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
-from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params
+from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params, compose_affine_matrix
 
 
 class Initializer:
@@ -159,44 +159,72 @@ class Initializer:
         print(f"meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
         print(f"measurements                      (N, Ky, Kx) = {cbeds.dtype}, {cbeds.shape}")
         self.init_variables['measurements'] = cbeds
+   
+    def init_pos(self):
+        source      = self.init_params['source_params']['pos_source']
+        params      = self.init_params['source_params']['pos_params']
+        N_scan_slow = self.init_params['exp_params']['N_scan_slow']
+        N_scan_fast = self.init_params['exp_params']['N_scan_fast']
+        probe_shape = np.array([self.init_params['exp_params']['Npix']]*2)
         
-    def init_obj(self):
-        source = self.init_params['source_params']['obj_source']
-        params = self.init_params['source_params']['obj_params']
-        print(f"\n### Initializing obj from '{source}' ###")
-        
+        print(f"\n### Initializing probe pos from '{source}' ###")
+
         # Load file
         if source   == 'custom':
-            obj = params
+            crop_pos, probe_pos_shifts = params[0], params[1]
+            pos = crop_pos + probe_pos_shifts
         elif source == 'pt':
             pt_path = params
-            ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
-            obja, objp = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy(), ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
-            obj = obja * np.exp(1j * objp)
+            ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
+            crop_pos         = ckpt['model_params']['crop_pos'].detach().cpu().numpy()
+            probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
+            pos = crop_pos + probe_pos_shifts
         elif source == 'PtyShv':
             mat_path = params
-            obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
-            print("Expanding PtyShv object dimension")
-            print(f"Input PtyShv obj has original shape {obj.shape}")
-            if len(obj.shape) == 2: # Single-slice ptycho
-                obj = obj[None,None,:,:]
-            elif len(obj.shape)==3: # MS-ptycho
-                obj = obj[None,].transpose(0,3,1,2)
+            mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
+            probe_positions = mat_contents[2]
+            probe_shape = mat_contents[1].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp)
+            obj_shape   = mat_contents[0].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
+            pos_offset = np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) - 1 # For Matlab - Python index shift
+            probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
+            pos                  = probe_positions_yx + pos_offset 
         elif source == 'simu':
-            obj_shape = params
-            if len(obj_shape) != 4:
-                raise ValueError(f"Input `obj_shape` = {obj_shape}, please provide a total dimension of 4 with (omode, Nz, Ny, Nx) instead!")
-            else:
-                obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
+            dx_spec        = self.init_params['exp_params']['dx_spec']
+            scan_step_size = self.init_params['exp_params']['scan_step_size']
+            pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
+            pos = pos - (pos.max(0) - pos.min(0))/2 + pos.min(0) # Center scan around origin
+            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
+            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
         
-        # Select omode range and print summary
-        omode_max = self.init_params['exp_params']['omode_max']
-        obj = obj[:omode_max].astype('complex64')
-        print(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}")
-        self.init_variables['obj'] = obj
-            
+        # Postprocess the scan positions if needed        
+        if self.init_params['exp_params']['scan_flip'] is not None:
+            scan_flip = self.init_params['exp_params']['scan_flip']
+            print(f"Flipping scan pattern with axes = {scan_flip}")
+            pos = pos.reshape(N_scan_slow, N_scan_fast, 2)
+            pos = np.flip(pos, scan_flip)
+            pos = pos.reshape(-1,2)
+        if self.init_params['exp_params']['scan_affine'] is not None:
+            (scale, asymmetry, rotation, shear) = self.init_params['exp_params']['scan_affine']
+            pos = pos - (pos.max(0) - pos.min(0)) + pos.min(0) # Center scan around origin
+            pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
+            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift back to obj coordinate
+        
+        self.obj_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
+        
+        crop_pos         = np.round(pos)
+        probe_pos_shifts = pos - np.round(pos)
+        crop_pos         = crop_pos.astype('int16')
+        probe_pos_shifts = probe_pos_shifts.astype('float32')
+        
+        # Print summary
+        print(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}")
+        print(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}")
+        print(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}")
+        self.init_variables['crop_pos'] = crop_pos
+        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
+                
     def init_probe(self):
         source = self.init_params['source_params']['probe_source']
         params = self.init_params['source_params']['probe_params']
@@ -257,46 +285,55 @@ class Initializer:
         print(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while sum(cbeds)/len(cbeds) = {np.sum(cbeds)/len(cbeds):.2f}")
         self.init_variables['probe'] = probe
             
-    def init_pos(self):
-        source = self.init_params['source_params']['pos_source']
-        params = self.init_params['source_params']['pos_params']
-        print(f"\n### Initializing probe pos from '{source}' ###")
-
+    def init_obj(self):
+        source = self.init_params['source_params']['obj_source']
+        params = self.init_params['source_params']['obj_params']
+        print(f"\n### Initializing obj from '{source}' ###")
+        
         # Load file
         if source   == 'custom':
-            crop_pos = params[0]
-            probe_pos_shifts = params[1]
+            obj = params
         elif source == 'pt':
             pt_path = params
-            ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
-            crop_pos         = ckpt['model_params']['crop_pos'].detach().cpu().numpy()
-            probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
+            ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
+            obja, objp = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy(), ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
+            obj = obja * np.exp(1j * objp)
         elif source == 'PtyShv':
             mat_path = params
-            mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
-            probe_positions = mat_contents[2]
-            probe_shape = mat_contents[1].shape   # Matlab probe is (Ny,Nx,pmode,vp)
-            obj_shape   = mat_contents[0].shape   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
-            pos_offset = np.ceil((np.array([obj_shape[0], obj_shape[1]])/2) - (np.array([probe_shape[0], probe_shape[1]])/2)) - 1 # For Matlab - Python index shift
-            probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
-            crop_coordinates     = probe_positions_yx + pos_offset 
-            crop_pos = np.round(crop_coordinates) # This one is rounded
-            probe_pos_shifts = (crop_coordinates - np.round(crop_coordinates)) # This shift (tH, tW) would be added to the probe to compensate the integer obj cropping
+            obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
+            print("Expanding PtyShv object dimension")
+            print(f"Input PtyShv obj has original shape {obj.shape}")
+            if len(obj.shape) == 2: # Single-slice ptycho
+                obj = obj[None,None,:,:]
+            elif len(obj.shape)==3: # MS-ptycho
+                obj = obj[None,].transpose(0,3,1,2)
         elif source == 'simu':
-            crop_pos = None
-            probe_pos_shifts = None
+            if params is not None:
+                obj_shape = params
+            else:
+                print("obj_shape is not provided, use exp_params, position range, and probe shape for estimated obj_shape (omode, Nz, Ny, Nx)")
+                omode = self.init_params['exp_params']['omode_max']
+                Nz    = self.init_params['exp_params']['Nlayer']
+                try:
+                    (Ny,Nx) = self.obj_extent
+                except:
+                    print("Warning: 'obj_extent' field not found. Initializing positions for obj_shape estimation...")
+                    self.init_pos()
+                    (Ny,Nx) = self.obj_extent
+                obj_shape = (omode, Nz, Ny, Nx)
+            if len(obj_shape) != 4:
+                raise ValueError(f"Input `obj_shape` = {obj_shape}, please provide a total dimension of 4 with (omode, Nz, Ny, Nx) instead!")
+            else:
+                obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
-        crop_pos = crop_pos.astype('int16')
-        probe_pos_shifts = probe_pos_shifts.astype('float32')
         
-        # Print summary
-        print(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}")
-        print(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}")
-        print(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}")
-        self.init_variables['crop_pos'] = crop_pos
-        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
-                
+        # Select omode range and print summary
+        omode_max = self.init_params['exp_params']['omode_max']
+        obj = obj[:omode_max].astype('complex64')
+        print(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}")
+        self.init_variables['obj'] = obj
+                    
     def init_omode_occu(self):
         source = self.init_params['source_params']['omode_occu_source']
         params = self.init_params['source_params']['omode_occu_params']
@@ -326,16 +363,23 @@ class Initializer:
         print(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}")
         self.init_variables['H'] = H
     
+    def init_check(self):
+        # Check the consistency of input params
+        # CBED len = N_scans = N_scan_slow * N_scan_fast
+        # Probe size = CBED size
+        pass
+    
     def init_all(self):
         # Run this method to initialize all
         
         self.init_cache()
         self.init_exp_params()
         self.init_measurements()
-        self.init_obj()
         self.init_probe()
         self.init_pos()
+        self.init_obj()
         self.init_omode_occu()
         self.init_H()
+        self.init_check()
         
         return self
