@@ -432,7 +432,7 @@ def make_stem_probe(params_dict):
         print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
         print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
         print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-        print(f'Real space extent = {dx*Npix:.4f} Ang')
+        print(f'Real space probe extent = {dx*Npix:.4f} Ang')
     
     return probe
 
@@ -546,7 +546,6 @@ def check_modes_ortho(tensor, atol = 2e-5):
 ###################################### ARCHIVE ##################################################
 
 def make_compact_batches(pos, num_groups):
-    from sklearn.cluster import MiniBatchKMeans
     # Fit K-Means clustering algorithm
     kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_groups, max_iter=10, batch_size=3072)
     kmeans.fit(pos)

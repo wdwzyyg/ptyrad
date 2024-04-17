@@ -14,6 +14,11 @@ exp_params = {
     'z_distance'        : 8, # Ang
     'Nlayer'            : 1,
     'N_scans'           : 16384,
+    'N_scan_slow'       : 128,
+    'N_scan_fast'       : 128,
+    'scan_step_size'    : 0.4290, # Ang
+    'scan_flip'         : None, 
+    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 10,
     'pmode_init_pows'   : [0.02],
@@ -28,12 +33,12 @@ exp_params = {
 source_params = {
     'measurements_source': 'hdf5',
     'measurements_params': [exp_CBED_path, 'dp'],
-    'obj_source'         : 'simu', 
-    'obj_params'         : (1,1,592,592),
+    'obj_source'         : 'simu', #'PtyShv', 
+    'obj_params'         : None, #ptycho_output_path, #(1,1,592,592),
     'probe_source'       : 'simu',
-    'probe_params'       : None,  # probe_simu_params
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    'probe_params'       : None,  
+    'pos_source'         : 'simu',
+    'pos_params'         : None, 
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

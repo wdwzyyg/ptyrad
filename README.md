@@ -37,6 +37,9 @@ Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/ref
 ### Trying the demo
 - `run_ptyrad.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 
+## Support
+If you run into problems, have questions or suggested features / modifications, please create an issue [here](https://github.com/chiahao3/ptyrad/issues/new/choose).
+
 ## Authors
 
 Chia-Hao Lee (cl2696@cornell.edu)

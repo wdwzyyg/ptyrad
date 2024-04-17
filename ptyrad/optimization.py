@@ -3,7 +3,6 @@
 ## Define the optimization loop related functions
 
 from .utils import time_sync
-from math import ceil, floor
 import numpy as np
 from torchmetrics.image import TotalVariation
 import torch

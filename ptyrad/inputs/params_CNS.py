@@ -1,14 +1,14 @@
 # CNS
 
-exp_CBED_path      = 'data/CNS_from_Hari/240327_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_2configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
 ptycho_output_path = 'data/CNS_from_Hari/Niter10000.mat'
+exp_CBED_path      = 'data/CNS_from_Hari/240327_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_2configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
 
 exp_params = {
     'kv'                : 300,  # kV
     'conv_angle'        : 30, # mrad, semi-convergence angle
     'Npix'              : 164, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
-    'rbf'               : None, # Pixels of radius of BF disk, used to calculate dk
-    'dx_spec'           : 0.1406,# Ang
+    'rbf'               : None, # Pixels of radius of BF disk
+    'dx_spec'           : 0.1406,# Ang, used to calculate dk
     'defocus'           : -100, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
     'z_distance'        : 1.25, # Ang
@@ -17,8 +17,8 @@ exp_params = {
     'N_scan_slow'       : 87,
     'N_scan_fast'       : 82,
     'scan_step_size'    : 0.28, # Ang
-    'scan_flip'         : (2),
-    'scan_affine'       : None,#(1, 0, 1, 0),# #None, # (scale, asymmetry, rotation, shear)
+    'scan_flip'         : (2), 
+    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 2,
     'pmode_init_pows'   : [0.02],
