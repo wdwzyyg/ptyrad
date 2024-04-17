@@ -1,10 +1,11 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning from make_batches
-from random import shuffle
-import torch
 import warnings
-import numpy as np
 from time import time
+
+from tifffile import imwrite
+import numpy as np
+import torch
 from torch.fft import fft2, ifft2, ifftshift, fftshift
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
@@ -42,82 +43,158 @@ def compose_affine_matrix(scale, asymmetry, rotation, shear):
 
     return affine_mat
 
-def select_center_rectangle_indices(matrix_height, matrix_width, height_rec, width_rec):
-    ''' Select the indices from the center part of the 4D-STEM data '''
-    # Thie is useful if you only want to reconstruct a small part of the data
-    # Example
-    # #indices = np.array(select_center_rectangle_indices(87,82,32,32))
+def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full'):
     
-    # Calculate the coordinates of the center rectangle
-    start_row = (matrix_height - height_rec) // 2
-    end_row = start_row + height_rec
-    start_col = (matrix_width - width_rec) // 2
-    end_col = start_col + width_rec
+    N_scans = N_scan_slow * N_scan_fast
+    
+    print(f"Selecting indices with the '{mode}' mode ")
+    # Generate flattened indices for the entire FOV
+    if mode == 'full':
+        indices = np.arange(N_scans)
+        return indices
 
-    # Generate flattened indices for the center rectangle
-    indices = []
-    for row in range(start_row, end_row):
-        for col in range(start_col, end_col):
-            indices.append(row * matrix_width + col)
+    # Set default values for subscan params
+    if subscan_slow is None and subscan_fast is None:
+        print(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions")
+        subscan_slow = N_scan_slow//2
+        subscan_fast = N_scan_fast//2
+        
+    # Generate flattened indices for the center rectangular region
+    if mode == 'center':
+        print(f"Choosing subscan with {(subscan_slow, subscan_fast)}") 
+        start_row = (N_scan_slow - subscan_slow) // 2
+        end_row = start_row + subscan_slow
+        start_col = (N_scan_fast - subscan_fast) // 2
+        end_col = start_col + subscan_fast
+        indices = np.array([row * N_scan_fast + col for row in range(start_row, end_row) for col in range(start_col, end_col)])
 
+    # Generate flattened indices for the entire FOV with sub-sampled indices
+    elif mode == 'sub':
+        print(f"Choosing subscan with {(subscan_slow, subscan_fast)}") 
+        full_indices = np.arange(N_scans).reshape(N_scan_slow, N_scan_fast)
+        subscan_slow_id = np.linspace(0, N_scan_slow-1, num=subscan_slow, dtype=int)
+        subscan_fast_id = np.linspace(0, N_scan_fast-1, num=subscan_fast, dtype=int)
+        slow_grid, fast_grid = np.meshgrid(subscan_slow_id, subscan_fast_id, indexing='ij')
+        indices = full_indices[slow_grid, fast_grid].reshape(-1)
+
+    else:
+        raise KeyError(f"Indices selection mode {mode} not implemented, please use either 'full', 'center', or 'sub'")   
+        
     return indices
 
-def make_save_dict(model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
+def make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     
     save_dict = {
-                'optimizable_tensors':model.optimizable_tensors,
-                'exp_params':exp_params,
-                'source_params':source_params,
-                'loss_params':loss_params,
-                'constraint_params':constraint_params,
+                'output_path'           : output_path,
+                'optimizable_tensors'   : model.optimizable_tensors,
+                'exp_params'            : exp_params,
+                'source_params'         : source_params,
+                'loss_params'           : loss_params,
+                'constraint_params'     : constraint_params,
                 'model_params':
                     {'detector_blur_std': model.detector_blur_std,
-                     'lr_params':model.lr_params,
-                     'omode_occu':model.omode_occu,
-                     'H':model.H,
-                     'crop_pos':model.crop_pos,
-                     'shift_probes':model.shift_probes},
-                'recon_params':recon_params,
-                'loss_iters': loss_iters,
-                'iter_t': iter_t,
-                'iter': iter,
-                'avg_losses': avg_losses
+                     'lr_params'        : model.lr_params,
+                     'omode_occu'       : model.omode_occu,
+                     'H'                : model.H,
+                     'z_distance'       : model.z_distance,
+                     'crop_pos'         : model.crop_pos,
+                     'shift_probes'     : model.shift_probes},
+                'recon_params'          : recon_params,
+                'loss_iters'            : loss_iters,
+                'iter_t'                : iter_t,
+                'iter'                  : iter,
+                'avg_losses'            : avg_losses
                 }
     
     return save_dict
 
-def make_recon_params_dict(NITER, BATCH_SIZE, GROUP, batches, output_path):
+def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS):
     recon_params = {
-        'NITER':       NITER,
-        'BATCH_SIZE':  BATCH_SIZE,
-        'GROUP':       GROUP,
-        'batches':     batches,
-        'output_path': output_path
+        'NITER'         :        NITER,
+        'INDICES_MODE'  : INDICES_MODE,
+        'BATCH_SIZE'    :   BATCH_SIZE,
+        'GROUP_MODE'    :   GROUP_MODE,
+        'SAVE_ITERS'    :   SAVE_ITERS,
     }
     return recon_params
 
-def make_batches(indices, pos, batch_size, group='random'):
+def make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix=''):
+    ''' Generate the output folder given indices, recon_params, model, and constraint_params '''
+    
+    # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
+    
+    # # Example
+    # NITER        = 50
+    # INDICES_MODE = 'full' #'full', 'center', 'sub'
+    # BATCH_SIZE   = 128
+    # GROUP_MODE   = 'random' #'random', 'sparse', 'compact'
+
+    # output_dir   = 'output/STO'
+    # postfix      = ''
+
+    # pos          = model.crop_pos.cpu().numpy()
+    # indices      = select_scan_indices(exp_params['N_scan_slow'], exp_params['N_scan_slow'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE)
+    # batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE)
+    # recon_params = make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE)
+    # output_path  = make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix)
+    
+    output_path  = output_dir
+    indices_mode = recon_params['INDICES_MODE']
+    group_mode   = recon_params['GROUP_MODE']
+    batch_size   = recon_params['BATCH_SIZE']
+    pmode        = model.opt_probe.size(0)
+    dp_size      = model.measurements.size(1)
+    obj_shape    = model.opt_objp.shape
+    objp_lr      = model.lr_params['objp']
+    
+    output_path  = os.path.join(output_dir, f"{indices_mode}_N{len(indices)}_dp{dp_size}_{group_mode}{batch_size}_p{pmode}_lr{objp_lr:.0e}_{obj_shape[0]}obj_{obj_shape[1]}slice")
+    
+    if obj_shape[1] != 1:
+        z_distance = model.z_distance.cpu().numpy().round(2)
+        output_path += f"_dz{z_distance}"
+    
+    if constraint_params['kz_filter']['freq'] is not None:
+        beta = constraint_params['kz_filter']['beta']
+        output_path += f"_kzreg{beta}"
+        
+    output_path += postfix
+    
+    if recon_params['SAVE_ITERS'] is not None:
+        os.makedirs(output_path, exist_ok=True)
+        print(f"output_path = '{output_path}' is generated!")
+    else:
+        print(f"output_path = '{output_path}' but is NOT generated!")
+    return output_path
+
+def make_batches(indices, pos, batch_size, mode='random'):
     ''' Make batches from input indices '''
     # Input:
     #   indices: int, (Ns,) array. indices could be a subset of all indices.
     #   pos: int/float (N,2) array. Always pass in the full positions.
     #   batch_size: int. The number of indices of each mini-batch
-    #   group: str. Choose between 'random', 'compact', or 'sparse' grouping.
+    #   mode: str. Choose between 'random', 'compact', or 'sparse' grouping.
     # Output:
     #   batches: A list of `num_batch` arrays, or [batch0, batch1, ...]
     # Note:
     #   The actual batch size would only be "close" if it's not divisible by len(indices) for 'random' grouping
     #   For 'compact' or 'sparse', it's generally fluctuating around the specified batch size
 
+    if len(indices) > len(pos):
+        raise ValueError(f"len(indices) = '{len(indices)}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
+    
+    if indices.max() > len(pos):
+        raise ValueError(f"Maximum index '{indices.max()}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
+    
     num_batch = len(indices) // batch_size   
-
-    if group == 'random':
+    t_start = time()
+    if mode == 'random':
         rng = np.random.default_rng()
         shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
         random_batches = np.array_split(shuffled_indices, num_batch) 
+        print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
         return random_batches
         
     else:
@@ -134,7 +211,8 @@ def make_batches(indices, pos, batch_size, group='random'):
             batch_indices_s = np.where(labels == batch_idx)[0]
             compact_batches.append(indices[batch_indices_s])
 
-        if group == 'compact':
+        if mode == 'compact':
+            print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
             return compact_batches
 
         else:
@@ -142,7 +220,7 @@ def make_batches(indices, pos, batch_size, group='random'):
             sparse_batches = [[] for _ in range(num_batch)]
             # Calculate the centroid for each compact group as initial start for sparse groups
             centroids = np.array([np.mean(pos[cbatch], axis=0) for cbatch in compact_batches])
-            pairwise_distances = cdist(pos, pos) # Calculae the dist for all pos can keep the absolute index and skip the conversion
+            pairwise_distances = cdist(pos, pos) # Calculate the dist for all pos can keep the absolute index and skip the conversion
             
             # Start with the first point as a seed for each group
             for batch_idx in range(num_batch):
@@ -163,27 +241,32 @@ def make_batches(indices, pos, batch_size, group='random'):
 
                 # Add the point to the group with the farthest minimal distance
                 sparse_batches[max_group_index].append(indices[i])
-            
+            print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
             return sparse_batches
 
-def shuffle_batches(batches, batch_size, group):
-    ''' Shuffle the sequence of batches '''
-    # Note: This will only shuffle the sequence of batches for "sparse" and "compact"
-    # For random grouping, generate an entirely new random batches should be more appropriate for the purpose of randomness
+def save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
+    save_dict = make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses)
 
-    if group =='random':
-        indices = np.concatenate(batches)        
-        num_batch = len(indices) // batch_size   
-        rng = np.random.default_rng()
-        shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
-        shuffled_batches = np.array_split(shuffled_indices, num_batch)
-        return shuffled_batches 
-    else:
-        shuffled_batches = batches.copy()
-        # In-place shuffling
-        shuffle(shuffled_batches)
+    torch.save(save_dict, os.path.join(output_path, f"model_iter{str(iter).zfill(4)}.pt"))
+
+    imwrite(os.path.join(output_path, f"probe_amp_iter{str(iter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
     
-    return shuffled_batches
+    omode  = model.opt_objp.size(0)
+    zslice = model.opt_objp.size(1)
+    
+    if omode == 1 and zslice == 1:
+        imwrite(os.path.join(output_path, f"objp_iter{str(iter).zfill(4)}.tif"), model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
+    elif omode == 1 and zslice > 1:
+        imwrite(os.path.join(output_path, f"objp_zstack_iter{str(iter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_zsum_iter{str(iter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
+    elif omode > 1 and zslice == 1:
+        imwrite(os.path.join(output_path, f"objp_ostack_iter{str(iter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_omean_iter{str(iter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_ostd_iter{str(iter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
+    else:
+        imwrite(os.path.join(output_path, f"objp_4D_iter{str(iter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(iter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(iter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
 
 def imshift_batch(img, shifts, grid):
     """

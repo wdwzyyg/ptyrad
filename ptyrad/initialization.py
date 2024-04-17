@@ -366,6 +366,7 @@ class Initializer:
         _, H, _, _ = near_field_evolution(probe_shape, z_distance, lambd, extent)
         H = H.astype('complex64')
         print(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}")
+        self.init_variables['z_distance'] = z_distance
         self.init_variables['H'] = H
     
     def init_check(self):

@@ -45,7 +45,7 @@ def plot_forward_pass(model, indices, dp_power, object_data):
         fig.colorbar(im11)
         plt.show()
         
-def plot_scan_positions(pos, img=None, offset=None, show_arrow=True):
+def plot_scan_positions(pos, img=None, offset=None, dot_scale=0.001, show_arrow=True):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
@@ -59,7 +59,7 @@ def plot_scan_positions(pos, img=None, offset=None, show_arrow=True):
         pos = np.array(pos) + np.array(offset)
         plt.gca().invert_yaxis()  # Pre-flip y-axis so the y-axis is image-like no matter what
     
-    plt.scatter(x = pos[:,1], y = pos[:,0], c=np.arange(len(pos)), s=0.001*np.arange(len(pos)))
+    plt.scatter(x = pos[:,1], y = pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)))
     plt.gca().set_aspect('equal', adjustable='box')
     plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
         

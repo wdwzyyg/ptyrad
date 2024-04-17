@@ -53,6 +53,7 @@ class PtychoAD(torch.nn.Module):
             self.H                      = torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device)
             self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
             self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
             self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
             
