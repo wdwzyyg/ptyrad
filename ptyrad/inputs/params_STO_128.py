@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.393, # Ang
-    'scan_flip'         : None, 
+    'scan_flip'         : (2),  # (2) for simu pos, None for imported pos
     'scan_affine'       : None, #(1,0,2,0), # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 4,
@@ -33,16 +33,12 @@ exp_params = {
 source_params = {
     'measurements_source': 'hdf5',
     'measurements_params': [exp_CBED_path, 'dp'],
-    # 'obj_source'         : 'simu', #'simu',
-    # 'obj_params'         : (1,30,1209,1209), #ptycho_output_path, #ptycho_output_path, #(1,44,860,860)
-    # 'probe_source'       : 'simu',
-    # 'probe_params'       : None, #ptycho_output_path, 
-    'obj_source'         : 'PtyShv', #'simu',
-    'obj_params'         : ptycho_output_path, #ptycho_output_path, #ptycho_output_path, #(1,44,860,860)
-    'probe_source'       : 'PtyShv',
-    'probe_params'       : ptycho_output_path, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path, 
+    'obj_source'         : 'simu', #'simu',
+    'obj_params'         : None, #ptycho_output_path, #ptycho_output_path, #(1,44,860,860)
+    'probe_source'       : 'simu',
+    'probe_params'       : None, #ptycho_output_path, 
+    'pos_source'         : 'simu',
+    'pos_params'         : None, 
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

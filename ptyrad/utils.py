@@ -160,6 +160,9 @@ def make_output_folder(output_dir, indices, recon_params, model, constraint_para
         beta = constraint_params['kz_filter']['beta']
         output_path += f"_kzreg{beta}"
         
+    if model.detector_blur_std is not None and model.detector_blur_std != 0:
+        output_path += f"_dpblur{model.detector_blur_std}"
+        
     output_path += postfix
     
     if recon_params['SAVE_ITERS'] is not None:
@@ -625,6 +628,29 @@ def check_modes_ortho(tensor, atol = 2e-5):
                 print(f"Modes {i} and {j} are orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
             else:
                 print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
+
+def center_of_mass(image):
+    # Create grid of coordinates
+    device = image.device
+    grid_y, grid_x = torch.meshgrid(torch.arange(image.shape[0], device=device), torch.arange(image.shape[1], device=device), indexing='ij')
+    
+    # Flatten image and grid
+    image_flat = image.view(-1)
+    grid_x_flat = grid_x.flatten().float()
+    grid_y_flat = grid_y.flatten().float()
+    
+    # Compute weighted sum of x and y coordinates
+    weighted_sum_x = torch.sum(grid_x_flat * image_flat)
+    weighted_sum_y = torch.sum(grid_y_flat * image_flat)
+    
+    # Compute total intensity
+    total_intensity = torch.sum(image_flat)
+    
+    # Calculate center of mass
+    center_x = weighted_sum_x / total_intensity
+    center_y = weighted_sum_y / total_intensity
+    
+    return center_x.item(), center_y.item()
 
 ###################################### ARCHIVE ##################################################
 

@@ -27,23 +27,21 @@ class PtychoAD(torch.nn.Module):
     
     # Example usage:
     # model_params = {
-    # 'init_variables': init.init_variables,
     # 'lr_params':{
     #     'obja': 0,
     #     'objp': 1e-3,
     #     'probe': 1e-3, 
     #     'probe_pos_shifts': 1e-3}}
     #                 
-    # model = PtychoAD(model_params, device=DEVICE)
+    # model = PtychoAD(init_variables, model_params, device=DEVICE)
     # optimizer = torch.optim.Adam(model.optimizer_params)
 
-    def __init__(self, model_params, device='cuda:0'):
+    def __init__(self, init_variables, model_params, device='cuda:0'):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device = device
             self.detector_blur_std = model_params['detector_blur_std']
             self.lr_params = model_params['lr_params']
-            init_variables = model_params['init_variables'] # Don't need to save this because eveything is parsed into the following tensors
             
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
             self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
@@ -148,6 +146,6 @@ class PtychoAD(torch.nn.Module):
         probes = self.get_probes(indices)
         dp_fwd = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, self.H)
         
-        if self.detector_blur_std is not None:
+        if self.detector_blur_std is not None and self.detector_blur_std != 0:
             dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
         return dp_fwd, object_patches[...,1]

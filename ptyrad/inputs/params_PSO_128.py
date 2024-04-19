@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 64,
     'N_scan_fast'       : 64,
     'scan_step_size'    : 0.41, # Ang
-    'scan_flip'         : (2), # Set to None if you import PtyShv pos
+    'scan_flip'         : (2),  # (2) for 'simu' pos, None for loaded pos
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 8,

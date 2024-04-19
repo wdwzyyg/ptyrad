@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
     'scan_step_size'    : 0.4290, # Ang
-    'scan_flip'         : None, 
+    'scan_flip'         : None, # None for both simu and loaded pos
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 10,
