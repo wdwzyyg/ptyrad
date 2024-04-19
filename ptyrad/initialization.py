@@ -193,7 +193,8 @@ class Initializer:
                 print(f"exp_params[`probe_simu_params`] is set to `{probe_simu_params}`, use exp_params and default values instead for simulation")
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params)
-            probe = make_mixed_probe(probe, probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'])
+            if probe_simu_params['pmodes'] > 1:
+                probe = make_mixed_probe(probe, probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'])
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
         
@@ -268,7 +269,7 @@ class Initializer:
             pos = pos.reshape(-1,2)
         if self.init_params['exp_params']['scan_affine'] is not None:
             (scale, asymmetry, rotation, shear) = self.init_params['exp_params']['scan_affine']
-            pos = pos - (pos.max(0) - pos.min(0)) + pos.min(0) # Center scan around origin
+            pos = pos - pos.mean(0) # Center scan around origin
             pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift back to obj coordinate
         

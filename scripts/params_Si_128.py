@@ -9,7 +9,7 @@ exp_params = {
     'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'rbf'               : None, # Pixels of radius of BF disk, used to calculate dk
     'dx_spec'           : 0.2249,# Ang
-    'defocus'           : -183.351, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
+    'defocus'           : 0, #-183.351, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
     'z_distance'        : 10, # Ang
     'Nlayer'            : 42,
@@ -54,7 +54,7 @@ model_params = {
     'lr_params':{
         'obja': 5e-4,
         'objp': 5e-4,
-        'probe': 2e-3, 
+        'probe': 1e-3, 
         'probe_pos_shifts': 0}}
 
 loss_params = {
@@ -67,7 +67,7 @@ loss_params = {
 }
 
 constraint_params = {
-    'ortho_pmode'   : {'freq': 1},
+    'ortho_pmode'   : {'freq': None},
     'ortho_omode'   : {'freq': None},
     'kz_filter'     : {'freq': 1, 'beta':1, 'alpha':1, 'z_pad':None},
     'postiv'        : {'freq': 1},
@@ -75,11 +75,11 @@ constraint_params = {
 }
 
 # Reconstruction params
-NITER        = 30
+NITER        = 20
 INDICES_MODE = 'center'   # 'full', 'center', 'sub'
 BATCH_SIZE   = 64
 GROUP_MODE   = 'sparse' # 'random', 'sparse', 'compact'
 SAVE_ITERS   = 5        # scalar or None
 
 output_dir   = 'H:/workspace/p01_code/deep_ptycho/ptyrad/output/Si'
-postfix      = '_2e-3Probe_fixPos'
+postfix      = '_focusProbe_noSVD'

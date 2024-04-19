@@ -148,9 +148,11 @@ def make_output_folder(output_dir, indices, recon_params, model, constraint_para
     pmode        = model.opt_probe.size(0)
     dp_size      = model.measurements.size(1)
     obj_shape    = model.opt_objp.shape
-    objp_lr      = model.lr_params['objp']
-    
-    output_path  = os.path.join(output_dir, f"{indices_mode}_N{len(indices)}_dp{dp_size}_{group_mode}{batch_size}_p{pmode}_lr{objp_lr:.0e}_{obj_shape[0]}obj_{obj_shape[1]}slice")
+    probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
+    objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
+    pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
+
+    output_path  = os.path.join(output_dir, f"{indices_mode}_N{len(indices)}_dp{dp_size}_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_olr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice")
     
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)

@@ -9,7 +9,7 @@ exp_params = {
     'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'rbf'               : None, # Pixels of radius of BF disk, used to calculate dk
     'dx_spec'           : 0.2249,# Ang
-    'defocus'           : -183.351, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
+    'defocus'           : 0, #-183.351, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
     'z_distance'        : 10, # Ang
     'Nlayer'            : 42,
@@ -17,8 +17,8 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.44, # Ang
-    'scan_flip'         : None, # (1) for 'simu' pos, None for loaded pos
-    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
+    'scan_flip'         : (1), # (1) for 'simu' pos, None for loaded pos
+    'scan_affine'       : (1,0,-1.5,0), # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 5,
     'pmode_init_pows'   : [0.02],
@@ -37,14 +37,14 @@ source_params = {
     'obj_params'         : None, #ptycho_output_path, #(1,44,860,860)
     'probe_source'       : 'simu',
     'probe_params'       : None, 
-    # 'pos_source'         : 'simu',
-    # 'pos_params'         : None, 
+    'pos_source'         : 'simu',
+    'pos_params'         : None, 
     # 'obj_source'         : 'PtyShv', #'PtyShv',
     # 'obj_params'         : ptycho_output_path, #ptycho_output_path, #(1,8,391,403),
     # 'probe_source'       : 'PtyShv',
     # 'probe_params'       : ptycho_output_path, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : ptycho_output_path,
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }
