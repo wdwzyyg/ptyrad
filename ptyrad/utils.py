@@ -121,7 +121,7 @@ def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITE
     }
     return recon_params
 
-def make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix=''):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, postfix=''):
     ''' Generate the output folder given indices, recon_params, model, and constraint_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
@@ -142,6 +142,7 @@ def make_output_folder(output_dir, indices, recon_params, model, constraint_para
     # output_path  = make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix)
     
     output_path  = output_dir
+    cbeds_flipT  = exp_params['cbeds_flipT']
     indices_mode = recon_params['INDICES_MODE']
     group_mode   = recon_params['GROUP_MODE']
     batch_size   = recon_params['BATCH_SIZE']
@@ -152,7 +153,12 @@ def make_output_folder(output_dir, indices, recon_params, model, constraint_para
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
 
-    output_path  = os.path.join(output_dir, f"{indices_mode}_N{len(indices)}_dp{dp_size}_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_olr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice")
+    output_path  = output_dir + "/" + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
+    
+    if cbeds_flipT is not None:
+        output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
+        
+    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_olr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
     
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)

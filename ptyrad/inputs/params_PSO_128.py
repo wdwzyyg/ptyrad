@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 64,
     'N_scan_fast'       : 64,
     'scan_step_size'    : 0.41, # Ang
-    'scan_flip'         : (2),  # (2) for 'simu' pos, None for loaded pos
+    'scan_flip'         : (2),  # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 8,
@@ -25,7 +25,7 @@ exp_params = {
     'probe_permute'     : None,
     'cbeds_permute'     : (0,2,1),
     'cbeds_reshape'     : None,
-    'cbeds_flip'        : None,
+    'cbeds_flipT'       : None, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'probe_simu_params' : None
     }
 

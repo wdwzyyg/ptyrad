@@ -146,10 +146,16 @@ class Initializer:
             print(f"Reshaping measurements into {cbeds_shape}")
             cbeds = cbeds.reshape(cbeds_shape)
             
-        if self.init_params['exp_params']['cbeds_flip'] is not None:
-            flip_axes = self.init_params['exp_params']['cbeds_flip']
-            print(f"Flipping measurements for axis = {flip_axes}")
-            cbeds = np.flip(cbeds, flip_axes)
+        if self.init_params['exp_params']['cbeds_flipT'] is not None:
+            flipT_axes = self.init_params['exp_params']['cbeds_flipT']
+            print(f"Flipping measurements with [flipup, fliplr, transpose] = {flipT_axes}")
+            
+            if flipT_axes[0] != 0:
+                cbeds = np.flip(cbeds, 1)
+            if flipT_axes[1] != 0:
+                cbeds = np.flip(cbeds, 2)
+            if flipT_axes[2] != 0:
+                cbeds = np.transpose(cbeds, (0,2,1))
             
         # Normalizing cbeds
         print("Normalizing measurements so the averaged measurement has max intensity at 1")
@@ -263,12 +269,13 @@ class Initializer:
         # Postprocess the scan positions if needed        
         if self.init_params['exp_params']['scan_flip'] is not None:
             scan_flip = self.init_params['exp_params']['scan_flip']
-            print(f"Flipping scan pattern with axes = {scan_flip}")
+            print(f"Flipping scan pattern (N_scan_slow, N_scan_fast, 2) with axes = {scan_flip}")
             pos = pos.reshape(N_scan_slow, N_scan_fast, 2)
             pos = np.flip(pos, scan_flip)
             pos = pos.reshape(-1,2)
         if self.init_params['exp_params']['scan_affine'] is not None:
             (scale, asymmetry, rotation, shear) = self.init_params['exp_params']['scan_affine']
+            print(f"Applying affine transofrmation to scan pattern with (scale, asymmetry, rotation, shear) = {(scale, asymmetry, rotation, shear)}")
             pos = pos - pos.mean(0) # Center scan around origin
             pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift back to obj coordinate
