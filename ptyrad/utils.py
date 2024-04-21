@@ -82,7 +82,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
+def make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
@@ -105,7 +105,7 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                 'recon_params'          : recon_params,
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
-                'iter'                  : iter,
+                'niter'                 : niter,
                 'avg_losses'            : avg_losses
                 }
     
@@ -258,29 +258,32 @@ def make_batches(indices, pos, batch_size, mode='random'):
             print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
             return sparse_batches
 
-def save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses):
-    save_dict = make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, iter, batch_losses)
+def save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses):
+    save_dict = make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses)
 
-    torch.save(save_dict, os.path.join(output_path, f"model_iter{str(iter).zfill(4)}.pt"))
+    torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
 
-    imwrite(os.path.join(output_path, f"probe_amp_iter{str(iter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
+    imwrite(os.path.join(output_path, f"probe_amp_iter{str(niter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
     
-    omode  = model.opt_objp.size(0)
-    zslice = model.opt_objp.size(1)
+    omode_occu = model.omode_occu
+    omode      = model.opt_objp.size(0)
+    zslice     = model.opt_objp.size(1)
+    
+    # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
     
     if omode == 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_iter{str(iter).zfill(4)}.tif"), model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_iter{str(niter).zfill(4)}.tif"), model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
     elif omode == 1 and zslice > 1:
-        imwrite(os.path.join(output_path, f"objp_zstack_iter{str(iter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_zsum_iter{str(iter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_zstack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_zsum_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
     elif omode > 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_ostack_iter{str(iter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_iter{str(iter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostd_iter{str(iter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_ostack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_omean_iter{str(niter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_ostd_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
     else:
-        imwrite(os.path.join(output_path, f"objp_4D_iter{str(iter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(iter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(iter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_4D_iter{str(niter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
+        imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
 
 def imshift_batch(img, shifts, grid):
     """
@@ -541,7 +544,7 @@ def make_mixed_probe(probe, pmodes, pmode_init_pows):
     #   pmode_init_pows: Integrated intensity of modes. List of a value (e.g. [0.02]) or a couple values for the first few modes. sum(pmode_init_pows) must < 1. 
     # Output:
     #   mixed_probe: A mixed state probe with (pmode,Ny,Nx)
-    
+       
     # Prepare a mixed-state probe `mixed_probe`
     print(f"Start making mixed-state STEM probe with {pmodes} incoherent probe modes")
     M = np.ceil(pmodes**0.5)-1

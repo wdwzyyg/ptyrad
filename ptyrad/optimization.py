@@ -117,7 +117,7 @@ class CombinedConstraint(torch.nn.Module):
         self.device = device
         self.constraint_params = constraint_params
 
-    def forward(self, model, iter):
+    def forward(self, model, niter):
         
         # Apply in-place constraints 
         with torch.no_grad():
@@ -127,45 +127,45 @@ class CombinedConstraint(torch.nn.Module):
             # However, this is at least similar to PtychoShelves' eng. reg_mu
             objp_blur_freq = self.constraint_params['objp_blur']['freq']
             objp_blur_std  = self.constraint_params['objp_blur']['std']
-            if objp_blur_freq is not None and iter % objp_blur_freq == 0 and objp_blur_std !=0:
+            if objp_blur_freq is not None and niter % objp_blur_freq == 0 and objp_blur_std !=0:
                 model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=5, sigma=objp_blur_std)
-                print(f"Apply objp Gaussian blur at iter {iter}")
+                print(f"Apply objp Gaussian blur at iter {niter}")
                 
             # Apply orthogonality constraint to probe modes
             ortho_pmode_freq = self.constraint_params['ortho_pmode']['freq']
-            if ortho_pmode_freq is not None and iter % ortho_pmode_freq == 0:
+            if ortho_pmode_freq is not None and niter % ortho_pmode_freq == 0:
                 model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
                 probe_int = model.opt_probe.abs().pow(2)
-                print(f"Apply ortho pmode constraint at iter {iter}, relative pmode power = {(probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)}")
+                print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {(probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)}")
 
             # Apply orthogonality constraint to omode
             ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
-            if ortho_omode_freq is not None and iter % ortho_omode_freq == 0:
+            if ortho_omode_freq is not None and niter % ortho_omode_freq == 0:
                 model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp, sort=False)
-                print(f"Apply ortho omode constraint at iter {iter}")
+                print(f"Apply ortho omode constraint at iter {niter}")
                 
             # Apply kz filter constraint
             kz_filter_freq = self.constraint_params['kz_filter']['freq']
             beta_regularize_layers = self.constraint_params['kz_filter']['beta']
             alpha_gaussian = self.constraint_params['kz_filter']['alpha']
             z_pad = self.constraint_params['kz_filter']['z_pad']
-            if kz_filter_freq is not None and iter % kz_filter_freq == 0:
+            if kz_filter_freq is not None and niter % kz_filter_freq == 0:
                 model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad)
-                print(f"Apply kz_filter constraint at iter {iter}")
+                print(f"Apply kz_filter constraint at iter {niter}")
 
             # Apply positivity constraint
             postiv_freq = self.constraint_params['postiv']['freq']
-            if postiv_freq is not None and iter % postiv_freq == 0: 
+            if postiv_freq is not None and niter % postiv_freq == 0: 
                 model.opt_objp.clamp_(min=0)
-                print(f"Apply hard positivity objp constraint at iter {iter}")
+                print(f"Apply hard positivity objp constraint at iter {niter}")
             
             # Apply probe int constraint
             fix_probe_int_freq = self.constraint_params['fix_probe_int']['freq']
-            if fix_probe_int_freq is not None and iter % fix_probe_int_freq == 0: 
+            if fix_probe_int_freq is not None and niter % fix_probe_int_freq == 0: 
                 current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
                 target_amp  = model.probe_int_sum**0.5 
                 model.opt_probe.data = model.opt_probe * target_amp/current_amp
-                print(f"Apply fix probe int constraint at iter {iter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+                print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
             
         return
 
@@ -181,7 +181,7 @@ def batch_update(batch, model, optimizer, loss_fn):
     batch_t = time_sync() - start_batch_t
     return losses, batch_t
 
-def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, iter):
+def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
@@ -197,15 +197,15 @@ def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, iter):
             print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
     
     # Apply iter-wise constraint
-    constraint_fn(model, iter)
+    constraint_fn(model, niter)
     
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t
 
-def loss_logger(batch_losses, iter, iter_t):
+def loss_logger(batch_losses, niter, iter_t):
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
-    print(f"Iter: {iter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
+    print(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
           f"in {iter_t // 60} min {iter_t % 60:03f} sec")
     loss_iter = sum(avg_losses.values())
     return loss_iter    

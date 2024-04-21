@@ -184,13 +184,13 @@ class Initializer:
             probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0] # PtychoShelves probe generally has (Ny,Nx,pmode,vp) dimension. Usually people prefer pmode over vp.
             print(f"Input PtyShv probe has original shape {probe.shape}")
             if probe.ndim == 4:
-                print(f"Import only the 1st variable probe mode to make a probe with (pmode, Ny, Nx)") # I don't find variable probe modes are particularly useful for electon ptychography
+                print(f"Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)") # I don't find variable probe modes are particularly useful for electon ptychography
                 probe = probe[...,0]
             elif probe.ndim == 2:
-                print(f"Expanding PtyShv probe dimension to make a probe with (pmode, Ny, Nx)")
+                print(f"Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)")
                 probe = probe[...,None]
             else:
-                probe = probe
+                probe = probe # probe = (pmode, Ny, Nx)
             print("Permuting PtyShv probe into (pmode, Ny, Nx)") # For PtychoShelves input, do the transpose
             probe = probe.transpose(2,0,1)
         elif source == 'simu':
@@ -198,9 +198,10 @@ class Initializer:
             if probe_simu_params is None or type(probe_simu_params) == str:
                 print(f"exp_params[`probe_simu_params`] is set to `{probe_simu_params}`, use exp_params and default values instead for simulation")
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
-            probe = make_stem_probe(probe_simu_params)
+            probe = make_stem_probe(probe_simu_params)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
-                probe = make_mixed_probe(probe, probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'])
+                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows']) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
+                                
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
         
