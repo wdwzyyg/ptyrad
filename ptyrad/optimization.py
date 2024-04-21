@@ -5,6 +5,7 @@
 from .utils import time_sync
 import numpy as np
 from torchmetrics.image import TotalVariation
+from torchvision.transforms.functional import gaussian_blur
 import torch
 
 # This is a current working version (2024.04.13) of the CombinedLoss class
@@ -121,6 +122,13 @@ class CombinedConstraint(torch.nn.Module):
         # Apply in-place constraints 
         with torch.no_grad():
 
+            # Apply Gaussian blur to object phase, this only applies to the last 2 dimension (...,H,W)
+            objp_blur_freq = self.constraint_params['objp_blur']['freq']
+            objp_blur_std  = self.constraint_params['objp_blur']['std']
+            if objp_blur_freq is not None and iter % objp_blur_freq == 0 and objp_blur_std !=0:
+                model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=5, sigma=objp_blur_std)
+                print(f"Apply objp Gaussian blur at iter {iter}")
+                
             # Apply orthogonality constraint to probe modes
             ortho_pmode_freq = self.constraint_params['ortho_pmode']['freq']
             if ortho_pmode_freq is not None and iter % ortho_pmode_freq == 0:

@@ -161,9 +161,12 @@ def make_output_folder(output_dir, indices, recon_params, model, constraint_para
     if constraint_params['kz_filter']['freq'] is not None:
         beta = constraint_params['kz_filter']['beta']
         output_path += f"_kzreg{beta}"
-        
+    
     if model.detector_blur_std is not None and model.detector_blur_std != 0:
         output_path += f"_dpblur{model.detector_blur_std}"
+    
+    if constraint_params['objp_blur']['freq'] is not None and constraint_params['objp_blur']['std'] != 0:
+        output_path += f"_opblur{constraint_params['objp_blur']['std']}"
         
     output_path += postfix
     

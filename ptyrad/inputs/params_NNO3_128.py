@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1848,# Ang, used to calculate dk
     'defocus'           : -130.928, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 5, #15, # Ang
-    'Nlayer'            : 30, #10,
+    'z_distance'        : 10, #15, # Ang
+    'Nlayer'            : 15, #10,
     'N_scans'           : 4096,
     'N_scan_slow'       : 64,
     'N_scan_fast'       : 64,
@@ -20,12 +20,12 @@ exp_params = {
     'scan_flip'         : (1),  # (1) for 'simu' pos, None for loaded pos
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
-    'pmode_max'         : 7,
+    'pmode_max'         : 12,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
     'cbeds_permute'     : (3,2,0,1),
     'cbeds_reshape'     : (4096,128,128),
-    'cbeds_flip'        : None,
+    'cbeds_flip'        : None, # Initially None
     'probe_simu_params' : None
     }
 

@@ -27,6 +27,7 @@ class PtychoAD(torch.nn.Module):
     
     # Example usage:
     # model_params = {
+    # 'detector_blur_std': 1,
     # 'lr_params':{
     #     'obja': 0,
     #     'objp': 1e-3,
@@ -39,9 +40,9 @@ class PtychoAD(torch.nn.Module):
     def __init__(self, init_variables, model_params, device='cuda:0'):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
-            self.device = device
-            self.detector_blur_std = model_params['detector_blur_std']
-            self.lr_params = model_params['lr_params']
+            self.device                 = device
+            self.detector_blur_std      = model_params['detector_blur_std']
+            self.lr_params              = model_params['lr_params']
             
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
             self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
@@ -77,6 +78,15 @@ class PtychoAD(torch.nn.Module):
         self.rx_grid = rx
     
     def set_optimizer(self, lr_params):
+        """ Sets the optimizer with lr_params """
+        # # Use this to edit learning rate if needed some refinement
+
+        # model.set_optimizer(lr_params={'obja': 1e-4,
+        #                                'objp': 1e-4,
+        #                                'probe': 1e-4, 
+        #                                'probe_pos_shifts': 1e-2})
+        # optimizer=torch.optim.Adam(model.optimizer_params)
+        
         self.lr_params = lr_params
         self.optimizer_params = []
         for param_name, lr in lr_params.items():
@@ -141,6 +151,8 @@ class PtychoAD(torch.nn.Module):
     def forward(self, indices):
         """ Doing the forward pass and get an output diffraction pattern for each input index """
         # The indices are passed in as an array and representing the whole batch
+        # Note that detector blur is a physical process and should be included in the forward method
+        # It's a design choice to put it here, instead of putting it under optimization.py
         
         object_patches = self.get_obj_ROI(indices)
         probes = self.get_probes(indices)
