@@ -33,12 +33,18 @@ exp_params = {
 source_params = {
     'measurements_source': 'hdf5',
     'measurements_params': [exp_CBED_path, 'dp'],
-    'obj_source'         : 'simu', #'PtyShv', 
-    'obj_params'         : None, #ptycho_output_path, #(1,1,592,592),
+    'obj_source'         : 'simu',
+    'obj_params'         : None, # (1,1,592,592),
     'probe_source'       : 'simu',
     'probe_params'       : None,  
     'pos_source'         : 'simu',
-    'pos_params'         : None, 
+    'pos_params'         : None,
+    # 'obj_source'         : 'PtyShv', 
+    # 'obj_params'         : ptycho_output_path, 
+    # 'probe_source'       : 'PtyShv',
+    # 'probe_params'       : ptycho_output_path, 
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : ptycho_output_path, 
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

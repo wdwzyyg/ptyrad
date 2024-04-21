@@ -33,8 +33,8 @@ exp_params = {
 source_params = {
     'measurements_source': 'mat',
     'measurements_params': [exp_CBED_path, 'cbed'],
-    'obj_source'         : 'simu', #'PtyShv',
-    'obj_params'         : None, #ptycho_output_path, #(1,8,391,403),
+    'obj_source'         : 'simu',
+    'obj_params'         : None, # (1,8,391,403),
     'probe_source'       : 'simu',
     'probe_params'       : None, 
     'pos_source'         : 'simu',

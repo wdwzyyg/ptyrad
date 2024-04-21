@@ -17,15 +17,15 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.44, # Ang
-    'scan_flip'         : None, # (1) for 'simu' pos, None for loaded pos
-    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
+    'scan_flip'         : (1), # (1) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
+    'scan_affine'       : (1,0,-1.5,0), # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1,
     'pmode_max'         : 5,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
     'cbeds_permute'     : (0,1,3,2),
     'cbeds_reshape'     : (65536,128,128),
-    'cbeds_flip'        : None,
+    'cbeds_flipT'       : None, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'probe_simu_params' : None
     }
 
@@ -33,18 +33,18 @@ exp_params = {
 source_params = {
     'measurements_source': 'mat',
     'measurements_params': [exp_CBED_path, 'cbed'],
-    'obj_source'         : 'simu', #'simu',
-    'obj_params'         : None, #ptycho_output_path, #(1,44,860,860)
+    'obj_source'         : 'simu',
+    'obj_params'         : None, # (1,44,860,860),
     'probe_source'       : 'simu',
     'probe_params'       : None, 
-    # 'pos_source'         : 'simu',
-    # 'pos_params'         : None, 
+    'pos_source'         : 'simu',
+    'pos_params'         : None, 
     # 'obj_source'         : 'PtyShv', #'PtyShv',
     # 'obj_params'         : ptycho_output_path, #ptycho_output_path, #(1,8,391,403),
     # 'probe_source'       : 'PtyShv',
     # 'probe_params'       : ptycho_output_path, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : ptycho_output_path,
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

@@ -123,6 +123,8 @@ class CombinedConstraint(torch.nn.Module):
         with torch.no_grad():
 
             # Apply Gaussian blur to object phase, this only applies to the last 2 dimension (...,H,W)
+            # Note that it's not clear whether applying blurring after every iteration would ever reach a steady state
+            # However, this is at least similar to PtychoShelves' eng. reg_mu
             objp_blur_freq = self.constraint_params['objp_blur']['freq']
             objp_blur_std  = self.constraint_params['objp_blur']['std']
             if objp_blur_freq is not None and iter % objp_blur_freq == 0 and objp_blur_std !=0:
@@ -136,7 +138,7 @@ class CombinedConstraint(torch.nn.Module):
                 probe_int = model.opt_probe.abs().pow(2)
                 print(f"Apply ortho pmode constraint at iter {iter}, relative pmode power = {(probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)}")
 
-            # Apply orthogonality constraint to pmode
+            # Apply orthogonality constraint to omode
             ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
             if ortho_omode_freq is not None and iter % ortho_omode_freq == 0:
                 model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp, sort=False)
