@@ -195,13 +195,20 @@ def make_batches(indices, pos, batch_size, mode='random'):
     # Note:
     #   The actual batch size would only be "close" if it's not divisible by len(indices) for 'random' grouping
     #   For 'compact' or 'sparse', it's generally fluctuating around the specified batch size
+    #   To check the correctness of each grouping, you may visualize the pos
+    #   Also we want to make sure we're not missing any indices, so we can do:
+    #
+    #   flatten_indices = np.concatenate(batches)
+    #   flatten_indices.sort()
+    #   indices.sort()
+    #   all(flatten_indices == indices)
 
     if len(indices) > len(pos):
         raise ValueError(f"len(indices) = '{len(indices)}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
     
     if indices.max() > len(pos):
         raise ValueError(f"Maximum index '{indices.max()}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
-    
+
     num_batch = len(indices) // batch_size   
     t_start = time()
     if mode == 'random':
@@ -211,7 +218,7 @@ def make_batches(indices, pos, batch_size, mode='random'):
         print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
         return random_batches
         
-    else:
+    else: # Either 'compact' or 'sparse'
         # Choose the selected pos from indices
         pos_s = pos[indices]
         # Kmeans for clustering
@@ -229,32 +236,40 @@ def make_batches(indices, pos, batch_size, mode='random'):
             print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
             return compact_batches
 
-        else:
-            # Initialize the list to store groups
-            sparse_batches = [[] for _ in range(num_batch)]
-            # Calculate the centroid for each compact group as initial start for sparse groups
-            centroids = np.array([np.mean(pos[cbatch], axis=0) for cbatch in compact_batches])
-            pairwise_distances = cdist(pos, pos) # Calculate the dist for all pos can keep the absolute index and skip the conversion
+        else: # 'sparse' mode
+            sparse_indices = indices.copy() # Make a deep copy of indices so that we may pop elements from sparse_indices later
             
-            # Start with the first point as a seed for each group
+            # Initialize the list to store groups
+            sparse_batches = []
+            
+            # Calculate the centroid for each compact group as initial start for sparse groups
+            # The idea is the centroids of each compact group are naturally sparse
+            centroids = np.array([np.mean(pos[cbatch], axis=0) for cbatch in compact_batches])
+            pairwise_distances = cdist(pos, pos) # Calculate the dist for ALL pos can keep the absolute index and skip the conversion between indexing
+            
+            used_indices = [] # This list stores the indices used for initialization of the sparse groups
+            # Find the indices closest to the centroids of compact groups, these indices are the initial point for each sparse group
             for batch_idx in range(num_batch):
-                distances = np.linalg.norm(pos_s - centroids[batch_idx], axis=1)
-                closest_idx_s = np.argmin(distances)
-                closest_idx = indices[closest_idx_s]
-                sparse_batches[batch_idx].append(closest_idx)
-
-            # Iterate through points
-            for i in range(num_batch, len(pos_s)):
+                distances = np.linalg.norm(pos_s - centroids[batch_idx], axis=1) # Note that this distances is only for selected pos (pos_s = pos[indices])
+                closest_idx_s = np.argmin(distances) # closest_idx_s is the position of min distances
+                closest_idx = indices[closest_idx_s] # closest_idx is the actual index that is closest to the centroid
+                sparse_batches.append([closest_idx])
+                used_indices.append(closest_idx_s)
+            sparse_indices = np.delete(sparse_indices, used_indices) # Delete the used_indices after the entire loop, this helps keep indexing correct and consistent
+            # Deleting elements in a loop would make indexing very challenging
+            
+            # Iterate through remaining points
+            for idx in sparse_indices:
                 min_distances = []
                 # Iterate through groups
                 for batch_idx in range(num_batch):
-                    distances = pairwise_distances[sparse_batches[batch_idx], indices[i]]
+                    distances = pairwise_distances[sparse_batches[batch_idx], idx]
                     min_distances.append(np.min(distances))
                 
                 max_group_index = np.argmax(min_distances)
 
                 # Add the point to the group with the farthest minimal distance
-                sparse_batches[max_group_index].append(indices[i])
+                sparse_batches[max_group_index].append(idx)
             print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
             return sparse_batches
 
