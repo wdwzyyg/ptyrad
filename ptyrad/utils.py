@@ -316,8 +316,8 @@ def imshift_batch(img, shifts, grid):
     
     shift_y, shift_x = shifts[:, 0, None, None, None], shifts[:, 1, None, None, None] # shift_y = (Nb, 1, 1, 1)
     ky, kx = grid[None, None, 0], grid[None,None, 1]                                  # ky = (1, 1, Ny, Nx)
-    w = torch.exp(-(2j * torch.pi) * (shift_x * kx) + shift_y * ky) 
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img[None,...])) * w))
+    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky)) 
+    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1)))
     
     return shifted_img
 
@@ -794,7 +794,7 @@ def imshift(img, shifts, device):
     ry, rx = torch.meshgrid(torch.arange(Ny), torch.arange(Nx), indexing='ij')
     ry, rx = ry.to(device), rx.to(device)
     w = -torch.exp(-(2j * torch.pi) * (shift_x * rx / Nx  + shift_y * ry / Ny))
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img)) * w))
+    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1)))
 
     return shifted_img
 
