@@ -215,7 +215,7 @@ def make_batches(indices, pos, batch_size, mode='random'):
         rng = np.random.default_rng()
         shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
         random_batches = np.array_split(shuffled_indices, num_batch) 
-        print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
+        print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
         return random_batches
         
     else: # Either 'compact' or 'sparse'
@@ -233,7 +233,7 @@ def make_batches(indices, pos, batch_size, mode='random'):
             compact_batches.append(indices[batch_indices_s])
 
         if mode == 'compact':
-            print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
+            print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
             return compact_batches
 
         else: # 'sparse' mode
@@ -270,7 +270,14 @@ def make_batches(indices, pos, batch_size, mode='random'):
 
                 # Add the point to the group with the farthest minimal distance
                 sparse_batches[max_group_index].append(idx)
-            print(f"Generated {mode} grouping in {time() - t_start:.3f} sec")
+            
+            # Final check because this procedure is fairly complicated
+            flatten_indices = np.concatenate(sparse_batches)
+            flatten_indices.sort()
+            indices.sort()
+            assert all(flatten_indices == indices), "Sorry, something went wrong with the sparse grouping, please try 'random' for now"
+            print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
+            
             return sparse_batches
 
 def save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses):
@@ -680,6 +687,97 @@ def center_of_mass(image):
     center_y = weighted_sum_y / total_intensity
     
     return center_x.item(), center_y.item()
+
+def get_blob_size(dx, blob, output='d90', plot_profile=False):
+    import matplotlib.pyplot as plt
+    """ Get the probe / blob size
+
+    Args:
+        dx (float): px size in Ang
+        blob (array): the probe/blob image, note that we assume the input is already directly measurable and no squaring is needed, centered, and background free
+        plot_profile (bool): Flag for plotting the profile or not 
+
+    Returns:
+        D50*dx: D50 in Ang
+        D90*dx: D90 in Ang
+        radius_rms*dx: RMS radius in Ang
+        radial_profile: radially averaged profile
+        radial_sum: radial profile without normalizing by the ring area
+        fig: Line profile figure
+    """
+    def get_radial_profile(data, center):
+        # The radial intensity is calculated up to the corners
+        # So len(radialprofile) will be len(data)/sqrt(2)
+        # The bin width is set to be the same with original data spacing (dr = dx)
+        y, x = np.indices((data.shape))
+        r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+        r = r.astype(int)
+        tbin = np.bincount(r.ravel(), data.ravel())
+        nr = np.bincount(r.ravel())
+        radial_profile = tbin / nr
+        radial_sum = tbin
+        return radial_profile, radial_sum
+
+    radial_profile, radial_sum = get_radial_profile(blob, (len(blob)//2, len(blob)//2))
+    #print("sum(radial_sum) = %.5f " %(np.sum(radial_sum)))
+
+    # Calculate the rms radius, in px
+    x = np.arange(len(radial_profile))
+    radius_rms = np.sqrt(np.sum(x**2*radial_profile*x)/np.sum(radial_profile*x))
+
+    # Calculate FWHM
+    
+    HWHM = np.max(np.where((radial_profile / radial_profile.max()) >=0.5))
+    
+    # Calculate D50, D90
+    cum_sum = np.cumsum(radial_sum)
+
+    # R50, 90 without normalization
+    R50 = np.min(np.where(cum_sum>=0.50*np.sum(radial_sum))[0])
+    R90 = np.min(np.where(cum_sum>=0.90*np.sum(radial_sum))[0])
+
+    D50 = (2*R50+1)
+    D90 = (2*R90+1)
+    FWHM = (2*HWHM+1)
+    #print('D50 = %s px or %.4f Ang' %(D50, D50*dx))
+    #print('D90 = %s px or %.4f Ang' %(D90, D90*dx))
+
+    if plot_profile:
+        
+        num_ticks = 11
+        x = dx*np.arange(len(radial_profile))
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        plt.title("Radially averaged profile")
+        plt.margins(x=0, y=0)
+        ax.plot(x, radial_profile/np.max(radial_profile), label='Radially averaged profile')
+        #plt.plot(x, cum_sum, 'k--', label='Integrated current')
+        plt.vlines(x=R50*dx, ymin=0, ymax=1, color="tab:orange", linestyle=":", label='R50') #Draw vertical lines at the data coordinate, in this case would be Ang.
+        plt.vlines(x=R90*dx, ymin=0, ymax=1, color="tab:red", linestyle=":", label='R90')
+        plt.vlines(x=HWHM*dx, ymin=0, ymax=1, color="tab:red", linestyle=":", label='R90')
+        plt.vlines(x=radius_rms*dx, ymin=0, ymax=1, color="tab:green", linestyle=":", label='Radius_RMS')
+        plt.xticks(np.arange(num_ticks)*np.round(len(radial_profile)*dx/num_ticks, decimals = 1-int(np.floor(np.log10(len(radial_profile)*dx)))))
+        ax.set_xlabel("Distance from blob center ($\AA$)")
+        ax.set_ylabel("Normalized intensity")
+        plt.legend()
+        plt.show()
+
+    if output == 'd50':
+        return D50*dx
+    elif output =='d90':
+        return D90*dx
+    elif output =='radius_rms':
+        return radius_rms*dx
+    elif output =='FWHM':
+        return FWHM*dx
+    elif output =='radial_profile':
+        return radial_profile
+    elif output =='radial_sum':
+        return radial_sum
+    elif output =='fig':
+        return fig
+    else:
+        raise KeyError(f"output ={output} not implemented!")
 
 ###################################### ARCHIVE ##################################################
 

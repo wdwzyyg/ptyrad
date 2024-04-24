@@ -122,6 +122,43 @@ def plot_affine_transformation(scale, asymmetry, rotation, shear):
     
     plt.legend()
     plt.show()
+
+def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_scale=1, pass_fig=False):
+    
+    fig, axs = plt.subplots(1,2, figsize = figsize)
+    
+    for i, ax in enumerate(axs):
+        if i == 0:
+            axs[0].set_title("Scan positions for all groups", fontsize=18)
+            for batch in batches:
+                ax.scatter(x=pos[batch, 1], y=pos[batch, 0], s=dot_scale)
+        else:
+            axs[1].set_title("Scan positions from group 0", fontsize=18)
+            ax.scatter(x=pos[batches[0], 1], y=pos[batches[0], 0], s=dot_scale)
+            
+            # Draw a circle at the first point with the given diameter
+            if circle_diameter:
+                first_point = pos[batches[0][0]]
+                circle = plt.Circle((first_point[1], first_point[0]), circle_diameter / 2, fill=False, color='r', linestyle='--')
+                ax.add_artist(circle)
+                
+                # Add annotation for "90% probe intensity"
+                annotation_text = "90% probe intensity"
+                annotation_x = first_point[1]
+                annotation_y = first_point[0] #+ circle_diameter / 2 + 10  # Adjust the vertical offset as needed
+                ax.annotate(annotation_text, xy=(annotation_x-circle_diameter/2, annotation_y-circle_diameter/2-3))
+            
+        ax.set_xlabel('X (obj coord, px)')
+        ax.set_ylabel('Y (obj coord, px)')
+        ax.set_xlim(pos[:,1].min()-10, pos[:,1].max()+10)
+        ax.set_ylim(pos[:,0].min()-10, pos[:,0].max()+10)
+        ax.invert_yaxis()
+        ax.set_aspect('equal', adjustable='box')
+    
+    plt.tight_layout()
+    plt.show()
+    if pass_fig:
+        return fig
     
 def plot_loss_curves(loss_iters, pass_fig=False):
     fig = plt.figure(figsize=(8,6))
