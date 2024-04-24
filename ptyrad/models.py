@@ -68,14 +68,25 @@ class PtychoAD(torch.nn.Module):
     
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
+        # Note that the Noy, Nox, roy, rox, shift_object_grid are pre-generated for potential future usage of sub-px object shifts
+        # Currently (2024.04.24) only the shift_probes_grid, rpy_grid, rpx_grid are used for sub-px shifts and obj_ROI selection
+        
         device = self.device
-        Ny, Nx = self.opt_probe.shape[-2:]
-        ry, rx = torch.meshgrid(torch.arange(Ny, dtype=torch.int32, device=device), 
-                                torch.arange(Nx, dtype=torch.int32, device=device), indexing='ij')
-
-        self.shift_probes_grid = torch.stack([ry/Ny, rx/Nx], dim=0) # (2,Ny,Nx)
-        self.ry_grid = ry
-        self.rx_grid = rx
+        Npy, Npx = self.opt_probe.shape[-2:] # Number of probe pixels in y and x directions
+        Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
+        
+        rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
+                                torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
+        roy, rox = torch.meshgrid(torch.arange(Noy, dtype=torch.int32, device=device), 
+                                torch.arange(Nox, dtype=torch.int32, device=device), indexing='ij') # real space grid for object in y and x directions
+        
+        self.shift_probes_grid = torch.stack([rpy/Npy, rpx/Npx], dim=0) # (2,Npy,Npx), normalized k-space grid stack for sub-px probe shifting 
+        self.shift_object_grid = torch.stack([roy/Noy, rox/Nox], dim=0) # (2,Noy,Nox), normalized k-space grid stack for sub-px object shifting
+        
+        self.rpy_grid = rpy # real space grid with y-indices spans across probe extent
+        self.rpx_grid = rpx
+        self.roy_grid = roy # real space grid with y-indices spans across object extent
+        self.rox_grid = rox
     
     def set_optimizer(self, lr_params):
         """ Sets the optimizer with lr_params """
@@ -116,12 +127,12 @@ class PtychoAD(torch.nn.Module):
         # opt_obj.shape = (B,D,H,W,C) = (omode,D,H,W,2)
         # object_patches = (N,B,D,H,W,2), N is the additional sample index within the input batch, B is now used for omode.
         
-        # ry_grid is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
+        # rpy_grid is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
         # obj_ROI_grid_y = (N,Ny,Nx)
         
         opt_obj = torch.stack([self.opt_obja, self.opt_objp], dim=-1)
-        obj_ROI_grid_y = self.ry_grid[None,:,:] + self.crop_pos[indices, None, None, 0]
-        obj_ROI_grid_x = self.rx_grid[None,:,:] + self.crop_pos[indices, None, None, 1]
+        obj_ROI_grid_y = self.rpy_grid[None,:,:] + self.crop_pos[indices, None, None, 0]
+        obj_ROI_grid_x = self.rpx_grid[None,:,:] + self.crop_pos[indices, None, None, 1]
         
         object_patches = opt_obj[:,:,obj_ROI_grid_y,obj_ROI_grid_x,:].permute(2,0,1,3,4,5)
         return object_patches
@@ -135,7 +146,7 @@ class PtychoAD(torch.nn.Module):
         if self.shift_probes:
             probes = imshift_batch(self.opt_probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
         else:
-            probes = self.opt_probe[None,...] # Extend a singleton N dimension, essentially using same probe for all samples
+            probes = torch.broadcast_to(self.opt_probe, (len(indices), *self.opt_probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
         return probes
     
     def get_measurements(self, indices=None):

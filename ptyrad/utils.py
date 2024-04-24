@@ -309,38 +309,42 @@ def save_results(output_path, model, exp_params, source_params, loss_params, con
 
 def imshift_batch(img, shifts, grid):
     """
-    Generates a batch of shifted images with support for a batch of subpixel shifts.
+    Generates a batch of shifted images from a single input image (..., Ny,Nx) with arbitray leading dimensions.
     
     This function shifts a complex-valued input image by applying phase shifts in the Fourier domain,
-    accommodating subpixel shifts in both x and y directions.
+    achieving subpixel shifts in both x and y directions.
 
     Inputs:
-        img (torch.Tensor): The input image to be shifted. It should be a complex-valued tensor with shape=(C, Ny, Nx).
+        img (torch.Tensor): The input image to be shifted. 
+                            img could be either a mixed-state complex probe (pmode, Ny, Nx) complex64 tensor, 
+                            or a mixed-state pseudo-complex object stack (2,omode,Nz,Ny,Nx) float32 tensor.
         shifts (torch.Tensor): The shifts to be applied to the image. It should be a (Nb,2) tensor and each slice as (shift_y, shift_x).
-        grid (torch.Tensor): The grid used for computing the shifts in the Fourier domain. It should be a tensor with shape=(2, Ny, Nx),
-                             where Ny and Nx are the height and width of the images, respectively.
+        grid (torch.Tensor): The k-space grid used for computing the shifts in the Fourier domain. It should be a tensor with shape=(2, Ny, Nx),
+                             where Ny and Nx are the height and width of the images, respectively. Note that the grid is normalized so the value spans
+                             from 0 to 1
 
     Outputs:
-        shifted_img (torch.Tensor): The batch of shifted images. It has the same shape as the input batch of images, i.e., shape=(Nb, C, Ny, Nx),
+        shifted_img (torch.Tensor): The batch of shifted images. It has an extra dimension than the input image, i.e., shape=(Nb, ..., Ny, Nx),
                                     where Nb is the number of samples in the input batch.
 
     Note:
-        - The shifts are specified as fractions of a pixel. For example, a shift of (0.5, 0.5) will shift the image by half a pixel in both y and x directions.
+        - The shifts are in unit of pixel. For example, a shift of (0.5, 0.5) will shift the image by half a pixel in both y and x directions, positive is down/right-ward.
         - The function utilizes the fast Fourier transform (FFT) to perform the shifting operation efficiently.
         - Make sure to convert the input image and shifts tensor to the desired device before passing them to this function.
         - The fft2 and fftshifts are all applied on the last 2 dimensions, therefore it's only shifting along y and x directions
-        - For more general usage of multidimensional array with lots of leading dimensions, we could modify the number of singletons in shifts and grid.
+        - tensor[None, ...] would add an extra dimension at 0, so *[None]*ndim means unwrapping a list of ndim None as [None, None, ...]
+        - The img is automatically broadcast to (Nb, *img.shape), so if a batch of images are passed in, each image would be shifted independently
     """
     
-    # img = (C,Ny,Nx), currently expecting mixed-state complex probe as a (pmode, Ny, Nx) complex64 tensor.
-    # shifts = (Nb, 2)
-    # grid = (2, Ny, Nx)
+    assert img.shape[-2:] == grid.shape[-2:], f"Found incompatible dimensions. img.shape[-2:] = {img.shape[-2:]} while grid.shape[-2:] = {grid.shape[-2:]}"
     
-    shift_y, shift_x = shifts[:, 0, None, None, None], shifts[:, 1, None, None, None] # shift_y = (Nb, 1, 1, 1)
-    ky, kx = grid[None, None, 0], grid[None,None, 1]                                  # ky = (1, 1, Ny, Nx)
-    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky)) 
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1)))
-    
+    ndim = img.ndim                                                                   # Get the total img ndim so that the shift is dimension-indepent
+    shifts = shifts[..., *[None]*ndim]                                                # Expand shifts to (Nb,2,1,1,...) so shifts.ndim = ndim+2
+    grid = grid[:,*[None]*(ndim-1), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+2
+    shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
+    ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
+    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1
+    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.real because the imag part is artifact
     return shifted_img
 
 def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_or_cp='np'):
