@@ -2,7 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.fft import fftshift, fftn
+from numpy.fft import fftshift, ifftn
 import torch
 
 def plot_forward_pass(model, indices, dp_power, pass_fig=False):
@@ -171,24 +171,33 @@ def plot_loss_curves(loss_iters, pass_fig=False):
     if pass_fig:
         return fig
     
-def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', pass_fig=False):
+def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', phase_cmap=None, amplitude_cmap=None, pass_fig=False):
     # This is for visualization so each mode has its own colorbar.
     # See the actual probe amplitude output for absolute scale visualizaiton
     
     if real_or_fourier == 'fourier':
-        init_probe = fftshift(fftn(init_probe, axes=(-2, -1), norm='ortho'), axes=(-2, -1))
-        opt_probe  = fftshift(fftn(opt_probe,  axes=(-2, -1), norm='ortho'), axes=(-2, -1))
+    # While it might seem redundant, the sandwitch fftshift(fft(fftshift(probe)))) is needed for the following reason:
+    # Although probe_fourier = fftn(fftshift(probe)) and probe_fourier = fftn(probe) gives the same abs(probe_fourier),
+    # pre-fftshifting the probe back to corner gives more accurate phase angle while plotting the angle(probe_fourier)
+    # On the other hand, fftn(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
+    # fftshift and ifftshift behaves the same when N is even, and there's no scaling for fftshift so I'll stick with fftshift for simplicity
+        init_probe = fftshift(ifftn(fftshift(init_probe, axes=(-2,-1)), axes=(-2, -1), norm='ortho'), axes=(-2,-1))
+        opt_probe  = fftshift(ifftn(fftshift(opt_probe, axes=(-2,-1)),  axes=(-2, -1), norm='ortho'), axes=(-2,-1))
     elif real_or_fourier =='real':
         pass
     else:
         raise ValueError("Please use 'real' or 'fourier' for probe mode visualization!")
         
     if amp_or_phase == 'phase':
-        init_probe = np.angle(init_probe)
-        opt_probe  = np.angle(opt_probe)
+        # Negative sign for consistency with chi(k), because psi = exp(-i*chi(k)). Overfocus should give positive phase shift near the edge of aperture
+        # Scale the plotted phase by the amplitude so we can focus more on the relevant phases
+        init_probe = -np.angle(init_probe)*np.abs(init_probe) 
+        opt_probe  = -np.angle(opt_probe)*np.abs(opt_probe)
+        cmap = phase_cmap if phase_cmap else 'twilight'
     elif amp_or_phase == 'amplitude' or amp_or_phase == 'amp':
         init_probe = np.abs(init_probe)
         opt_probe  = np.abs(opt_probe)
+        cmap = amplitude_cmap if amplitude_cmap else 'viridis'
     else:
         raise ValueError("Please use 'amplitude' or 'phase' for probe mode visualization!")
     
@@ -199,13 +208,13 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     for i in range(len(opt_probe)):
         ax_init = axs[0, i]
         ax_init.set_title(f"Init probe mode {i}")
-        im_init = ax_init.imshow(init_probe[i])
+        im_init = ax_init.imshow(init_probe[i], cmap=cmap)
         ax_init.axis('off')
         plt.colorbar(im_init, ax=ax_init, shrink=0.6)
 
         ax_opt = axs[1, i]
         ax_opt.set_title(f"Opt probe mode {i}")
-        im_opt = ax_opt.imshow(opt_probe[i])
+        im_opt = ax_opt.imshow(opt_probe[i], cmap=cmap)
         ax_opt.axis('off')
         plt.colorbar(im_opt, ax=ax_opt, shrink=0.6)
     plt.tight_layout()
