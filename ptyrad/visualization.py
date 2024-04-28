@@ -236,15 +236,21 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_loss.savefig(output_path + f"/summary_loss_iter{str(niter).zfill(4)}.png")
     
     # Probe modes in real and reciprocal space
-    fig_probe_modes_real = plot_probe_modes(init_variables['probe'], model.opt_probe.detach().cpu().numpy(), real_or_fourier='real', pass_fig=True)
-    fig_probe_modes_fourier = plot_probe_modes(init_variables['probe'], model.opt_probe.detach().cpu().numpy(), real_or_fourier='fourier', pass_fig=True)
+    init_probe = init_variables['probe']
+    opt_probe = model.opt_probe.detach().cpu().numpy()
+    fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', pass_fig=True)
+    fig_probe_modes_fourier_amp   = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='amplitude', pass_fig=True)
+    fig_probe_modes_fourier_phase = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='phase', pass_fig=True)
+
     if save_fig:
-        fig_probe_modes_real.savefig(output_path + f"/summary_probe_modes_real_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
-        fig_probe_modes_fourier.savefig(output_path + f"/summary_probe_modes_fourier_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+        fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+        fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+        fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+
         
     # Scan positions
     init_pos = init_variables['crop_pos'] + init_variables['probe_pos_shifts']
     pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
-    fig_scan_pos = plot_scan_positions(pos=pos, init_pos=init_pos, dot_scale=1, pass_fig=True)
+    fig_scan_pos = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, pass_fig=True)
     if save_fig:
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")

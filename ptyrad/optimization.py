@@ -150,8 +150,13 @@ class CombinedConstraint(torch.nn.Module):
             alpha_gaussian = self.constraint_params['kz_filter']['alpha']
             z_pad = self.constraint_params['kz_filter']['z_pad']
             if kz_filter_freq is not None and niter % kz_filter_freq == 0:
-                model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad)
-                print(f"Apply kz_filter constraint at iter {niter}")
+                for obj_type in self.constraint_params['kz_filter']['obj_type']:
+                    if obj_type == 'phase':
+                        model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='phase')
+                        print(f"Apply kz_filter constraint on objp at iter {niter}")
+                    if obj_type =='amplitude':
+                        model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='amplitude')
+                        print(f"Apply kz_filter constraint on obja at iter {niter}")
 
             # Apply positivity constraint
             postiv_freq = self.constraint_params['postiv']['freq']
@@ -210,7 +215,7 @@ def loss_logger(batch_losses, niter, iter_t):
     loss_iter = sum(avg_losses.values())
     return loss_iter    
 
-def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None):
+def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_type='phase'):
     # Calculate force of regularization based on the idea that DoF = resolution^2/lambda
     
     # Pad the tensor with zeros
@@ -228,8 +233,8 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None):
     # Generate 3D coordinate grid using meshgrid
     grid_kz, grid_ky, grid_kx = torch.meshgrid(kz, ky, kx, indexing='ij')
 
-    # Create the filter function Wa
-    W = 1 - torch.atan((beta_regularize_layers * torch.abs(grid_kz) / torch.sqrt(grid_kx**2 + grid_ky**2 + 1e-20))**2) / (torch.pi/2)
+    # Create the filter function Wa. W and Wa is exactly the same as PtychoShelves for now
+    W = 1 - torch.atan((beta_regularize_layers * torch.abs(grid_kz) / torch.sqrt(grid_kx**2 + grid_ky**2 + 1e-3))**2) / (torch.pi/2)
     Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
 
     # Filter the obj with filter funciton Wa    
@@ -239,6 +244,9 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None):
     if z_pad is not None:
         fobj = fobj[:,z_pad:-z_pad,:,:]
     
+    if obj_type == 'amplitude':
+        fobj = 1+0.9*(fobj-1)
+        
     return fobj
 
 def orthogonalize_modes_vec(modes, sort = False):
