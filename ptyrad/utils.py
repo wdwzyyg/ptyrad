@@ -165,8 +165,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         output_path += f"_dz{z_distance}"
     
     if constraint_params['kz_filter']['freq'] is not None:
+        obj_type = constraint_params['kz_filter']['obj_type']
+        kz_str = {'both': 'kz', 'amplitude': 'kza', 'phase': 'kzp'}.get(obj_type)
         beta = constraint_params['kz_filter']['beta']
-        output_path += f"_kzreg{beta}"
+        output_path += f"_{kz_str}reg{beta}"
     
     if model.detector_blur_std is not None and model.detector_blur_std != 0:
         output_path += f"_dpblur{model.detector_blur_std}"

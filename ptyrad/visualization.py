@@ -5,7 +5,7 @@ import numpy as np
 from numpy.fft import fftshift, ifftn
 import torch
 
-def plot_forward_pass(model, indices, dp_power, pass_fig=False):
+def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     """ Plot the forward pass for the input torch model """
     # The input is expected to be torch object and the attributes are all torch tensors and will be converted to numpy
     
@@ -27,8 +27,10 @@ def plot_forward_pass(model, indices, dp_power, pass_fig=False):
         obj_ROI        = (obj_ROI * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
         model_CBEDs    = model_CBEDs.detach().cpu().numpy()
         measured_CBEDs = measured_CBEDs.detach().cpu().numpy()
-        
+    
+    plt.ioff() # Temporaily disable the interactive plotting mode
     fig, axs = plt.subplots(len(indices), 4, figsize=(24, 5.5*len(indices)))
+    plt.suptitle("Forward pass", fontsize=24)
     
     for i, idx in enumerate(indices):
 
@@ -48,18 +50,21 @@ def plot_forward_pass(model, indices, dp_power, pass_fig=False):
         axs[i,3].set_title(f"Data CBED^{dp_power} index{idx}", fontsize=16)
         fig.colorbar(im03, shrink=0.6)
     plt.tight_layout()
-    plt.show()
+    if show_fig:
+        plt.show()
     if pass_fig:
         return fig
         
-def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, pass_fig=False):
+def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
     # The dots are plotted with asending size and color changes to represent the relative order
     
+    plt.ioff() # Temporaily disable the interactive plotting mode
     fig = plt.figure(figsize = figsize)
-    plt.title("Scan positions")
+    ax = plt.gca() # There's only 1 ax for plt.figure(), and plt.title is an Axes-level attribute so I need to pass the Axes out because I like plt.title layout better
+    plt.title("Scan positions", fontsize=16)
     
     if img is not None:
         plt.imshow(img)
@@ -71,6 +76,8 @@ def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8)
     else:
         plt.scatter(x=init_pos[:,1], y=init_pos[:,0], c='C0', s=dot_scale, label='Init scan positions')
         plt.scatter(x=pos[:,1],      y=pos[:,0],      c='C1', s=dot_scale, label='Opt scan positions')
+        plt.ylim(init_pos[:,0].min()-10, init_pos[:,0].max()+10)
+        plt.xlim(init_pos[:,1].min()-10, init_pos[:,1].max()+10)
     
     plt.gca().set_aspect('equal', adjustable='box')
     plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
@@ -84,9 +91,10 @@ def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8)
                 color='red', head_width=2.5, head_length=5)
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    if show_fig:
+        plt.show()
     if pass_fig:
-        return fig
+        return fig, ax
     
 def plot_affine_transformation(scale, asymmetry, rotation, shear):
     from .utils import compose_affine_matrix
@@ -150,7 +158,7 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_s
             
         ax.set_xlabel('X (obj coord, px)')
         ax.set_ylabel('Y (obj coord, px)')
-        ax.set_xlim(pos[:,1].min()-10, pos[:,1].max()+10)
+        ax.set_xlim(pos[:,1].min()-10, pos[:,1].max()+10) # Show the full range to better visualize if a sub-group (like 'center') is selected
         ax.set_ylim(pos[:,0].min()-10, pos[:,0].max()+10)
         ax.invert_yaxis()
         ax.set_aspect('equal', adjustable='box')
@@ -160,18 +168,21 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_s
     if pass_fig:
         return fig
     
-def plot_loss_curves(loss_iters, pass_fig=False):
+def plot_loss_curves(loss_iters, show_fig=True, pass_fig=False):
+
+    plt.ioff() # Temporaily disable the interactive plotting mode
     fig = plt.figure(figsize=(8,6))
     plt.title("Loss value vs. iterations", fontsize=16)
     plt.plot(np.array(loss_iters)[:,0], np.array(loss_iters)[:,1], marker='o')
     plt.xlabel("Iterations", fontsize=16)
     plt.ylabel("Loss values", fontsize=16)
     plt.tight_layout()
-    plt.show()
+    if show_fig:
+        plt.show()
     if pass_fig:
         return fig
     
-def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', phase_cmap=None, amplitude_cmap=None, pass_fig=False):
+def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', phase_cmap=None, amplitude_cmap=None, show_fig=True, pass_fig=False):
     # This is for visualization so each mode has its own colorbar.
     # See the actual probe amplitude output for absolute scale visualizaiton
     
@@ -201,6 +212,7 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     else:
         raise ValueError("Please use 'amplitude' or 'phase' for probe mode visualization!")
     
+    plt.ioff() # Temporaily disable the interactive plotting mode
     fig, axs = plt.subplots(2, len(opt_probe), figsize=(len(opt_probe)*2.5, 6))
     axs = axs[:,None] if len(opt_probe) == 1 else axs # Expand axs to (2,1) to handle the special case of 1 probe mode
     plt.suptitle(f"Probe modes {amp_or_phase} in {real_or_fourier} space", fontsize=18)
@@ -218,39 +230,63 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
         ax_opt.axis('off')
         plt.colorbar(im_opt, ax=ax_opt, shrink=0.6)
     plt.tight_layout()
-    plt.show()
+    if show_fig:
+        plt.show()
     if pass_fig:
         return fig
 
-def plot_summary(output_path, loss_iters, niter, indices, init_variables, model, save_fig=False):
+def plot_summary(output_path, loss_iters, niter, indices, init_variables, model, show_fig=True, save_fig=False):
     """ Wrapper function for most visualization function """
+    # Note: Set show_fig=False and save_fig=True if you just want to save the figure without showing
+    
+    # Sets figure saving to be True if you accidiently disable both show_fig and save_fig
+    if show_fig is False and save_fig is False:
+        save_fig = True 
     
     # Forward pass
-    fig_forward = plot_forward_pass(model, np.random.choice(indices,2, replace=False), 0.5, pass_fig=True)
-    if save_fig:
-        fig_forward.savefig(output_path + f"/summary_forward_pass_iter{str(niter).zfill(4)}.png")
-    
+    fig_forward = plot_forward_pass(model, np.random.choice(indices,2, replace=False), 0.5, show_fig=False, pass_fig=True)
+    fig_forward.suptitle(f"Forward pass at iter {niter}", fontsize=24)
+  
     # loss curves
-    fig_loss = plot_loss_curves(loss_iters, pass_fig=True)
+    fig_loss = plot_loss_curves(loss_iters, show_fig=show_fig, pass_fig=True)
     if save_fig:
         fig_loss.savefig(output_path + f"/summary_loss_iter{str(niter).zfill(4)}.png")
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
     opt_probe = model.opt_probe.detach().cpu().numpy()
-    fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', pass_fig=True)
-    fig_probe_modes_fourier_amp   = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='amplitude', pass_fig=True)
-    fig_probe_modes_fourier_phase = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='phase', pass_fig=True)
+    fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', show_fig=False, pass_fig=True)
+    fig_probe_modes_fourier_amp   = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='amplitude', show_fig=False, pass_fig=True)
+    fig_probe_modes_fourier_phase = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='phase', show_fig=False, pass_fig=True)
+    fig_probe_modes_real_amp.suptitle(f"Probe modes amplitude in real space at iter {niter}", fontsize=18)
+    fig_probe_modes_fourier_amp.suptitle(f"Probe modes amplitude in fourier space at iter {niter}", fontsize=18)
+    fig_probe_modes_fourier_phase.suptitle(f"Probe modes phase in fourier space at iter {niter}", fontsize=18)
 
-    if save_fig:
-        fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
-        fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
-        fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
-
-        
     # Scan positions
     init_pos = init_variables['crop_pos'] + init_variables['probe_pos_shifts']
     pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
-    fig_scan_pos = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, pass_fig=True)
+    fig_scan_pos, ax = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, show_fig=False, pass_fig=True)
+    ax.set_title(f"Scan positions at iter {niter}", fontsize=16)
+        
+    # Show and save fig
+    if show_fig:
+        fig_forward.show()
+        fig_probe_modes_real_amp.show()
+        fig_probe_modes_fourier_amp.show()
+        fig_probe_modes_fourier_phase.show()
+        fig_scan_pos.show()
+
     if save_fig:
+        print(f"Saving summary figures for iter {niter}")
+        fig_forward.savefig(output_path + f"/summary_forward_pass_iter{str(niter).zfill(4)}.png")
+        fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+        fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+        fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
+        
+    # Close figures after saving
+    plt.close(fig_forward)
+    plt.close(fig_probe_modes_real_amp)
+    plt.close(fig_probe_modes_fourier_amp)
+    plt.close(fig_probe_modes_fourier_phase)
+    plt.close(fig_scan_pos)

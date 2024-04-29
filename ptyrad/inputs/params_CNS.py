@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 87,
     'N_scan_fast'       : 82,
     'scan_step_size'    : 0.28, # Ang
-    'scan_flip'         : None, # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
+    'scan_flip'         : (2), # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : (1,0,2,0), # (scale, asymmetry, rotation, shear)
     'omode_max'         : 1, #1
     'pmode_max'         : 2, #2
@@ -33,18 +33,18 @@ exp_params = {
 source_params = {
     'measurements_source': 'mat',
     'measurements_params': [exp_CBED_path, 'cbed'],
-    # 'obj_source'         : 'simu',
-    # 'obj_params'         : None, # (1,8,391,403),
+    'obj_source'         : 'simu',
+    'obj_params'         : None, # (1,8,391,403),
     'probe_source'       : 'simu',
     'probe_params'       : None, 
-    # 'pos_source'         : 'simu',
-    # 'pos_params'         : None,
-    'obj_source'         : 'PtyShv', 
-    'obj_params'         : ptycho_output_path, 
+    'pos_source'         : 'simu',
+    'pos_params'         : None,
+    # 'obj_source'         : 'PtyShv', 
+    # 'obj_params'         : ptycho_output_path, 
     # 'probe_source'       : 'PtyShv',
     # 'probe_params'       : ptycho_output_path, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : ptycho_output_path,
     'omode_occu_source'  : 'uniform',
     'omode_occu_params'  : None
 }

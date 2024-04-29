@@ -149,14 +149,14 @@ class CombinedConstraint(torch.nn.Module):
             beta_regularize_layers = self.constraint_params['kz_filter']['beta']
             alpha_gaussian = self.constraint_params['kz_filter']['alpha']
             z_pad = self.constraint_params['kz_filter']['z_pad']
+            obj_type = self.constraint_params['kz_filter']['obj_type']
             if kz_filter_freq is not None and niter % kz_filter_freq == 0:
-                for obj_type in self.constraint_params['kz_filter']['obj_type']:
-                    if obj_type == 'phase':
-                        model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='phase')
-                        print(f"Apply kz_filter constraint on objp at iter {niter}")
-                    if obj_type =='amplitude':
-                        model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='amplitude')
-                        print(f"Apply kz_filter constraint on obja at iter {niter}")
+                if obj_type in ['phase', 'both']:
+                    model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='phase')
+                    print(f"Apply kz_filter constraint on objp at iter {niter}")
+                if obj_type in ['amplitude', 'both']:
+                    model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='amplitude')
+                    print(f"Apply kz_filter constraint on obja at iter {niter}")
 
             # Apply positivity constraint
             postiv_freq = self.constraint_params['postiv']['freq']
@@ -171,7 +171,6 @@ class CombinedConstraint(torch.nn.Module):
                 target_amp  = model.probe_int_sum**0.5 
                 model.opt_probe.data = model.opt_probe * target_amp/current_amp
                 print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
-            
         return
 
 def batch_update(batch, model, optimizer, loss_fn):
@@ -287,7 +286,7 @@ def orthogonalize_modes_vec(modes, sort = False):
         modes_int =  ortho_modes.abs().pow(2).sum((-2,-1))
         _, indices = torch.sort(modes_int, descending=True)
         ortho_modes = ortho_modes[indices]
-    
+        
     return ortho_modes
 
 def orthogonalize_modes_loop(modes):
@@ -317,4 +316,5 @@ def orthogonalize_modes_loop(modes):
     for jj in range(N):
         for ii in range(N):
             ortho_modes[jj] += modes[ii] * evecs[ii, jj]
+            
     return ortho_modes
