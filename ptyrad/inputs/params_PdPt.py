@@ -9,7 +9,7 @@ exp_params = {
     'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'rbf'               : None, # Pixels of radius of BF disk
     'dx_spec'           : 0.2262,# Ang, used to calculate dk
-    'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
+    'defocus'           : -250, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
     'z_distance'        : 10, #15, # Ang
     'Nlayer'            : 22, #10,

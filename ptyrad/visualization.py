@@ -1,6 +1,8 @@
 ## Defining visualization functions
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+
 import numpy as np
 from numpy.fft import fftshift, ifftn
 import torch
@@ -35,19 +37,19 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     for i, idx in enumerate(indices):
 
         im00 = axs[i,0].imshow(probes_int[i]) 
-        axs[i,0].set_title(f"Model probe intensity index{idx}", fontsize=16)
+        axs[i,0].set_title(f"Model probe intensity idx{idx}", fontsize=16)
         fig.colorbar(im00, shrink=0.6)
         
         im01 = axs[i,1].imshow(obj_ROI[i].sum(0))
-        axs[i,1].set_title(f"Model object phase (osum, zsum) index{idx}", fontsize=16)
+        axs[i,1].set_title(f"Model object phase (osum, zsum) idx{idx}", fontsize=16)
         fig.colorbar(im01, shrink=0.6)
 
         im02 = axs[i,2].imshow((model_CBEDs[i]**dp_power))
-        axs[i,2].set_title(f"Model CBED^{dp_power} index{idx}", fontsize=16)
+        axs[i,2].set_title(f"Model CBED^{dp_power} idx{idx}", fontsize=16)
         fig.colorbar(im02, shrink=0.6)
         
         im03 = axs[i,3].imshow((measured_CBEDs[i]**dp_power))
-        axs[i,3].set_title(f"Data CBED^{dp_power} index{idx}", fontsize=16)
+        axs[i,3].set_title(f"Data CBED^{dp_power} idx{idx}", fontsize=16)
         fig.colorbar(im03, shrink=0.6)
     plt.tight_layout()
     if show_fig:
@@ -148,6 +150,7 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_s
             if circle_diameter:
                 first_point = pos[batches[0][0]]
                 circle = plt.Circle((first_point[1], first_point[0]), circle_diameter / 2, fill=False, color='r', linestyle='--')
+                ax.scatter(x=first_point[1], y=first_point[0], s=dot_scale, color='r')
                 ax.add_artist(circle)
                 
                 # Add annotation for "90% probe intensity"
@@ -168,23 +171,51 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_s
     if pass_fig:
         return fig
     
-def plot_loss_curves(loss_iters, show_fig=True, pass_fig=False):
+def plot_loss_curves(loss_iters, last_n_iters=10, show_fig=True, pass_fig=False):
+    last_n_iters = int(last_n_iters)
+    data = np.array(loss_iters)
 
     plt.ioff() # Temporaily disable the interactive plotting mode
-    fig = plt.figure(figsize=(8,6))
-    plt.title("Loss value vs. iterations", fontsize=16)
-    plt.plot(np.array(loss_iters)[:,0], np.array(loss_iters)[:,1], marker='o')
-    plt.xlabel("Iterations", fontsize=16)
-    plt.ylabel("Loss values", fontsize=16)
+    fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
+
+    # Plot all loss values
+    axs.plot(data[:,0], data[:,1], marker='o')
+
+    # Plot the last n iters as an inset
+    if len(data) > 20 and last_n_iters is not None:
+        # Create inset subplot for zoomed-in plot
+        axins = axs.inset_axes([0.45, 0.3, 0.4, 0.5])
+        axins.plot(data[-last_n_iters:,0], data[-last_n_iters:,1], marker='o')
+        axins.set_xlabel('Iterations', fontsize=12)
+        axins.set_ylabel('Loss value', fontsize=12)
+        axins.yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.5f}'))
+        axs.indicate_inset_zoom(axins, edgecolor="gray")
+        axins.set_title(f'Last {last_n_iters} iterations', fontsize=12, pad=10)
+
+    # Set labels and title for the main plot
+    axs.set_xlabel('Iterations', fontsize=16)
+    axs.set_ylabel('Loss value', fontsize=16)
+    axs.set_title(f'Loss value: {data[-1,1]:.5f} at iter {int(data[-1,0])}', fontsize=16)
+    axs.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    plt.yticks(fontsize=14)
+    plt.xticks(fontsize=14)
     plt.tight_layout()
     if show_fig:
         plt.show()
     if pass_fig:
         return fig
-    
+
 def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', phase_cmap=None, amplitude_cmap=None, show_fig=True, pass_fig=False):
+    # The input probes are expected to be numpy array
     # This is for visualization so each mode has its own colorbar.
     # See the actual probe amplitude output for absolute scale visualizaiton
+    
+    # Get the power distribution
+    # Although init_probe_int wouldn't change, calculate it takes < 0.2 ms so realy no need to pre-calculate it
+    init_probe_int = np.abs(init_probe)**2 
+    opt_probe_int = np.abs(opt_probe)**2
+    init_probe_pow = np.sum(init_probe_int, axis=(-2,-1))/np.sum(init_probe_int) 
+    opt_probe_pow = np.sum(opt_probe_int, axis=(-2,-1))/np.sum(opt_probe_int)
     
     if real_or_fourier == 'fourier':
     # While it might seem redundant, the sandwitch fftshift(fft(fftshift(probe)))) is needed for the following reason:
@@ -219,13 +250,13 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
                 
     for i in range(len(opt_probe)):
         ax_init = axs[0, i]
-        ax_init.set_title(f"Init probe mode {i}")
+        ax_init.set_title(f"Init pmode {i}: {init_probe_pow[i]:.1%}")
         im_init = ax_init.imshow(init_probe[i], cmap=cmap)
         ax_init.axis('off')
         plt.colorbar(im_init, ax=ax_init, shrink=0.6)
 
         ax_opt = axs[1, i]
-        ax_opt.set_title(f"Opt probe mode {i}")
+        ax_opt.set_title(f"Opt pmode {i}: {opt_probe_pow[i]:.1%}")
         im_opt = ax_opt.imshow(opt_probe[i], cmap=cmap)
         ax_opt.axis('off')
         plt.colorbar(im_opt, ax=ax_opt, shrink=0.6)
@@ -248,9 +279,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     fig_forward.suptitle(f"Forward pass at iter {niter}", fontsize=24)
   
     # loss curves
-    fig_loss = plot_loss_curves(loss_iters, show_fig=show_fig, pass_fig=True)
-    if save_fig:
-        fig_loss.savefig(output_path + f"/summary_loss_iter{str(niter).zfill(4)}.png")
+    fig_loss = plot_loss_curves(loss_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
@@ -270,6 +299,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         
     # Show and save fig
     if show_fig:
+        fig_loss.show()
         fig_forward.show()
         fig_probe_modes_real_amp.show()
         fig_probe_modes_fourier_amp.show()
@@ -278,6 +308,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
 
     if save_fig:
         print(f"Saving summary figures for iter {niter}")
+        fig_loss.savefig(output_path + f"/summary_loss_iter{str(niter).zfill(4)}.png")
         fig_forward.savefig(output_path + f"/summary_forward_pass_iter{str(niter).zfill(4)}.png")
         fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
@@ -285,6 +316,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
         
     # Close figures after saving
+    plt.close(fig_loss)
     plt.close(fig_forward)
     plt.close(fig_probe_modes_real_amp)
     plt.close(fig_probe_modes_fourier_amp)
