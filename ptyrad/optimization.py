@@ -136,13 +136,20 @@ class CombinedConstraint(torch.nn.Module):
             if ortho_pmode_freq is not None and niter % ortho_pmode_freq == 0:
                 model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
                 probe_int = model.opt_probe.abs().pow(2)
-                print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {(probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)}")
+                probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
+                print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}")
 
-            # Apply orthogonality constraint to omode
+            # omode need something other than orthogonalize_modes because it'll likely merely output a strong mean mode with nearly 0 other modes
             ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
             if ortho_omode_freq is not None and niter % ortho_omode_freq == 0:
-                model.opt_objp.data = orthogonalize_modes_vec(model.opt_objp, sort=False)
-                print(f"Apply ortho omode constraint at iter {niter}")
+                # For omode to work correctly, it should be a phase object with obja = 1
+                #obj_decomp = torch.abs(orthogonalize_modes_vec(model.opt_objp, sort=True)) # This will give PCA-like behavior or mean, std, and higher order terms
+                obj_decomp = decomp_omodes(model.opt_objp, sort=True) # The choice of this function is tricky and need some more experiment, underdevolopment
+                obj_int = obj_decomp.abs().pow(2)
+                obj_pow = obj_int.sum((1,2,3))/obj_int.sum()
+                model.opt_objp.data   = obj_decomp
+                # model.omode_occu.data = obj_pow
+                print(f"Apply ortho omode constraint at iter {niter}, relative omode power = {obj_pow.detach().cpu().numpy().round(3)}")
                 
             # Apply kz filter constraint
             kz_filter_freq = self.constraint_params['kz_filter']['freq']
@@ -283,11 +290,15 @@ def orthogonalize_modes_vec(modes, sort = False):
 
     # sort modes by their contribution
     if sort:
-        modes_int =  ortho_modes.abs().pow(2).sum((-2,-1))
+        modes_int =  ortho_modes.abs().pow(2).sum(tuple(range(1,ortho_modes.ndim))) # Sum every but 1st dimension
         _, indices = torch.sort(modes_int, descending=True)
         ortho_modes = ortho_modes[indices]
         
     return ortho_modes
+
+def decomp_omodes(modes, sort=False):
+    ''' Placeholder for a decomposition function for omodes '''
+    return modes
 
 def orthogonalize_modes_loop(modes):
     ''' Similar implementation of SVD decomposition with PtychoShelves'''
