@@ -19,7 +19,7 @@ exp_params = {
     'scan_step_size'    : 0.3, # Ang
     'scan_flip'         : None, # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
-    'omode_max'         : 2, #1
+    'omode_max'         : 4, #1
     'pmode_max'         : 2, #2
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,

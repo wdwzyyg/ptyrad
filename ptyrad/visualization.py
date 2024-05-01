@@ -18,39 +18,43 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     # The dp_power here is for visualization purpose, the actual loss function has its own param field
     
     with torch.no_grad():
-        probes               = model.get_probes(indices)
-        probes_int           = probes.abs().pow(2).sum(1)
-        model_CBEDs, obj_ROI = model(indices)
-        omode_occu           = model.omode_occu
-        measured_CBEDs       = model.get_measurements(indices)
-        
+        probes                   = model.get_probes(indices)
+        probes_int               = probes.abs().pow(2).sum(1)
+        model_CBEDs, obj_patches = model(indices)
+        omode_occu               = model.omode_occu
+        measured_CBEDs           = model.get_measurements(indices)
         
         probes_int     = probes_int.detach().cpu().numpy()
-        obj_ROI        = (obj_ROI * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        obja_ROI        = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        objp_ROI        = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
         model_CBEDs    = model_CBEDs.detach().cpu().numpy()
         measured_CBEDs = measured_CBEDs.detach().cpu().numpy()
     
     plt.ioff() # Temporaily disable the interactive plotting mode
-    fig, axs = plt.subplots(len(indices), 4, figsize=(24, 5.5*len(indices)))
+    fig, axs = plt.subplots(len(indices), 5, figsize=(24, 5*len(indices)))
     plt.suptitle("Forward pass", fontsize=24)
     
     for i, idx in enumerate(indices):
-
+        # Looping over the N_i dimension
         im00 = axs[i,0].imshow(probes_int[i]) 
-        axs[i,0].set_title(f"Model probe intensity idx{idx}", fontsize=16)
+        axs[i,0].set_title(f"Probe intensity idx{idx}", fontsize=16)
         fig.colorbar(im00, shrink=0.6)
-        
-        im01 = axs[i,1].imshow(obj_ROI[i].sum(0))
-        axs[i,1].set_title(f"Model object phase (osum, zsum) idx{idx}", fontsize=16)
-        fig.colorbar(im01, shrink=0.6)
 
-        im02 = axs[i,2].imshow((model_CBEDs[i]**dp_power))
-        axs[i,2].set_title(f"Model CBED^{dp_power} idx{idx}", fontsize=16)
-        fig.colorbar(im02, shrink=0.6)
+        im01 = axs[i,1].imshow(obja_ROI[i].prod(0))
+        axs[i,1].set_title(f"Object amp. (osum, zprod) idx{idx}", fontsize=16)
+        fig.colorbar(im01, shrink=0.6)
         
-        im03 = axs[i,3].imshow((measured_CBEDs[i]**dp_power))
-        axs[i,3].set_title(f"Data CBED^{dp_power} idx{idx}", fontsize=16)
+        im02 = axs[i,2].imshow(objp_ROI[i].sum(0))
+        axs[i,2].set_title(f"Object phase (osum, zsum) idx{idx}", fontsize=16)
+        fig.colorbar(im02, shrink=0.6)
+
+        im03 = axs[i,3].imshow((model_CBEDs[i]**dp_power))
+        axs[i,3].set_title(f"Model CBED^{dp_power} idx{idx}", fontsize=16)
         fig.colorbar(im03, shrink=0.6)
+        
+        im04 = axs[i,4].imshow((measured_CBEDs[i]**dp_power))
+        axs[i,4].set_title(f"Data CBED^{dp_power} idx{idx}", fontsize=16)
+        fig.colorbar(im04, shrink=0.6)
     plt.tight_layout()
     if show_fig:
         plt.show()

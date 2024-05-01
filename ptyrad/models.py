@@ -171,4 +171,4 @@ class PtychoAD(torch.nn.Module):
         
         if self.detector_blur_std is not None and self.detector_blur_std != 0:
             dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
-        return dp_fwd, object_patches[...,1]
+        return dp_fwd, object_patches

@@ -10,6 +10,24 @@ from torch.fft import fft2, ifft2, ifftshift, fftshift
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
+def has_nan_or_inf(tensor):
+    """
+    Check if a torch.Tensor contains any NaN or Inf values.
+
+    Parameters:
+        tensor (torch.Tensor): Input tensor to check.
+
+    Returns:
+        bool: True if the tensor contains any NaN or Inf values, False otherwise.
+    """
+    # Check for NaN values
+    has_nan = torch.isnan(tensor).any()
+
+    # Check for Inf values
+    has_inf = torch.isinf(tensor).any()
+
+    return has_nan or has_inf
+
 def get_size_bytes(x):
     
     print(f"Input tensor has shape {x.shape}, dtype {x.dtype}, and live on {x.device}")
@@ -151,6 +169,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     obj_shape    = model.opt_objp.shape
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
+    obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
 
     output_path  = output_dir + "/" + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -158,7 +177,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if cbeds_flipT is not None:
         output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
         
-    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_olr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
+    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
     
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
@@ -173,8 +192,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if model.detector_blur_std is not None and model.detector_blur_std != 0:
         output_path += f"_dpblur{model.detector_blur_std}"
     
-    if constraint_params['objp_blur']['freq'] is not None and constraint_params['objp_blur']['std'] != 0:
-        output_path += f"_opblur{constraint_params['objp_blur']['std']}"
+    if constraint_params['obj_blur']['freq'] is not None and constraint_params['obj_blur']['std'] != 0:
+        obj_type = constraint_params['obj_blur']['obj_type']
+        obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
+        output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
         
     output_path += postfix
     
