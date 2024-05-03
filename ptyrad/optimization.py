@@ -4,43 +4,23 @@
 
 from .utils import time_sync
 import numpy as np
-from torchmetrics.image import TotalVariation
 from torchvision.transforms.functional import gaussian_blur
 import torch
 
-# This is a current working version (2024.04.13) of the CombinedLoss class
-# I cleaned up the archived versions and slightly renamed the objects and variables for clarity
-
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
-# Currently there're loss_single, loss_pacbed, loss_tv, loss_l1, loss_l2, and loss_postiv available
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
 # usually 0.5 for loss_single and 0.2 for loss_pacbed to emphasize the diffuse background
-# The obj-dependent regularizations (TV, L1, L2, postiv) are using the objp_patches as input
+# The obj-dependent regularization loss_sparse is using the objp_patches as input
 # In this way it'll only calculate values within the ROI, so the edges of the object would not be included
 
 class CombinedLoss(torch.nn.Module):
     """ Calculate the loss with regularization on the object phase patches for each batch """
-    
-    # Example usage:
-    # with torch.no_grad():
-    #     loss_fn = CombinedLoss(loss_params, device=DEVICE)
-    #     np.random.seed(42)
-    #     indices = np.random.randint(0,N_max,48)
-    #     model_CBEDs, objp_patches = model(indices)
-    #     measured_CBEDs = measurements[indices]
-    #     loss_batch, losses = loss_fn(model_CBEDs, measured_CBEDs, objp_patches, model.omode_occu)
-    # print(losses)
-    
-    # model/measured CBEDs (N,Ky,Kx), float32 tensor
-    # objp_patches (N, omode, Nz, Ny, Nx), float32 tensor
-    # omode_occu (omode), float32 tensor
-    
+
     def __init__(self, loss_params, device='cuda:0'):
         super(CombinedLoss, self).__init__()
         self.device = device
         self.loss_params = loss_params
         self.mse = torch.nn.MSELoss(reduction='mean')
-        self.tv = TotalVariation(reduction='mean').to(device)
 
     def get_loss_single(self, model_CBEDs, measured_CBEDs):
         # Calculate loss_single
@@ -48,7 +28,7 @@ class CombinedLoss(torch.nn.Module):
         if single_params['state']:
             dp_pow = single_params.get('dp_pow', 0.5)
             data_mean = measured_CBEDs.pow(dp_pow).mean()
-            loss_single = self.mse(model_CBEDs.pow(dp_pow), measured_CBEDs.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes it quite stable between dp_pow 0.2-0.5.
+            loss_single = self.mse(model_CBEDs.pow(dp_pow), measured_CBEDs.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_single *= single_params['weight']
         else:
             loss_single = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
@@ -64,38 +44,13 @@ class CombinedLoss(torch.nn.Module):
         else:
             loss_pacbed = torch.tensor(0, dtype=torch.float32, device=self.device)
         return loss_pacbed
-
-    def get_loss_obja1(self, obja_patches, omode_occu):
-        # Calculate loss_obja1 by calculating the ln norm of obja - 1
-        # This loss punishes any value of obja that deviates from 1
-        # Note that if obja = 1 we'll get NaN from obja.grad
-        # Although I could initialize obja with 1e-5(N(0,1))+1, it's quite intuitive to have obja = 1 so I'll handle NaN here by adding eps = 1e-20
-        # obja_patches = (N, omode, Nz, Ny, Nx)
-        obja1_params = self.loss_params['loss_obja1']
-        if obja1_params['state']:
-            ln_order = obja1_params['ln_order']
-            if obja1_params['reduction'] == 'each':
-                loss_obja1 = obja1_params['weight'] * (torch.mean((obja_patches-1+1e-20).abs().pow(ln_order),      dim=(0,-3,-2,-1)).pow(1/ln_order) * omode_occu).sum()
-            elif obja1_params['reduction'] == 'proj':
-                loss_obja1 = obja1_params['weight'] * (torch.mean((obja_patches.prod(2)-1+1e-20).abs().pow(ln_order), dim=(0,-2,-1)).pow(1/ln_order) * omode_occu).sum()
-        else:
-            loss_obja1 = torch.tensor(0, dtype=torch.float32, device=self.device)
-        return loss_obja1
         
-    def get_loss_tv(self, objp_patches, omode_occu):
-        # Calculate loss_tv
-        # https://lightning.ai/docs/torchmetrics/stable/image/total_variation.html 
-        # This TV only applies to the last 2 dim (N,C,H,W), so there's no z-direction measurement in our case with objp_patches (N, omode, Nz, Ny, Nx)
-        tv_params = self.loss_params['loss_tv']
-        if tv_params['state']:
-            # Do the weighted sum along omode and normalize by number of z slices because the TV is summing over C and averaging over N.
-            loss_tv = tv_params['weight'] * sum([self.tv(objp_patches[:,i])*omode_occu[i] for i in range(len(omode_occu))]) / objp_patches.shape[2] 
-        else:
-            loss_tv = torch.tensor(0, dtype=torch.float32, device=self.device)
-        return loss_tv
-    
     def get_loss_sparse(self, objp_patches, omode_occu):
         # Calculate loss_sparse by considering the ln norm
+        # For obj-dependent regularization terms, the omode contribution should be weighting the individual loss for each omode.
+        # Scaling the obj value by its omode_occu would make non-linear loss like l2 dependent on # of omode.
+        # Therefore, the proper way is to get a loss tensor L(obj) shaped (N, omode, Nz, Ny, Nx) and then do the voxel-wise mean across (N,:,Nz,Ny,Nx)
+        # and lastly we do the weighted sum with omode_occu so that the loss value is not batch, object size, or omode dependent.
         sparse_params = self.loss_params['loss_sparse']
         if sparse_params['state']:
             ln_order = sparse_params['ln_order']
@@ -103,35 +58,18 @@ class CombinedLoss(torch.nn.Module):
         else:
             loss_sparse = torch.tensor(0, dtype=torch.float32, device=self.device)
         return loss_sparse
-        
-    def get_loss_postiv(self, objp_patches, omode_occu):
-        # Calculate loss_postiv
-        postiv_params = self.loss_params['loss_postiv']
-        if postiv_params['state']:
-            loss_postiv = postiv_params['weight'] * (torch.mean(torch.relu(-objp_patches), dim=(0,2,3,4)) * omode_occu).sum()
-        else:
-            loss_postiv = torch.tensor(0, dtype=torch.float32, device=self.device)
-        return loss_postiv
     
     def forward(self, model_CBEDs, measured_CBEDs, object_patches, omode_occu):
         losses = []
-
         losses.append(self.get_loss_single(model_CBEDs, measured_CBEDs))
         losses.append(self.get_loss_pacbed(model_CBEDs, measured_CBEDs))
-        
-        # For obj-dependent regularization terms, the omode contribution should be weighting the individual loss for each omode.
-        # Scaling the obj value by its omode_occu would make non-linear loss like l2 and tv value dependent on # of omode.
-        # Therefore, the proper way is to get a loss tensor L(obj) shaped (N, omode, Nz, Ny, Nx) and then do the voxel-wise mean across (N,:,Nz,Ny,Nx)
-        # and lastly we do the weighted sum with omode_occu so that the loss value is not batch, object size, or omode dependent.
-        losses.append(self.get_loss_obja1 (object_patches[...,0], omode_occu))
-        losses.append(self.get_loss_tv    (object_patches[...,1], omode_occu))
         losses.append(self.get_loss_sparse(object_patches[...,1], omode_occu))
-        losses.append(self.get_loss_postiv(object_patches[...,1], omode_occu))
         total_loss = sum(losses)
         return total_loss, losses
     
 class CombinedConstraint(torch.nn.Module):
     ''' Apply iteration-wise in-place constraints on the optimizable tensors '''
+    
     def __init__(self, constraint_params, device='cuda:0'):
         super(CombinedConstraint, self).__init__()
         self.device = device
@@ -146,20 +84,6 @@ class CombinedConstraint(torch.nn.Module):
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
             print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}")
     
-    def apply_ortho_omode(self, model, niter):
-        ''' This feature is still under construction '''
-        # omode need something other than orthogonalize_modes because it'll likely merely output a strong mean mode with nearly 0 other modes
-        ortho_omode_freq = self.constraint_params['ortho_omode']['freq']
-        if ortho_omode_freq is not None and niter % ortho_omode_freq == 0:
-            # For omode to work correctly, it should be a phase object with obja = 1
-            #obj_decomp = torch.abs(orthogonalize_modes_vec(model.opt_objp, sort=True)) # This will give PCA-like behavior or mean, std, and higher order terms
-            obj_decomp = decomp_omodes(model.opt_objp, sort=True) # The choice of this function is tricky and need some more experiment, underdevolopment
-            obj_int = obj_decomp.abs().pow(2)
-            obj_pow = obj_int.sum((1,2,3))/obj_int.sum()
-            model.opt_objp.data   = obj_decomp
-            # model.omode_occu.data = obj_pow
-            print(f"Apply ortho omode constraint at iter {niter}, relative omode power = {obj_pow.detach().cpu().numpy().round(3)}")
-    
     def apply_obj_blur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last 2 dimension (...,H,W) '''
         # Note that it's not clear whether applying blurring after every iteration would ever reach a steady state
@@ -170,10 +94,10 @@ class CombinedConstraint(torch.nn.Module):
         if obj_blur_freq is not None and niter % obj_blur_freq == 0 and obj_blur_std !=0:
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = gaussian_blur(model.opt_obja, kernel_size=5, sigma=obj_blur_std)
-                print(f"Apply lateral (y,x) Gaussian blur on obja at iter {niter}")
+                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_blur_std} px on obja at iter {niter}")
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=5, sigma=obj_blur_std)
-                print(f"Apply lateral (y,x) Gaussian blur on objp at iter {niter}")
+                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_blur_std} px on objp at iter {niter}")
                 
     def apply_kz_filter(self, model, niter):
         ''' Apply kz Fourier filter constraint on object '''
@@ -186,10 +110,10 @@ class CombinedConstraint(torch.nn.Module):
         if kz_filter_freq is not None and niter % kz_filter_freq == 0:
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='amplitude')
-                print(f"Apply kz_filter constraint on obja at iter {niter}")
+                print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on obja at iter {niter}")
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='phase')
-                print(f"Apply kz_filter constraint on objp at iter {niter}")
+                print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on objp at iter {niter}")
     
     def apply_obja_thresh(self, model, niter):
         ''' Apply thresholding on obja at voxel level '''
@@ -200,7 +124,7 @@ class CombinedConstraint(torch.nn.Module):
         if obja_thresh_freq is not None and niter % obja_thresh_freq == 0: 
             model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp_(min=thresh[0], max=thresh[1])
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} threshold constraint on obja at iter {niter}")
+            print(f"Apply {relax_str} threshold constraint with thresh = {thresh} on obja at iter {niter}")
 
     def apply_objp_postiv(self, model, niter):
         ''' Apply positivity constraint on objp at voxel level '''
@@ -250,18 +174,6 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_obj_same(model, niter)
             self.apply_fix_probe_int(model, niter)
 
-def batch_update(batch, model, optimizer, loss_fn):
-    ''' Optimization closure that performs 1 mini-batch update '''
-    start_batch_t = time_sync()
-    optimizer.zero_grad()
-    model_CBEDs, object_patches = model(batch)
-    measured_CBEDs = model.get_measurements(batch)
-    loss_batch, losses = loss_fn(model_CBEDs, measured_CBEDs, object_patches, model.omode_occu)
-    loss_batch.backward()
-    optimizer.step() # batch update
-    batch_t = time_sync() - start_batch_t
-    return losses, batch_t
-
 def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
@@ -269,7 +181,14 @@ def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     
     # Start mini-batch optimization
     for batch_idx, batch in enumerate(batches):
-        losses, batch_t = batch_update(batch, model, optimizer, loss_fn)
+        start_batch_t = time_sync()
+        optimizer.zero_grad()
+        model_CBEDs, object_patches = model(batch)
+        measured_CBEDs = model.get_measurements(batch)
+        loss_batch, losses = loss_fn(model_CBEDs, measured_CBEDs, object_patches, model.omode_occu)
+        loss_batch.backward()
+        optimizer.step() # batch update
+        batch_t = time_sync() - start_batch_t
 
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
@@ -364,38 +283,4 @@ def orthogonalize_modes_vec(modes, sort = False):
         _, indices = torch.sort(modes_int, descending=True)
         ortho_modes = ortho_modes[indices]
         
-    return ortho_modes
-
-def decomp_omodes(modes, sort=False):
-    ''' Placeholder for a decomposition function for omodes '''
-    return modes
-
-def orthogonalize_modes_loop(modes):
-    ''' Similar implementation of SVD decomposition with PtychoShelves'''
-    # (N,Y,X) = modes.shape
-    # modes_reshaped = modes.view(N, -1) # Reshape modes to have a shape of (Nmode, X*Y)
-    # A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
-    
-        # calculate M M* and its eigenvectors
-    N = modes.size(0)
-    A = torch.zeros(N, N, dtype=modes.dtype, device=modes.device)
-    for ii in range(N):
-        p2 = modes[ii]
-        for jj in range(N):
-            p1 = modes[jj]
-            A[ii, jj] = torch.sum(torch.dot(p2.view(-1), p1.view(-1)))
-    
-    evals, evecs = torch.linalg.eig(A)
-
-    # sort modes by their contribution
-    evals_abs = torch.abs(evals)
-    _, indices = torch.sort(evals_abs, descending=True)
-    evecs = evecs[:, indices]
-
-    # orthogonalize modes
-    ortho_modes = torch.zeros_like(modes)
-    for jj in range(N):
-        for ii in range(N):
-            ortho_modes[jj] += modes[ii] * evecs[ii, jj]
-            
     return ortho_modes
