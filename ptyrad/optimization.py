@@ -83,7 +83,18 @@ class CombinedConstraint(torch.nn.Module):
             probe_int = model.opt_probe.abs().pow(2)
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
             print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}")
-    
+            
+    def apply_fix_probe_int(self, model, niter):
+        ''' Apply probe intensity constraint '''
+        # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
+        # Therefore, a mean probe intensity is used here as the target intensity
+        fix_probe_int_freq = self.constraint_params['fix_probe_int']['freq']
+        if fix_probe_int_freq is not None and niter % fix_probe_int_freq == 0: 
+            current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
+            target_amp  = model.probe_int_sum**0.5   
+            model.opt_probe.data = model.opt_probe * target_amp/current_amp
+            print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+            
     def apply_obj_blur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last 2 dimension (...,H,W) '''
         # Note that it's not clear whether applying blurring after every iteration would ever reach a steady state
@@ -122,9 +133,9 @@ class CombinedConstraint(torch.nn.Module):
         relax            = self.constraint_params['obja_thresh']['relax']
         thresh           = self.constraint_params['obja_thresh']['thresh']
         if obja_thresh_freq is not None and niter % obja_thresh_freq == 0: 
-            model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp_(min=thresh[0], max=thresh[1])
+            model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp(min=thresh[0], max=thresh[1])
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} threshold constraint with thresh = {thresh} on obja at iter {niter}")
+            print(f"Apply {relax_str} threshold constraint with thresh = {np.round(thresh,5)} on obja at iter {niter}")
 
     def apply_objp_postiv(self, model, niter):
         ''' Apply positivity constraint on objp at voxel level '''
@@ -133,9 +144,25 @@ class CombinedConstraint(torch.nn.Module):
         objp_postiv_freq = self.constraint_params['objp_postiv']['freq']
         relax            = self.constraint_params['objp_postiv']['relax'] 
         if objp_postiv_freq is not None and niter % objp_postiv_freq == 0: 
-            model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp_(min=0)
+            model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
             print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")
+            
+    def apply_obj_chgflip(self, model, niter):
+        ''' Apply charge-flipping constraint on object '''
+        # Note that this `relax` is defined oppositly to PtychoShelves's `positivity_constraint_object` in `ptycho_solver`. 
+        # Here, relax=1 means fully relaxed and essentially no constraint.
+        obj_chgflip_freq = self.constraint_params['obj_chgflip']['freq']
+        obj_type         = self.constraint_params['obj_chgflip']['obj_type']
+        relax            = self.constraint_params['obj_chgflip']['relax']
+        relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_chgflip))' if relax != 0 else 'hard'
+        if obj_chgflip_freq is not None and niter % obj_chgflip_freq == 0: 
+            if obj_type in ['amplitude', 'both']:
+                model.opt_obja.data = relax * model.opt_obja + (1-relax) * (torch.abs(model.opt_obja-1)+1)
+                print(f"Apply {relax_str} charge-flipping constraint around 1 on obja at iter {niter}")
+            if obj_type in ['phase', 'both']:
+                model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.abs()
+                print(f"Apply {relax_str} charge-flipping constraint around 0 on objp at iter {niter}")
 
     def apply_obj_same(self, model, niter):
         ''' Apply identical slice constraint on obj, forcing the z slices to be the same '''
@@ -151,28 +178,19 @@ class CombinedConstraint(torch.nn.Module):
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_same))' if relax != 0 else 'hard'
             print(f"Apply {relax_str} identical z-slice constraint on obj at iter {niter}")
         
-    def apply_fix_probe_int(self, model, niter):
-        ''' Apply probe intensity constraint '''
-        # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
-        # Therefore, a mean probe intensity is used here as the target intensity
-        fix_probe_int_freq = self.constraint_params['fix_probe_int']['freq']
-        if fix_probe_int_freq is not None and niter % fix_probe_int_freq == 0: 
-            current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
-            target_amp  = model.probe_int_sum**0.5   
-            model.opt_probe.data = model.opt_probe * target_amp/current_amp
-            print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+
         
     def forward(self, model, niter):
-        # Apply in-place constraints 
+        # Apply in-place constraints if niter satisfies the predetermined frequency
         with torch.no_grad():
             self.apply_ortho_pmode(model, niter)
-            # self.apply_ortho_omode(model, niter) # This feature is still under construction
+            self.apply_fix_probe_int(model, niter)
             self.apply_obj_blur(model, niter)
             self.apply_kz_filter(model, niter)
             self.apply_obja_thresh(model, niter)
             self.apply_objp_postiv(model, niter)
+            self.apply_obj_chgflip(model, niter)
             self.apply_obj_same(model, niter)
-            self.apply_fix_probe_int(model, niter)
 
 def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''

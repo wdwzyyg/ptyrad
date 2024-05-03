@@ -1,6 +1,6 @@
 # CNS
 
-ptycho_output_path = 'data/20240417_NNO3PlanviewPtychoRT_Lopa/Niter2000.mat'
+ptycho_output_path = 'data/20240417_NNO3PlanviewPtychoRT_Lopa/Niter1000_Yi.mat' #Niter2000.mat
 exp_CBED_path      = 'data/20240417_NNO3PlanviewPtychoRT_Lopa/centered.mat' 
 
 exp_params = {
@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1848,# Ang, used to calculate dk
     'defocus'           : -130.928, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 2, #15, # Ang
-    'Nlayer'            : 50, #10,
+    'z_distance'        : 4, #15, # Ang
+    'Nlayer'            : 25, #10,
     'N_scans'           : 4096,
     'N_scan_slow'       : 64,
     'N_scan_fast'       : 64,
