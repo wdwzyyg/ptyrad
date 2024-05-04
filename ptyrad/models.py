@@ -1,7 +1,7 @@
 ## Defining PtychoAD class for the optimization object
 
 from .forward import  multislice_forward_model_vec_all
-from .utils import imshift_batch
+from .utils import imshift_batch, imshift_single, get_center_of_mass
 from torchvision.transforms.functional import gaussian_blur
 import torch
 
@@ -41,6 +41,7 @@ class PtychoAD(torch.nn.Module):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device                 = device
+            self.recenter_cbeds         = model_params['recenter_cbeds']
             self.detector_blur_std      = model_params['detector_blur_std']
             self.lr_params              = model_params['lr_params']
             
@@ -56,16 +57,49 @@ class PtychoAD(torch.nn.Module):
             self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
             
+            # Create grids for shifting
+            self.create_grids()
+            
+            # Recenter the cbeds
+            if self.recenter_cbeds is not None:
+                self.avg_cbeds_shift = self.shift_cbeds()
+            else:
+                self.avg_cbeds_shift = None
+
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
                 'obja'            : self.opt_obja,
                 'objp'            : self.opt_objp,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
-            
-            self.create_grids()
             self.set_optimizer(self.lr_params)
-    
+            
+    def shift_cbeds(self):
+        assert self.recenter_cbeds in ['all', 'each'], f"Specified recenter_cbeds method {self.recenter_cbeds} does not exist!"
+        
+        cbeds = self.measurements
+        if self.recenter_cbeds =='all':
+            shift_str = 'fixed'
+            cbeds = cbeds.sum(0)
+        elif self.recenter_cbeds =='each':
+            shift_str = 'averaged'
+            
+        cy, cx = get_center_of_mass(torch.fft.fftshift(cbeds, dim=(-2,-1)), corner_centered = True)
+        shifts = torch.stack((-cy, -cx), dim=1) if self.recenter_cbeds == 'each' else torch.stack((-cy, -cx)).broadcast_to((len(self.measurements),2)) # make shifts (N,2)
+        grid = self.shift_probes_grid
+        # For CBEDs it's unlikely to do imshift_batch due to GPU memory constraints
+        for idx, shift in enumerate(shifts):
+            self.measurements.data[idx] = imshift_single(self.measurements[idx], shift=shift, grid=grid).abs()
+            print(f"Shifting cbed {idx} with (sy,sx) = {shifts[idx].detach().cpu().numpy().round(4)} px") 
+
+        print(f'Finished recentering {self.recenter_cbeds} CBEDs with {shift_str} (sy,sx) = {shifts.mean(0).detach().cpu().numpy().round(4)} px')
+        
+        # Update total probe intensity after the CBED shift
+        self.probe_int_sum.data = self.measurements.mean(0).sum()
+        print(f"Update probe_int_sum into {self.probe_int_sum:.4f} after CBEDs shifting")
+        
+        return (-cy.mean(), -cx.mean())
+        
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
         # Note that the Noy, Nox, roy, rox, shift_object_grid are pre-generated for potential future usage of sub-px object shifts
@@ -111,7 +145,7 @@ class PtychoAD(torch.nn.Module):
         self.print_model_summary()
         
     def print_model_summary(self):
-        print('PtychoAD optimizable variables:')
+        print('\nPtychoAD optimizable variables:')
         for name, tensor in self.optimizable_tensors.items():
             print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
         total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)

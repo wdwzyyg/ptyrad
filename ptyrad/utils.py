@@ -114,13 +114,15 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                 'loss_params'           : loss_params,
                 'constraint_params'     : constraint_params,
                 'model_params':
-                    {'detector_blur_std': model.detector_blur_std,
+                    {'recenter_cbeds'   : model.recenter_cbeds,
+                     'detector_blur_std': model.detector_blur_std,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
                      'z_distance'       : model.z_distance,
                      'crop_pos'         : model.crop_pos,
-                     'shift_probes'     : model.shift_probes},
+                     'shift_probes'     : model.shift_probes,
+                     'avg_cbeds_shift'  : model.avg_cbeds_shift},
                 'recon_params'          : recon_params,
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
@@ -337,11 +339,50 @@ def save_results(output_path, model, exp_params, source_params, loss_params, con
         imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
         imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
 
+def imshift_single(img, shift, grid):
+    """
+    Generates a single shifted image from a single input image (..., Ny,Nx) with arbitray leading dimensions.
+    
+    This function shifts a complex/real-valued input image by applying phase shifts in the Fourier domain,
+    achieving subpixel shifts in both x and y directions.
+
+    Inputs:
+        img (torch.Tensor): The input image to be shifted. 
+                            img could be either a mixed-state complex probe (pmode, Ny, Nx) complex64 tensor, 
+                            or a mixed-state pseudo-complex object stack (2,omode,Nz,Ny,Nx) float32 tensor.
+        shift (torch.Tensor): The shift to be applied to the image. It should be a (2,) tensor and as (shift_y, shift_x).
+        grid (torch.Tensor): The k-space grid used for computing the shifts in the Fourier domain. It should be a tensor with shape=(2, Ny, Nx),
+                             where Ny and Nx are the height and width of the images, respectively. Note that the grid is normalized so the value spans
+                             from 0 to 1
+
+    Outputs:
+        shifted_img (torch.Tensor): The shifted image (..., Ny, Nx),
+
+    Note:
+        - The shifts are in unit of pixel. For example, a shift of (0.5, 0.5) will shift the image by half a pixel in both y and x directions, positive is down/right-ward.
+        - The function utilizes the fast Fourier transform (FFT) to perform the shifting operation efficiently.
+        - Make sure to convert the input image and shifts tensor to the desired device before passing them to this function.
+        - The fft2 and fftshifts are all applied on the last 2 dimensions, therefore it's only shifting along y and x directions
+        - tensor[None, ...] would add an extra dimension at 0, so *[None]*ndim means unwrapping a list of ndim None as [None, None, ...]
+        - The img is automatically broadcast to (Nb, *img.shape), so if a batch of images are passed in, each image would be shifted independently
+    """
+    
+    assert img.shape[-2:] == grid.shape[-2:], f"Found incompatible dimensions. img.shape[-2:] = {img.shape[-2:]} while grid.shape[-2:] = {grid.shape[-2:]}"
+    
+    ndim = img.ndim                                                                   # Get the total img ndim so that the shift is dimension-indepent
+    shift = shift[..., *[None]*(ndim-1)]                                              # Expand shifts to (2,1,1,...) so shifts.ndim = ndim+1
+    grid = grid[:,*[None]*(ndim-2), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+1
+    shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
+    ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
+    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim
+    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
+    return shifted_img
+
 def imshift_batch(img, shifts, grid):
     """
     Generates a batch of shifted images from a single input image (..., Ny,Nx) with arbitray leading dimensions.
     
-    This function shifts a complex-valued input image by applying phase shifts in the Fourier domain,
+    This function shifts a complex/real-valued input image by applying phase shifts in the Fourier domain,
     achieving subpixel shifts in both x and y directions.
 
     Inputs:
@@ -374,7 +415,7 @@ def imshift_batch(img, shifts, grid):
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.real because the imag part is artifact
+    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
     return shifted_img
 
 def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_or_cp='np'):
@@ -700,14 +741,19 @@ def check_modes_ortho(tensor, atol = 2e-5):
                 print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
 
 def get_center_of_mass(image, corner_centered=False):
-    """ Finds and returns the center of mass of an real-valued 2D tensor """
+    """ Finds and returns the center of mass of an real-valued 2/3D tensor """
+    # The expected input shape can be either (Ny, Nx) or (N, Ny, Nx)
+    # The output center_y and center_x will be either (N,) or a scaler tensor
     # Note that for even-number sized arr (like [128,128]), even it's uniformly ones, the "center" would be between pixels like [63.5,63.5]
     # Note that the `corner_centered` flag idea is adapted from py4DSTEM, which is quite handy when we have corner-centered probe or CBED
     # https://github.com/py4dstem/py4DSTEM/blob/dev/py4DSTEM/process/utils/utils.py
     
+    ndim = image.ndim
+    assert ndim in [2, 3], f"image.ndim must be either 2 or 3, we've got {ndim}"
+    
     # Create grid of coordinates
     device = image.device
-    ny, nx = image.shape
+    (ny, nx) = image.shape[-2:]
 
     if corner_centered:
         grid_y, grid_x = torch.meshgrid(torch.fft.fftfreq(ny, 1 / ny, device=device), torch.fft.fftfreq(nx, 1 / nx, device=device), indexing='ij')
@@ -715,11 +761,11 @@ def get_center_of_mass(image, corner_centered=False):
         grid_y, grid_x = torch.meshgrid(torch.arange(ny, device=device), torch.arange(nx, device=device), indexing='ij')
     
     # Compute total intensity
-    total_intensity = torch.sum(image)
+    total_intensity = torch.sum(image, dim = (-2,-1)).mean()
     
     # Compute weighted sum of x and y coordinates
-    center_y = torch.sum(grid_y * image) / total_intensity
-    center_x = torch.sum(grid_x * image) / total_intensity
+    center_y = torch.sum(grid_y * image, dim = (-2,-1)) / total_intensity
+    center_x = torch.sum(grid_x * image, dim = (-2,-1)) / total_intensity
     
     return center_y, center_x
 
@@ -925,36 +971,7 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         print(f"The object shape is interpolated to {complex_object_interp3d.shape}.")
         return complex_object_interp3d.astype(obj_dtype)
 
-def imshift(img, shifts, device):
-    """
-    Generates a shifted image with support for subpixel shifts.
-    
-    This function shifts a complex-valued input image by applying phase shifts in the Fourier domain,
-    accommodating subpixel shifts in both x and y directions.
 
-    Inputs:
-        img (torch.Tensor): The input image to be shifted. It should be a complex-valued tensor with shape=(..., Ny, Nx).
-        shifts (torch.Tensor): The shifts to be applied to the image. It should be a single tensor as (shift_y, shift_x).
-        device (torch.device): The device on which the computation will be performed.
-
-    Outputs:
-        shifted_img (torch.Tensor): The shifted image. It has the same shape as the input image, i.e., shape=(..., Ny, Nx).
-
-    Note:
-        - The shifts are specified as fractions of a pixel. For example, a shift of (0.5, 0.5) will shift the image by half a pixel in both y and x directions.
-        - The function utilizes the fast Fourier transform (FFT) to perform the shifting operation efficiently.
-        - Make sure to convert the input image and shifts tensor to the desired device before passing them to this function.
-        - The fft2 and fftshifts are all applied on the last 2 dimensions, therefore it's only shifting along y and x directions
-    """
-
-    Ny, Nx = img.shape[-2], img.shape[-1]
-    shift_y, shift_x = shifts[0], shifts[1]
-    ry, rx = torch.meshgrid(torch.arange(Ny), torch.arange(Nx), indexing='ij')
-    ry, rx = ry.to(device), rx.to(device)
-    w = -torch.exp(-(2j * torch.pi) * (shift_x * rx / Nx  + shift_y * ry / Ny))
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1)))
-
-    return shifted_img
 
 def Fresnel_propagator(probe, z_distances, lambd, extent):
     # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more

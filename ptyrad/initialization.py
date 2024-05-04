@@ -133,6 +133,7 @@ class Initializer:
         if (cbeds < 0).any():
             min_value = cbeds.min()
             cbeds -= min_value
+            # Subtraction is more general, but clipping might be more noise-robust due to the inherent denoising
             print(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements")
         
         # Permute, reshape, and flip
