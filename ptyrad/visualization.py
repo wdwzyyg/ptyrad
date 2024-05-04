@@ -6,6 +6,17 @@ import matplotlib.ticker as ticker
 import numpy as np
 from numpy.fft import fftshift, ifftn
 import torch
+from ptyrad.utils import make_sigmoid_mask
+
+def plot_sigmoid_mask(Npix, relative_radius, relative_width):
+    mask = make_sigmoid_mask(Npix, relative_radius, relative_width).detach().cpu().numpy()
+    fig, axs = plt.subplots(1,2, figsize=(13,6))
+    fig.suptitle(f"Sigmoid mask with radius = {relative_radius}, width = {relative_width}", fontsize=18)
+    im = axs[0].imshow(mask)
+    axs[0].axhline(y=Npix//2, c='r', linestyle='--')
+    axs[1].plot(mask[Npix//2], c='r')
+    fig.colorbar(im, shrink=0.7)
+    plt.show()
 
 def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     """ Plot the forward pass for the input torch model """
@@ -137,7 +148,7 @@ def plot_affine_transformation(scale, asymmetry, rotation, shear):
     plt.legend()
     plt.show()
 
-def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_scale=1, pass_fig=False):
+def plot_pos_grouping(pos, batches, circle_diameter=False, diameter_type='90%', figsize=(16,8), dot_scale=1, pass_fig=False):
     
     fig, axs = plt.subplots(1,2, figsize = figsize)
     
@@ -158,7 +169,7 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, figsize=(16,8), dot_s
                 ax.add_artist(circle)
                 
                 # Add annotation for "90% probe intensity"
-                annotation_text = "90% probe intensity"
+                annotation_text = f"{diameter_type} probe intensity"
                 annotation_x = first_point[1]
                 annotation_y = first_point[0] #+ circle_diameter / 2 + 10  # Adjust the vertical offset as needed
                 ax.annotate(annotation_text, xy=(annotation_x-circle_diameter/2, annotation_y-circle_diameter/2-3))
