@@ -2,10 +2,11 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync
+from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 import torch
+from torch.fft import fftshift, ifftn, fftn, fftfreq
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
@@ -82,8 +83,48 @@ class CombinedConstraint(torch.nn.Module):
             model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
             probe_int = model.opt_probe.abs().pow(2)
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
-            print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}")
+            print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+    
+    def apply_fix_probe_com(self, model, niter):
+        ''' Apply probe CoM constraint to the global probe '''
+        fix_probe_com_freq = self.constraint_params['fix_probe_com']['freq']
+        if fix_probe_com_freq is not None and niter % fix_probe_com_freq == 0:
+            probe_int = model.opt_probe.abs().pow(2).sum(0) # probe_int (Ny,Nx)
+            cy, cx = get_center_of_mass(fftshift(probe_int), corner_centered = True)
+            model.opt_probe.data = imshift_batch(model.opt_probe, shifts = torch.tensor([(-cy, -cx)], device = model.device), grid = model.shift_probes_grid).squeeze(0) # The return of imshift_batch is (1, pmode, Ny, Nx)
+            print(f"Apply fix_probe_com constraint to the global probe at iter {niter}, shift vec (sy,sx) = {np.round([-cy.item(), -cx.item()], 4)} px")
+    
+    def apply_probe_mask_r(self, model, niter):
+        ''' Apply probe amplitude constraint in real space '''
+        # Note that this will change the total probe intensity, please use this with `fix_probe_int`
+        # Although the mask wouldn't change during the iteration, making a mask takes only ~0.5us on CPU so really no need to pre-calculate it
+        
+        probe_mask_r_freq = self.constraint_params['probe_mask_r']['freq']
+        relative_radius  = self.constraint_params['probe_mask_r']['radius']
+        relative_width   = self.constraint_params['probe_mask_r']['width']
+        if probe_mask_r_freq is not None and niter % probe_mask_r_freq == 0:
+            Npix = model.opt_probe.size(-1)
+            mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device) 
+            model.opt_probe.data = mask * model.opt_probe
+            print(f"Apply real-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
             
+    def apply_probe_mask_k(self, model, niter):
+        ''' Apply probe amplitude constraint in Fourier space '''
+        # Note that this will change the total probe intensity, please use this with `fix_probe_int`
+        # Although the mask wouldn't change during the iteration, making a mask takes only ~0.5us on CPU so really no need to pre-calculate it
+        # The sandwitch fftshift(ifft(fftshift(probe))) is needed to properly handle the complex probe
+        
+        probe_mask_k_freq = self.constraint_params['probe_mask_k']['freq']
+        relative_radius  = self.constraint_params['probe_mask_k']['radius']
+        relative_width   = self.constraint_params['probe_mask_k']['width']
+        if probe_mask_k_freq is not None and niter % probe_mask_k_freq == 0:
+            Npix = model.opt_probe.size(-1)
+            mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
+            probe_k = fftshift(ifftn(fftshift(model.opt_probe, dim=(-2,-1)),  dim=(-2, -1), norm='ortho'), dim=(-2,-1))
+            probe_r = fftshift(ifftn(fftshift(mask * probe_k,  dim=(-2,-1)),  dim=(-2, -1), norm='ortho'), dim=(-2,-1))
+            model.opt_probe.data = probe_r
+            print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
         # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
@@ -178,19 +219,22 @@ class CombinedConstraint(torch.nn.Module):
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_same))' if relax != 0 else 'hard'
             print(f"Apply {relax_str} identical z-slice constraint on obj at iter {niter}")
         
-
-        
     def forward(self, model, niter):
         # Apply in-place constraints if niter satisfies the predetermined frequency
         with torch.no_grad():
-            self.apply_ortho_pmode(model, niter)
+            # Probe constraints
+            self.apply_ortho_pmode  (model, niter)
+            self.apply_fix_probe_com(model, niter)
+            self.apply_probe_mask_r  (model, niter)
+            self.apply_probe_mask_k  (model, niter)
             self.apply_fix_probe_int(model, niter)
-            self.apply_obj_blur(model, niter)
-            self.apply_kz_filter(model, niter)
-            self.apply_obja_thresh(model, niter)
-            self.apply_objp_postiv(model, niter)
-            self.apply_obj_chgflip(model, niter)
-            self.apply_obj_same(model, niter)
+            # Object constraints
+            self.apply_obj_blur     (model, niter)
+            self.apply_kz_filter    (model, niter)
+            self.apply_obja_thresh  (model, niter)
+            self.apply_objp_postiv  (model, niter)
+            self.apply_obj_chgflip  (model, niter)
+            self.apply_obj_same     (model, niter)
 
 def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
@@ -239,9 +283,9 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
     
     # Generate 1D grids along each dimension
     Npix = obj.shape[1:]
-    kz = torch.fft.fftfreq(Npix[0]).to(device) 
-    ky = torch.fft.fftfreq(Npix[1]).to(device) 
-    kx = torch.fft.fftfreq(Npix[2]).to(device) 
+    kz = fftfreq(Npix[0]).to(device) 
+    ky = fftfreq(Npix[1]).to(device) 
+    kx = fftfreq(Npix[2]).to(device) 
     
     # Generate 3D coordinate grid using meshgrid
     grid_kz, grid_ky, grid_kx = torch.meshgrid(kz, ky, kx, indexing='ij')
@@ -251,7 +295,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
     Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
 
     # Filter the obj with filter funciton Wa    
-    fobj = torch.real(torch.fft.ifftn(torch.fft.fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
+    fobj = torch.real(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
     
     # Select the original z-range before padding
     if z_pad is not None:

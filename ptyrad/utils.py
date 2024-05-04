@@ -2,6 +2,7 @@ import os
 os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning from make_batches
 import warnings
 from time import time
+from math import floor, ceil
 
 from tifffile import imwrite
 import numpy as np
@@ -197,6 +198,12 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
         output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
         
+    if constraint_params['probe_mask_r']['freq'] is not None:
+        output_path += f"_pmr{round(constraint_params['probe_mask_r']['radius'],2)}"
+        
+    if constraint_params['probe_mask_k']['freq'] is not None:
+        output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
+            
     output_path += postfix
     
     if recon_params['SAVE_ITERS'] is not None:
@@ -692,28 +699,29 @@ def check_modes_ortho(tensor, atol = 2e-5):
             else:
                 print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
 
-def center_of_mass(image):
+def get_center_of_mass(image, corner_centered=False):
+    """ Finds and returns the center of mass of an real-valued 2D tensor """
+    # Note that for even-number sized arr (like [128,128]), even it's uniformly ones, the "center" would be between pixels like [63.5,63.5]
+    # Note that the `corner_centered` flag idea is adapted from py4DSTEM, which is quite handy when we have corner-centered probe or CBED
+    # https://github.com/py4dstem/py4DSTEM/blob/dev/py4DSTEM/process/utils/utils.py
+    
     # Create grid of coordinates
     device = image.device
-    grid_y, grid_x = torch.meshgrid(torch.arange(image.shape[0], device=device), torch.arange(image.shape[1], device=device), indexing='ij')
-    
-    # Flatten image and grid
-    image_flat = image.view(-1)
-    grid_x_flat = grid_x.flatten().float()
-    grid_y_flat = grid_y.flatten().float()
-    
-    # Compute weighted sum of x and y coordinates
-    weighted_sum_x = torch.sum(grid_x_flat * image_flat)
-    weighted_sum_y = torch.sum(grid_y_flat * image_flat)
+    ny, nx = image.shape
+
+    if corner_centered:
+        grid_y, grid_x = torch.meshgrid(torch.fft.fftfreq(ny, 1 / ny, device=device), torch.fft.fftfreq(nx, 1 / nx, device=device), indexing='ij')
+    else:
+        grid_y, grid_x = torch.meshgrid(torch.arange(ny, device=device), torch.arange(nx, device=device), indexing='ij')
     
     # Compute total intensity
-    total_intensity = torch.sum(image_flat)
+    total_intensity = torch.sum(image)
     
-    # Calculate center of mass
-    center_x = weighted_sum_x / total_intensity
-    center_y = weighted_sum_y / total_intensity
+    # Compute weighted sum of x and y coordinates
+    center_y = torch.sum(grid_y * image) / total_intensity
+    center_x = torch.sum(grid_x * image) / total_intensity
     
-    return center_x.item(), center_y.item()
+    return center_y, center_x
 
 def get_blob_size(dx, blob, output='d90', plot_profile=False):
     import matplotlib.pyplot as plt
@@ -762,12 +770,16 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False):
     # R50, 90 without normalization
     R50 = np.min(np.where(cum_sum>=0.50*np.sum(radial_sum))[0])
     R90 = np.min(np.where(cum_sum>=0.90*np.sum(radial_sum))[0])
+    R99 = np.min(np.where(cum_sum>=0.99*np.sum(radial_sum))[0])
+    R995 = np.min(np.where(cum_sum>=0.995*np.sum(radial_sum))[0])
+    R999 = np.min(np.where(cum_sum>=0.999*np.sum(radial_sum))[0])
 
-    D50 = (2*R50+1)
-    D90 = (2*R90+1)
+    D50  = (2*R50+1)
+    D90  = (2*R90+1)
+    D99  = (2*R99+1)
+    D995 = (2*R995+1)
+    D999 = (2*R999+1)
     FWHM = (2*HWHM+1)
-    #print('D50 = %s px or %.4f Ang' %(D50, D50*dx))
-    #print('D90 = %s px or %.4f Ang' %(D90, D90*dx))
 
     if plot_profile:
         
@@ -781,7 +793,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False):
         #plt.plot(x, cum_sum, 'k--', label='Integrated current')
         plt.vlines(x=R50*dx, ymin=0, ymax=1, color="tab:orange", linestyle=":", label='R50') #Draw vertical lines at the data coordinate, in this case would be Ang.
         plt.vlines(x=R90*dx, ymin=0, ymax=1, color="tab:red", linestyle=":", label='R90')
-        plt.vlines(x=HWHM*dx, ymin=0, ymax=1, color="tab:red", linestyle=":", label='R90')
+        plt.vlines(x=HWHM*dx, ymin=0, ymax=1, color="tab:blue", linestyle=":", label='FWHM')
         plt.vlines(x=radius_rms*dx, ymin=0, ymax=1, color="tab:green", linestyle=":", label='Radius_RMS')
         plt.xticks(np.arange(num_ticks)*np.round(len(radial_profile)*dx/num_ticks, decimals = 1-int(np.floor(np.log10(len(radial_profile)*dx)))))
         ax.set_xlabel("Distance from blob center ($\AA$)")
@@ -790,56 +802,62 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False):
         plt.show()
 
     if output == 'd50':
-        return D50*dx
+        out = D50*dx
     elif output =='d90':
-        return D90*dx
+        out =  D90*dx
+    elif output =='d99':
+        out =  D99*dx
+    elif output =='d995':
+        out =  D995*dx
+    elif output =='d999':
+        out =  D999*dx
     elif output =='radius_rms':
-        return radius_rms*dx
+        out =  radius_rms*dx
     elif output =='FWHM':
-        return FWHM*dx
+        out =  FWHM*dx
     elif output =='radial_profile':
-        return radial_profile
+        out =  radial_profile
     elif output =='radial_sum':
-        return radial_sum
+        out =  radial_sum
     elif output =='fig':
-        return fig
+        out =  fig
     else:
         raise KeyError(f"output ={output} not implemented!")
+    
+    if output not in ['radial_profile', 'radial_sum', 'fig']:
+        print(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')
+    return out
+
+def make_sigmoid_mask(Npix, relative_radius=2/3, relative_width=0.2):
+    ''' Make a mask from circular sigmoid function '''    
+    # relative_radius = 0.67 # This is the relative Nyquist frequency where the sigmoid = 0.5
+    # relative_width  = 0.2 # This is the relative width (compared to full image) that y drops from 1 to 0
+    
+    def scaled_sigmoid(x, offset=0, scale=1):
+        # If scale =  1, y drops from 1 to 0 between (-0.5,0.5), or effectively 1 px
+        # If scale = 10, it takes roughly 10 px for y to drop from 1 to 0
+        scaled_sigmoid = 1 / (1 + torch.exp((x-offset)/scale*10))
+        return scaled_sigmoid
+    
+    ky = torch.linspace(-floor(Npix/2),ceil(Npix/2)-1,Npix)
+    kx = torch.linspace(-floor(Npix/2),ceil(Npix/2)-1,Npix)
+    grid_ky, grid_kx = torch.meshgrid(ky, kx, indexing='ij')
+    kR = torch.sqrt(grid_ky**2+grid_kx**2) # centered already
+    sigmoid_mask = scaled_sigmoid(kR, offset=Npix/2*relative_radius, scale=relative_width*Npix)
+    
+    return sigmoid_mask
+
+def get_rbf(cbeds, thresh=0.5):
+    """ Utility function that returns an estimate of the radius of rbf from CBEDs """
+    # cbeds: 3D array of (N,ky,kx) so that we can take an average 
+    # thresh: 0.5 for FWHM, 0.1 for Full-width at 10th maximum
+    cbed = cbeds.sum(0)
+    line = cbed.max(0)
+    indices = np.where(line > line.max()*thresh)[0]
+    rbf = 0.5*(indices[-1]-indices[0])
+    return rbf
 
 ###################################### ARCHIVE ##################################################
-
-def make_compact_batches(pos, num_groups):
-    # Fit K-Means clustering algorithm
-    kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_groups, max_iter=10, batch_size=3072)
-    kmeans.fit(pos)
-
-    # Get cluster labels
-    labels = kmeans.labels_
-
-    # Separate data points into groups
-    groups = []
-    for i in range(num_groups):
-        group_indices = np.where(labels == i)[0]
-        groups.append(group_indices)
-
-    return groups
-
-def make_random_batches(indices, batch_size):
-    ''' Make random batches from input indices and batch_size '''
-    # Input:
-    #   indices: int or array_like. If indices is an integer, randomly permute np.arange(indices). If indices is an array, make a copy and shuffle the elements randomly.
-    #   batch_size: int. The number of indices of each mini-batch
-    # Output:
-    #   batches: A list of `num_batch` arrays, or [batch0, batch1, ...]
-    # Note:
-    # The actual batch size would only be "close" if it's not divisible by len(indices)
-    if isinstance(indices, int):
-        indices = range(indices)
-    num_batch = len(indices) / batch_size                 
-    rng = np.random.default_rng()
-    shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
-    batches = np.array_split(shuffled_indices, num_batch) 
-    return batches
 
 def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
     """ Transform a complex numpy array in a "pseudo-complex" tensor"""
