@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
 import numpy as np
-from numpy.fft import fftshift, ifft2
+from numpy.fft import fft2, fftshift, ifftshift
 import torch
 from ptyrad.utils import make_sigmoid_mask
 
@@ -233,13 +233,12 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     opt_probe_pow = np.sum(opt_probe_int, axis=(-2,-1))/np.sum(opt_probe_int)
     
     if real_or_fourier == 'fourier':
-    # While it might seem redundant, the sandwitch fftshift(fft(fftshift(probe)))) is needed for the following reason:
-    # Although probe_fourier = fftn(fftshift(probe)) and probe_fourier = fftn(probe) gives the same abs(probe_fourier),
+    # While it might seem redundant, the sandwitch fftshift(fft(ifftshift(probe)))) is needed for the following reason:
+    # Although probe_fourier = fft2(ifftshift(probe)) and probe_fourier = fft2(probe) gives the same abs(probe_fourier),
     # pre-fftshifting the probe back to corner gives more accurate phase angle while plotting the angle(probe_fourier)
-    # On the other hand, fftn(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
-    # fftshift and ifftshift behaves the same when N is even, and there's no scaling for fftshift so I'll stick with fftshift for simplicity
-        init_probe = fftshift(ifft2(fftshift(init_probe, axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
-        opt_probe  = fftshift(ifft2(fftshift(opt_probe,  axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
+    # On the other hand, fft2(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
+        init_probe = fftshift(fft2(ifftshift(init_probe, axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
+        opt_probe  = fftshift(fft2(ifftshift(opt_probe,  axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
     elif real_or_fourier =='real':
         pass
     else:

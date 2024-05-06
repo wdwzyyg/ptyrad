@@ -373,7 +373,7 @@ class Initializer:
         dx_spec = self.init_params['exp_params']['dx_spec']
         extent = dx_spec * probe_shape
         print(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance:.4f} Ang, lambd = {lambd:.4f} Ang, extent = {extent.round(4)} Ang")
-        _, H, _, _ = near_field_evolution(probe_shape, z_distance, lambd, extent)
+        H = near_field_evolution(probe_shape, z_distance, lambd, extent)
         H = H.astype('complex64')
         print(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}")
         self.init_variables['z_distance'] = z_distance

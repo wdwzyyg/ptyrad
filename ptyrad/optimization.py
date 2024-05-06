@@ -2,11 +2,11 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask, fftshift2
+from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask, fftshift2, ifftshift2, add_const_phase_shift
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 import torch
-from torch.fft import ifft2, fftn, ifftn, fftfreq
+from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
@@ -90,9 +90,9 @@ class CombinedConstraint(torch.nn.Module):
         fix_probe_com_freq = self.constraint_params['fix_probe_com']['freq']
         if fix_probe_com_freq is not None and niter % fix_probe_com_freq == 0:
             probe_int = model.opt_probe.abs().pow(2).sum(0) # probe_int (Ny,Nx)
-            cy, cx = get_center_of_mass(fftshift2(probe_int), corner_centered = True)
+            cy, cx = get_center_of_mass(ifftshift2(probe_int), corner_centered = True) # ifftshift2 is for center->corner
             model.opt_probe.data = imshift_batch(model.opt_probe, shifts = torch.tensor([(-cy, -cx)], device = model.device), grid = model.shift_probes_grid).squeeze(0) # The return of imshift_batch is (1, pmode, Ny, Nx)
-            print(f"Apply fix_probe_com constraint to the global probe at iter {niter}, shift vec (sy,sx) = {np.round([-cy.item(), -cx.item()], 4)} px")
+            print(f"Apply fix probe CoM constraint to the global probe at iter {niter}, shift vec (sy,sx) = {np.round([-cy.item(), -cx.item()], 4)} px")
     
     def apply_probe_mask_r(self, model, niter):
         ''' Apply probe amplitude constraint in real space '''
@@ -112,7 +112,8 @@ class CombinedConstraint(torch.nn.Module):
         ''' Apply probe amplitude constraint in Fourier space '''
         # Note that this will change the total probe intensity, please use this with `fix_probe_int`
         # Although the mask wouldn't change during the iteration, making a mask takes only ~0.5us on CPU so really no need to pre-calculate it
-        # The sandwitch fftshift(ifft(fftshift(probe))) is needed to properly handle the complex probe
+        # The sandwitch fftshift(fft(ifftshift(probe))) is needed to properly handle the complex probe without serrated phase
+        # fft2 is for real->fourier, while fftshift2 is for corner->center
         
         probe_mask_k_freq = self.constraint_params['probe_mask_k']['freq']
         relative_radius  = self.constraint_params['probe_mask_k']['radius']
@@ -120,11 +121,21 @@ class CombinedConstraint(torch.nn.Module):
         if probe_mask_k_freq is not None and niter % probe_mask_k_freq == 0:
             Npix = model.opt_probe.size(-1)
             mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
-            probe_k = fftshift2(ifft2(fftshift2(model.opt_probe), norm='ortho'))
-            probe_r = fftshift2(ifft2(fftshift2(mask * probe_k),  norm='ortho'))
+            probe_k = fftshift2 (fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k at center for later masking
+            probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for round-trip 
             model.opt_probe.data = probe_r
             print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
 
+    def apply_fix_probe_phi(self, model, niter):
+        ''' Apply probe phase constraint '''
+        # fft2 is for real->fourier, while fftshift2 is for corner->center
+        fix_probe_phi_freq = self.constraint_params['fix_probe_phi']['freq']
+        if fix_probe_phi_freq is not None and niter % fix_probe_phi_freq == 0: 
+            probe_k = fft2(ifftshift2(model.opt_probe), norm='ortho') # probe_k at corner for later indexing
+            phi0 = probe_k.angle()[:,0,0] # Get the phase of Fourier probes at k=0 (phi0), note that probe_k is at corner of k-space
+            model.opt_probe.data = fftshift2(ifft2(add_const_phase_shift(probe_k, -phi0), norm='ortho')) # Note that the norm='ortho' is explicitly specified but not needed for round-trip 
+            print(f"Apply fix probe phi constraint at iter {niter} for each pmode with original phi0 (phase of F(0)) = {phi0.detach().cpu().numpy().round(2)} rad")
+                
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
         # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
@@ -225,8 +236,9 @@ class CombinedConstraint(torch.nn.Module):
             # Probe constraints
             self.apply_ortho_pmode  (model, niter)
             self.apply_fix_probe_com(model, niter)
-            self.apply_probe_mask_r  (model, niter)
-            self.apply_probe_mask_k  (model, niter)
+            self.apply_probe_mask_r (model, niter)
+            self.apply_probe_mask_k (model, niter)
+            self.apply_fix_probe_phi(model, niter)
             self.apply_fix_probe_int(model, niter)
             # Object constraints
             self.apply_obj_blur     (model, niter)
@@ -295,7 +307,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
     Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
 
     # Filter the obj with filter funciton Wa    
-    fobj = torch.real(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
+    fobj = torch.abs(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
     
     # Select the original z-range before padding
     if z_pad is not None:
