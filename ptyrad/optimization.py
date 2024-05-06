@@ -2,11 +2,11 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask
+from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask, fftshift2
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 import torch
-from torch.fft import fftshift, ifftn, fftn, fftfreq
+from torch.fft import ifft2, fftn, ifftn, fftfreq
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
@@ -90,7 +90,7 @@ class CombinedConstraint(torch.nn.Module):
         fix_probe_com_freq = self.constraint_params['fix_probe_com']['freq']
         if fix_probe_com_freq is not None and niter % fix_probe_com_freq == 0:
             probe_int = model.opt_probe.abs().pow(2).sum(0) # probe_int (Ny,Nx)
-            cy, cx = get_center_of_mass(fftshift(probe_int), corner_centered = True)
+            cy, cx = get_center_of_mass(fftshift2(probe_int), corner_centered = True)
             model.opt_probe.data = imshift_batch(model.opt_probe, shifts = torch.tensor([(-cy, -cx)], device = model.device), grid = model.shift_probes_grid).squeeze(0) # The return of imshift_batch is (1, pmode, Ny, Nx)
             print(f"Apply fix_probe_com constraint to the global probe at iter {niter}, shift vec (sy,sx) = {np.round([-cy.item(), -cx.item()], 4)} px")
     
@@ -120,8 +120,8 @@ class CombinedConstraint(torch.nn.Module):
         if probe_mask_k_freq is not None and niter % probe_mask_k_freq == 0:
             Npix = model.opt_probe.size(-1)
             mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
-            probe_k = fftshift(ifftn(fftshift(model.opt_probe, dim=(-2,-1)),  dim=(-2, -1), norm='ortho'), dim=(-2,-1))
-            probe_r = fftshift(ifftn(fftshift(mask * probe_k,  dim=(-2,-1)),  dim=(-2, -1), norm='ortho'), dim=(-2,-1))
+            probe_k = fftshift2(ifft2(fftshift2(model.opt_probe), norm='ortho'))
+            probe_r = fftshift2(ifft2(fftshift2(mask * probe_k),  norm='ortho'))
             model.opt_probe.data = probe_r
             print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
 

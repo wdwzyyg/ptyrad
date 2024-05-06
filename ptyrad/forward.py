@@ -1,6 +1,7 @@
 ## Defining multislice forward model for electron diffraction with mixed probe/object modes of 3D objects
 
-from torch.fft import fft2, ifft2, fftshift
+from torch.fft import fft2, ifft2
+from .utils import fftshift2
 import torch
 
 # This is a current working version (2024.04.03) of the multislice forward model
@@ -37,7 +38,7 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H):
     for n in range(n_slices-1):
         object_slice = object_cplx[:, :, n, :, :] # object_slice -> (N, omode, Ny, Nx)
         psi = psi * object_slice[:, None, :, :, :]  # psi -> (N, pmode, omode, Ny, Nx)
-        psi = ifft2(H * fft2(psi, dim=(-2, -1)), dim=(-2, -1))
+        psi = ifft2(H * fft2(psi)) # Note that fft2 and ifft2 are applying to the last 2 axis
 
     # Interacting with the last layer, and no propagation is needed afterward
     object_slice = object_cplx[:, :, n_slices-1, :, :]
@@ -53,5 +54,5 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H):
     # dp_fwd = sum(weighted_psi_k)
     # Note that norm = 'ortho' is needed to ensure the for each sample, sum(|psi|^2) and sum(dp) has the same scale (should be 1) 
     
-    dp_fwd = torch.sum(torch.square(torch.abs(fftshift(fft2(psi, dim=(-2, -1), norm='ortho'), dim=(-2, -1)))) * omode_occu[:,None,None], dim=(1, 2)) + 1e-20 # Add 1e-20 for numerical stability
+    dp_fwd = torch.sum(torch.square(torch.abs(fftshift2(fft2(psi, norm='ortho')))) * omode_occu[:,None,None], dim=(1, 2)) + 1e-20 # Add 1e-20 for numerical stability
     return dp_fwd

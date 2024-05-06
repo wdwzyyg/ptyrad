@@ -7,7 +7,7 @@ from math import floor, ceil
 from tifffile import imwrite
 import numpy as np
 import torch
-from torch.fft import fft2, ifft2, ifftshift, fftshift
+from torch.fft import fft2, ifft2, fftfreq
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
@@ -375,7 +375,7 @@ def imshift_single(img, shift, grid):
     shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w)) # For real-valued input, take shifted_img.abs()
     return shifted_img
 
 def imshift_batch(img, shifts, grid):
@@ -415,7 +415,7 @@ def imshift_batch(img, shifts, grid):
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w)) # For real-valued input, take shifted_img.abs()
     return shifted_img
 
 def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_or_cp='np'):
@@ -756,7 +756,7 @@ def get_center_of_mass(image, corner_centered=False):
     (ny, nx) = image.shape[-2:]
 
     if corner_centered:
-        grid_y, grid_x = torch.meshgrid(torch.fft.fftfreq(ny, 1 / ny, device=device), torch.fft.fftfreq(nx, 1 / nx, device=device), indexing='ij')
+        grid_y, grid_x = torch.meshgrid(fftfreq(ny, 1 / ny, device=device), fftfreq(nx, 1 / nx, device=device), indexing='ij')
     else:
         grid_y, grid_x = torch.meshgrid(torch.arange(ny, device=device), torch.arange(nx, device=device), indexing='ij')
     
@@ -903,6 +903,26 @@ def get_rbf(cbeds, thresh=0.5):
     rbf = 0.5*(indices[-1]-indices[0])
     return rbf
 
+def add_const_phase_shift(cplx, phase_shift):
+    """ Add a constant phase shift to the complex input """
+    # This is a handy function to demonstrate that adding a constant phase shift to complex function has no effect to its physical properties
+    # For example, even we add a constant phase shift to the probe, it has no effect to the resulting CBED pattern
+    
+    # torch.ones_like will copy the dtype so we make it a float before making the abs and angle
+    device = cplx.device
+    phi = torch.polar(abs=torch.ones_like(cplx.abs(), device=device), angle=phase_shift*torch.ones_like(cplx.abs()), device=device)
+    return cplx*phi
+
+def fftshift2(x):
+    """ A wrapper over torch.fft.fftshift """
+    # I'm tired of keep specifying the last 2 dim for fftshift
+    return torch.fft.fftshift(x, dim=(-2,-1))  
+
+def ifftshift2(x):
+    """ A wrapper over torch.fft.ifftshift """
+    # I'm tired of keep specifying the last 2 dim for fftshift
+    return torch.fft.ifftshift(x, dim=(-2,-1))  
+
 ###################################### ARCHIVE ##################################################
 
 def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
@@ -999,7 +1019,7 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
     prop_probes = np.zeros((len(z_distances), *probe.shape)).astype(probe.dtype)
     for i, z_distance in enumerate(z_distances):
         _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np')
-        prop_probes[i] = np.fft.ifft2(H * np.fft.fft2(probe, axes=(-2, -1)), axes=(-2, -1))
+        prop_probes[i] = np.fft.ifft2(H * np.fft.fft2(probe))
     
     return prop_probes
 

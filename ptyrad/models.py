@@ -1,7 +1,7 @@
 ## Defining PtychoAD class for the optimization object
 
 from .forward import  multislice_forward_model_vec_all
-from .utils import imshift_batch, imshift_single, get_center_of_mass
+from .utils import imshift_batch, imshift_single, get_center_of_mass, fftshift2
 from torchvision.transforms.functional import gaussian_blur
 import torch
 
@@ -84,7 +84,7 @@ class PtychoAD(torch.nn.Module):
         elif self.recenter_cbeds =='each':
             shift_str = 'averaged'
             
-        cy, cx = get_center_of_mass(torch.fft.fftshift(cbeds, dim=(-2,-1)), corner_centered = True)
+        cy, cx = get_center_of_mass(fftshift2(cbeds), corner_centered = True)
         shifts = torch.stack((-cy, -cx), dim=1) if self.recenter_cbeds == 'each' else torch.stack((-cy, -cx)).broadcast_to((len(self.measurements),2)) # make shifts (N,2)
         grid = self.shift_probes_grid
         # For CBEDs it's unlikely to do imshift_batch due to GPU memory constraints

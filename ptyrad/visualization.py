@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
 import numpy as np
-from numpy.fft import fftshift, ifftn
+from numpy.fft import fftshift, ifft2
 import torch
 from ptyrad.utils import make_sigmoid_mask
 
@@ -238,8 +238,8 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     # pre-fftshifting the probe back to corner gives more accurate phase angle while plotting the angle(probe_fourier)
     # On the other hand, fftn(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
     # fftshift and ifftshift behaves the same when N is even, and there's no scaling for fftshift so I'll stick with fftshift for simplicity
-        init_probe = fftshift(ifftn(fftshift(init_probe, axes=(-2,-1)), axes=(-2, -1), norm='ortho'), axes=(-2,-1))
-        opt_probe  = fftshift(ifftn(fftshift(opt_probe, axes=(-2,-1)),  axes=(-2, -1), norm='ortho'), axes=(-2,-1))
+        init_probe = fftshift(ifft2(fftshift(init_probe, axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
+        opt_probe  = fftshift(ifft2(fftshift(opt_probe,  axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
     elif real_or_fourier =='real':
         pass
     else:
