@@ -7,7 +7,7 @@ from math import floor, ceil
 from tifffile import imwrite
 import numpy as np
 import torch
-from torch.fft import fft2, ifft2, ifftshift, fftshift
+from torch.fft import fft2, ifft2, fftfreq
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
@@ -173,6 +173,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
     obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
+    tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
 
     output_path  = output_dir + "/" + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -180,7 +181,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if cbeds_flipT is not None:
         output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
         
-    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
+    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
     
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
@@ -375,7 +376,11 @@ def imshift_single(img, shift, grid):
     shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.abs(). 
+    
+    # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
+    # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.
+    
     return shifted_img
 
 def imshift_batch(img, shifts, grid):
@@ -415,72 +420,59 @@ def imshift_batch(img, shifts, grid):
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1
-    shifted_img = ifft2(ifftshift(fftshift(fft2(img), dim=(-2,-1)) * w, dim=(-2,-1))) # For real-valued input, take shifted_img.abs()
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.abs()
+    
+    # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
+    # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.
+    
     return shifted_img
 
-def near_field_evolution(u_0_shape, z, lambd, extent, use_ASM_only=True, use_np_or_cp='np'):
-#  FUNCTION  [u_1, H, h, dH] = near_field_evolution(u_0, z, lambda, extent, use_ASM_only)
-#  Description: nearfield evolution function, it automatically switch
-#  between ASM and Fraunhofer propagation 
-#  Translated from Yi's fold_slice Matlab implementation into CuPy and NumPy by Chia-Hao Lee
+def near_field_evolution(u_0_shape, z, lambd, extent):
+    """ Fresnel propagator """
+    #  FUNCTION  [u_1, H, h, dH] = near_field_evolution(u_0, z, lambda, extent)
+    #  Translated and simplified from Yi's fold_slice Matlab implementation into numPy by Chia-Hao Lee
+
+    u_0    = np.ones(u_0_shape)
+    Npix   = np.array(u_0.shape)
+    z      = np.array(z)
+    lambd  = np.array(lambd)
+    extent = np.array(extent)
+
+    xgrid = np.linspace(0.5 + (-Npix[0] / 2), 0.5 + (Npix[0] / 2 - 1), Npix[0]) / Npix[0]
+    ygrid = np.linspace(0.5 + (-Npix[1] / 2), 0.5 + (Npix[1] / 2 - 1), Npix[1]) / Npix[1]
+
+    k = 2 * np.pi / lambd
     
-    if use_np_or_cp == 'cp':
-        import cupy as xp
-    else:
-        import numpy as xp
+    # Standard ASM
+    kx = 2 * np.pi * xgrid / extent[0] * Npix[0]
+    ky = 2 * np.pi * ygrid / extent[1] * Npix[1]
+    Kx, Ky = np.meshgrid(kx, ky)
+    H = np.fft.ifftshift(np.exp(1j * z * np.sqrt(k ** 2 - Kx.T ** 2 - Ky.T ** 2))) # H has zero frequency at the corner in k-space
 
-    u_0 = xp.ones(u_0_shape)
+    return H
+
+def add_tilts_to_propagator(propagator, tilts, dz, dk):
+    """ Add small crystal tilts to a single propagator """
+    # Ref: https://abtem.readthedocs.io/en/latest/user_guide/walkthrough/multislice.html
+    # tilts angle should be less than 1 deg (17 mrad)
+    # tilt-induced phase shift = exp(2pi*i*dz*(kx*tan(tx)+ky*tan(ty)), note that k in 1/Ang
+    # This is a vectorized function that apply crystall tilts to a single propagator
+    # If tilts.ndim=1, then it'll return a single propagator with (1,Y,X)
+    # Note that the propagator is corner-centered at k-space
     
-    H = None
-    h = None
-    u_1 = None
-    dH = None
-
-    if z == 0:
-        H = 1
-        u_1 = u_0
-        return u_1, H, h, dH
-
-    if z == float('inf'):
-        return u_1, H, h, dH
-
-    Npix = u_0.shape
-
-    xgrid = xp.linspace(0.5 + (-Npix[0] / 2), 0.5 + (Npix[0] / 2 - 1), Npix[0]) / Npix[0]
-
-    ygrid = xp.linspace(0.5 + (-Npix[1] / 2), 0.5 + (Npix[1] / 2 - 1), Npix[1]) / Npix[1]
-
-
-    k = 2 * xp.pi / lambd
-
-    extent = xp.array(extent)
-    lambd = xp.array(lambd)
-    z = xp.array(z)
-    Npix = xp.array(Npix)
-
-    F = xp.mean(extent ** 2 / (lambd * z * Npix))
+    # Create grid of coordinates
+    device         = propagator.device
+    (ny, nx)       = propagator.shape[-2:]
+    grid_y, grid_x = torch.meshgrid(fftfreq(ny, 1 / ny, device=device), fftfreq(nx, 1 / nx, device=device), indexing='ij')
+    kx             = grid_x * dk # dk in 1/Ang
+    ky             = grid_y * dk
     
-    if abs(F) < 1 and not use_ASM_only:
-        # Farfield propagation
-        print('Farfield regime, F/Npix={:.2f}'.format(float(F)))
-        Xrange = xgrid * extent[0]
-        Yrange = ygrid * extent[1]
-        X, Y = xp.meshgrid(Xrange, Yrange)
-        h = xp.exp(1j * k * z + 1j * k / (2 * z) * (X.T ** 2 + Y.T ** 2))
-        H = xp.fft.ifftshift(xp.fft.fft2(xp.fft.fftshift(h)))
-        H = H / xp.abs(H[Npix[0] // 2, Npix[1] // 2])  # Renormalize to conserve flux in the image
-    else:
-        # Standard ASM
-        kx = 2 * xp.pi * xgrid / extent[0] * Npix[0]
-        ky = 2 * xp.pi * ygrid / extent[1] * Npix[1]
-        Kx, Ky = xp.meshgrid(kx, ky)
-        dH = -1j * (Kx.T ** 2 + Ky.T ** 2) / (2 * k)
-        H = xp.exp(1j * z * xp.sqrt(k ** 2 - Kx.T ** 2 - Ky.T ** 2))
-        h = None
-
-    # Do the ifftshift inside the function so the output has zero frequency at the center
-    H = xp.fft.ifftshift(H)
-    return u_1, H, h, dH
+    tilts_y        = tilts[:,0,None,None] / 1e3 #mrad, tilts_y = (N,Y,X)
+    tilts_x        = tilts[:,1,None,None] / 1e3
+    phase_shift    = 2 * torch.pi * dz * (ky * torch.tan(tilts_y) + kx * torch.tan(tilts_x)) 
+    propagators    = propagator * torch.exp(1j*phase_shift)
+    
+    return propagators
 
 def test_loss_fn(model, indices, loss_fn):
     """ Print loss values for each term for convenient weight tuning """
@@ -499,6 +491,18 @@ def test_loss_fn(model, indices, loss_fn):
             print(f"{loss_name.ljust(11)}: {loss_value.detach().cpu().numpy():.8f}")
     return
 
+def test_constraint_fn(test_model, constraint_fn, plot_forward_pass):
+    """ Test run of the constraint_fn """
+    # Note that this would directly modify the model so we need to make a test one
+
+    indices = np.random.randint(0,len(test_model.measurements),2)
+    
+    constraint_fn(test_model, niter=1) 
+    if plot_forward_pass is not None:
+        plot_forward_pass(test_model, indices, 0.5)
+    del test_model
+    return
+    
 def kv2wavelength(acceleration_voltage):
     # Physical Constants
     PLANCKS = 6.62607015E-34 # m^2*kg / s
@@ -550,7 +554,9 @@ def make_stem_probe(params_dict):
         #  probe: complex probe functions at real space (sample plane)
     # Inputs: 
         #  params_dict: probe parameters and other settings
-        
+    
+    from numpy.fft import ifft2, fftshift, ifftshift
+    
     ## Basic params
     voltage     = params_dict["kv"]         # Ang
     conv_angle  = params_dict["conv_angle"] # mrad
@@ -615,7 +621,7 @@ def make_stem_probe(params_dict):
 
     psi = np.exp(-1j*chi)*np.exp(-2*np.pi*1j*shifts[0]*kX)*np.exp(-2*np.pi*1j*shifts[1]*kY)
     probe = mask*psi # It's now the masked wave function at the aperture plane
-    probe = np.fft.fftshift(np.fft.ifft2(np.fft.ifftshift(probe))) # Propagate the wave function from aperture to the sample plane. 
+    probe = fftshift(ifft2(ifftshift(probe))) # Propagate the wave function from aperture to the sample plane. 
     probe = probe/np.sqrt(np.sum((np.abs(probe))**2)) # Normalize the probe so sum(abs(probe)^2) = 1
 
     if params_dict['print_info']:
@@ -756,7 +762,7 @@ def get_center_of_mass(image, corner_centered=False):
     (ny, nx) = image.shape[-2:]
 
     if corner_centered:
-        grid_y, grid_x = torch.meshgrid(torch.fft.fftfreq(ny, 1 / ny, device=device), torch.fft.fftfreq(nx, 1 / nx, device=device), indexing='ij')
+        grid_y, grid_x = torch.meshgrid(fftfreq(ny, 1 / ny, device=device), fftfreq(nx, 1 / nx, device=device), indexing='ij')
     else:
         grid_y, grid_x = torch.meshgrid(torch.arange(ny, device=device), torch.arange(nx, device=device), indexing='ij')
     
@@ -903,6 +909,27 @@ def get_rbf(cbeds, thresh=0.5):
     rbf = 0.5*(indices[-1]-indices[0])
     return rbf
 
+def add_const_phase_shift(cplx, phase_shift):
+    """ Add a constant phase shift to the complex input """
+    # This is a handy function to demonstrate that adding a constant phase shift to complex function has no effect to its physical properties
+    # For example, even we add a constant phase shift to the probe, it has no effect to the resulting CBED pattern
+    # If phase_shift is not a scalar but phase_shift.ndim = 1 as [phi0, phi1, phi2.....], it'll be applied to each mode of the cplx (N, Y, X)
+    
+    # torch.ones_like will copy the dtype so we make it a float before making the abs and angle
+    ones = torch.ones_like(cplx.abs())
+    phi = torch.polar(abs=ones, angle=ones * phase_shift[:,None,None])
+    return cplx*phi
+
+def fftshift2(x):
+    """ A wrapper over torch.fft.fftshift for the last 2 dims """
+    # Note that fftshift and ifftshift are only equivalent when N = even 
+    return torch.fft.fftshift(x, dim=(-2,-1))  
+
+def ifftshift2(x):
+    """ A wrapper over torch.fft.ifftshift for the last 2 dims"""
+    # Note that fftshift and ifftshift are only equivalent when N = even 
+    return torch.fft.ifftshift(x, dim=(-2,-1))  
+
 ###################################### ARCHIVE ##################################################
 
 def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):
@@ -971,8 +998,6 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         print(f"The object shape is interpolated to {complex_object_interp3d.shape}.")
         return complex_object_interp3d.astype(obj_dtype)
 
-
-
 def Fresnel_propagator(probe, z_distances, lambd, extent):
     # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more
     
@@ -996,10 +1021,12 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
     # plt.colorbar()
     # plt.show()
     
+    from numpy.fft import fft2, ifft2, fftshift, ifftshift
+    
     prop_probes = np.zeros((len(z_distances), *probe.shape)).astype(probe.dtype)
     for i, z_distance in enumerate(z_distances):
-        _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np')
-        prop_probes[i] = np.fft.ifft2(H * np.fft.fft2(probe, axes=(-2, -1)), axes=(-2, -1))
+        _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np') # H is corner-centered at k-space
+        prop_probes[i] = fftshift(ifft2(H * fft2(ifftshift(probe, axes=(-2,-1)))), axes=(-2,-1))
     
     return prop_probes
 

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
 import numpy as np
-from numpy.fft import fftshift, ifftn
+from numpy.fft import fft2, fftshift, ifftshift
 import torch
 from ptyrad.utils import make_sigmoid_mask
 
@@ -72,7 +72,7 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     if pass_fig:
         return fig
         
-def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
+def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
@@ -89,7 +89,15 @@ def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8)
         plt.gca().invert_yaxis()  # Pre-flip y-axis so the y-axis is image-like no matter what
     
     if init_pos is None:
-        plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
+        if tilts is None:
+            plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
+        else:
+            tilts = np.broadcast_to(tilts, shape=(len(pos),2))
+            M = np.hypot(tilts[:,0], tilts[:,1])
+            q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
+            cbar = fig.colorbar(q, shrink=0.75)
+            cbar.ax.set_ylabel('mrad')
+            cbar.ax.get_yaxis().labelpad = 15
     else:
         plt.scatter(x=init_pos[:,1], y=init_pos[:,0], c='C0', s=dot_scale, label='Init scan positions')
         plt.scatter(x=pos[:,1],      y=pos[:,0],      c='C1', s=dot_scale, label='Opt scan positions')
@@ -233,13 +241,12 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     opt_probe_pow = np.sum(opt_probe_int, axis=(-2,-1))/np.sum(opt_probe_int)
     
     if real_or_fourier == 'fourier':
-    # While it might seem redundant, the sandwitch fftshift(fft(fftshift(probe)))) is needed for the following reason:
-    # Although probe_fourier = fftn(fftshift(probe)) and probe_fourier = fftn(probe) gives the same abs(probe_fourier),
+    # While it might seem redundant, the sandwitch fftshift(fft(ifftshift(probe)))) is needed for the following reason:
+    # Although probe_fourier = fft2(ifftshift(probe)) and probe_fourier = fft2(probe) gives the same abs(probe_fourier),
     # pre-fftshifting the probe back to corner gives more accurate phase angle while plotting the angle(probe_fourier)
-    # On the other hand, fftn(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
-    # fftshift and ifftshift behaves the same when N is even, and there's no scaling for fftshift so I'll stick with fftshift for simplicity
-        init_probe = fftshift(ifftn(fftshift(init_probe, axes=(-2,-1)), axes=(-2, -1), norm='ortho'), axes=(-2,-1))
-        opt_probe  = fftshift(ifftn(fftshift(opt_probe, axes=(-2,-1)),  axes=(-2, -1), norm='ortho'), axes=(-2,-1))
+    # On the other hand, fft2(probe) would generate additional phase shifts that looks like checkerboard artifact in angle(probe_fourier)
+        init_probe = fftshift(fft2(ifftshift(init_probe, axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
+        opt_probe  = fftshift(fft2(ifftshift(opt_probe,  axes=(-2,-1)), norm='ortho'), axes=(-2,-1))
     elif real_or_fourier =='real':
         pass
     else:
@@ -306,11 +313,16 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     fig_probe_modes_fourier_amp.suptitle(f"Probe modes amplitude in fourier space at iter {niter}", fontsize=18)
     fig_probe_modes_fourier_phase.suptitle(f"Probe modes phase in fourier space at iter {niter}", fontsize=18)
 
-    # Scan positions
+    # Scan positions and tilts
     init_pos = init_variables['crop_pos'] + init_variables['probe_pos_shifts']
     pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
+    tilts = model.opt_obj_tilts.detach().cpu().numpy()
+    tilts = np.broadcast_to(tilts, (len(pos), 2)) # tilts has to be (N_scan, 2)
     fig_scan_pos, ax = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, show_fig=False, pass_fig=True)
     ax.set_title(f"Scan positions at iter {niter}", fontsize=16)
+    
+    fig_obj_tilts, ax = plot_scan_positions(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
+    ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
         
     # Show and save fig
     if show_fig:
@@ -320,6 +332,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.show()
         fig_probe_modes_fourier_phase.show()
         fig_scan_pos.show()
+        fig_obj_tilts.show()
 
     if save_fig:
         print(f"Saving summary figures for iter {niter}")
@@ -329,6 +342,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
+        fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts_iter{str(niter).zfill(4)}.png")
         
     # Close figures after saving
     plt.close(fig_loss)
@@ -337,3 +351,4 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     plt.close(fig_probe_modes_fourier_amp)
     plt.close(fig_probe_modes_fourier_phase)
     plt.close(fig_scan_pos)
+    plt.close(fig_obj_tilts)

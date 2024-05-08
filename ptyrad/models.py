@@ -1,12 +1,9 @@
 ## Defining PtychoAD class for the optimization object
 
 from .forward import  multislice_forward_model_vec_all
-from .utils import imshift_batch, imshift_single, get_center_of_mass
+from .utils import get_center_of_mass, imshift_single, imshift_batch, ifftshift2, add_tilts_to_propagator
 from torchvision.transforms.functional import gaussian_blur
 import torch
-
-# This is a current working version (2024.04.13) of the PtychoAD class
-# I cleaned up the archived versiosn and slightly renamed the objects and variables for clarity
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -47,6 +44,7 @@ class PtychoAD(torch.nn.Module):
             
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
             self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
+            self.opt_obj_tilts          = torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device)
             self.opt_probe              = torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)  
             self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device)
             self.omode_occu             = torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device) 
@@ -54,6 +52,9 @@ class PtychoAD(torch.nn.Module):
             self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
             self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
+            self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
+            self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
+            self.tilt_obj               = (self.opt_obj_tilts != torch.zeros((1,2),         dtype=torch.float32))  # Set tilt_obj to False if opj_tilts = [[0,0]]
             self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
             
@@ -70,6 +71,7 @@ class PtychoAD(torch.nn.Module):
             self.optimizable_tensors = {
                 'obja'            : self.opt_obja,
                 'objp'            : self.opt_objp,
+                'obj_tilts'       : self.opt_obj_tilts,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.set_optimizer(self.lr_params)
@@ -84,7 +86,7 @@ class PtychoAD(torch.nn.Module):
         elif self.recenter_cbeds =='each':
             shift_str = 'averaged'
             
-        cy, cx = get_center_of_mass(torch.fft.fftshift(cbeds, dim=(-2,-1)), corner_centered = True)
+        cy, cx = get_center_of_mass(ifftshift2(cbeds), corner_centered = True) # ifftshift2 is for center->corner
         shifts = torch.stack((-cy, -cx), dim=1) if self.recenter_cbeds == 'each' else torch.stack((-cy, -cx)).broadcast_to((len(self.measurements),2)) # make shifts (N,2)
         grid = self.shift_probes_grid
         # For CBEDs it's unlikely to do imshift_batch due to GPU memory constraints
@@ -183,6 +185,20 @@ class PtychoAD(torch.nn.Module):
             probes = torch.broadcast_to(self.opt_probe, (len(indices), *self.opt_probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
         return probes
     
+    def get_propagators(self, indices):
+        """ Get propagators for each position """
+        # This function will return a single propagator (H) if self.opt_obj_tilts.ndim == 1 (single tilt_y, tilt_x) 
+        # For self.opt_obj_tilts.ndim == 2 (N,2), it'll return multiple propagtors stacked at axis 0 (N,Y,X)
+
+        if self.tilt_obj is False:
+            return self.H[None,:,:] # Make it into (1,Y,X)
+        
+        if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.size = (1,2)
+            propagators  = add_tilts_to_propagator(self.H, self.opt_obj_tilts, dz=self.z_distance, dk=self.dk)
+        else:
+            propagators  = add_tilts_to_propagator(self.H, self.opt_obj_tilts[indices], dz=self.z_distance, dk=self.dk)
+        return propagators
+    
     def get_measurements(self, indices=None):
         """ Get measurements for each position """
         # Return the selected measurements based on input indices
@@ -200,8 +216,9 @@ class PtychoAD(torch.nn.Module):
         # It's a design choice to put it here, instead of putting it under optimization.py
         
         object_patches = self.get_obj_ROI(indices)
-        probes = self.get_probes(indices)
-        dp_fwd = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, self.H)
+        probes         = self.get_probes(indices)
+        propagators    = self.get_propagators(indices)
+        dp_fwd         = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, propagators)
         
         if self.detector_blur_std is not None and self.detector_blur_std != 0:
             dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)

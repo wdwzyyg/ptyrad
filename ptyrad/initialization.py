@@ -2,7 +2,7 @@
 
 import numpy as np
 from .data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
-from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params, compose_affine_matrix
+from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params, compose_affine_matrix, get_rbf
 
 
 class Initializer:
@@ -109,6 +109,9 @@ class Initializer:
         print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
         print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
         print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+        self.init_variables['dx'] = dx #   Ang
+        self.init_variables['dk'] = dk # 1/Ang
+        
             
     def init_measurements(self):
         source = self.init_params['source_params']['measurements_source']
@@ -163,7 +166,12 @@ class Initializer:
         cbeds = cbeds / (np.mean(cbeds, 0).max()) # Normalizing the cbeds_data so that the averaged CBED has max at 1. This will make each CBED has max somewhere ~ 1
         cbeds = cbeds.astype('float32')
         
+        # Get rbf related values
+        rbf = get_rbf(cbeds)
+        suggested_probe_mask_k_radius = 2*rbf/cbeds.shape[-1]
+        
         # Print out some measurements statistics
+        print(f"Radius of bright field disk             (rbf) = {rbf} px, suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}")
         print(f"meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
         print(f"measurements                      (N, Ky, Kx) = {cbeds.dtype}, {cbeds.shape}")
         self.init_variables['measurements'] = cbeds
@@ -350,17 +358,17 @@ class Initializer:
         self.init_variables['obj'] = obj
                     
     def init_omode_occu(self):
-        source = self.init_params['source_params']['omode_occu_source']
-        params = self.init_params['source_params']['omode_occu_params']
-        print(f"\n### Initializing omode_occu from '{source}' ###")
+        occu_type = self.init_params['exp_params']['omode_init_occu']['occu_type']
+        init_occu = self.init_params['exp_params']['omode_init_occu']['init_occu']
+        print(f"\n### Initializing omode_occu from '{occu_type}' ###")
 
-        if source   == 'custom':
-            omode_occu = params
-        elif source == 'uniform':
+        if occu_type   == 'custom':
+            omode_occu = init_occu
+        elif occu_type == 'uniform':
             omode = self.init_params['exp_params']['omode_max']
             omode_occu = np.ones(omode)/omode
         else:
-            raise KeyError(f"Initialization method {source} not implemented yet, please use 'custom' or 'uniform'!")
+            raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
         omode_occu = omode_occu.astype('float32')
         print(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}")
         self.init_variables['omode_occu'] = omode_occu
@@ -373,11 +381,27 @@ class Initializer:
         dx_spec = self.init_params['exp_params']['dx_spec']
         extent = dx_spec * probe_shape
         print(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance:.4f} Ang, lambd = {lambd:.4f} Ang, extent = {extent.round(4)} Ang")
-        _, H, _, _ = near_field_evolution(probe_shape, z_distance, lambd, extent)
+        H = near_field_evolution(probe_shape, z_distance, lambd, extent)
         H = H.astype('complex64')
         print(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}")
         self.init_variables['z_distance'] = z_distance
         self.init_variables['H'] = H
+    
+    def init_obj_tilts(self):
+        N_scans    = self.init_params['exp_params']['N_scans']
+        init_tilts = self.init_params['exp_params']['obj_tilts']['init_tilts'] 
+        tilt_type  = self.init_params['exp_params']['obj_tilts']['tilt_type'] 
+        print(f"\n### Initializing obj tilts with tilt_type = '{tilt_type}' ###")
+        if tilt_type == 'each':
+            obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
+        elif tilt_type == 'all':
+            obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
+        else:
+            raise KeyError(f"Unknown tilt_type = {tilt_type}, please use 'each' or 'all'!")
+        
+        print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
+        self.init_variables['obj_tilts'] = obj_tilts
+        print(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}")
     
     def init_check(self):
         # Although some of the input experimental parameters might not be used directly by the package
@@ -403,6 +427,7 @@ class Initializer:
         obj              = self.init_variables['obj']
         omode_occu       = self.init_variables['omode_occu'] 
         H                = self.init_variables['H']
+        obj_tilts        = self.init_variables['obj_tilts']
         
         # Check CBED shape
         if Npix == cbeds.shape[-2] == cbeds.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
@@ -426,7 +451,15 @@ class Initializer:
         else:
             raise ValueError(f"Found inconsistency between obj.shape[1]({obj.shape[1]}) and Nlayer({Nlayer})")
 
-
+        # Check obj tilts
+        if obj_tilts is None:
+            print(f"obj_tilts is None")
+        else:
+            if len(obj_tilts) in [1, N_scans]:
+                print(f"obj_tilts is consistent with either 1 or N_scans")
+            else:
+                raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
+        
         print(f"Pass the consistency chcek of initialized variables, initialization is done!")
     
     def init_all(self):
@@ -440,6 +473,7 @@ class Initializer:
         self.init_obj()
         self.init_omode_occu()
         self.init_H()
+        self.init_obj_tilts()
         self.init_check()
         
         return self
