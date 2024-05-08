@@ -173,6 +173,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
     obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
+    tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
 
     output_path  = output_dir + "/" + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -180,7 +181,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if cbeds_flipT is not None:
         output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
         
-    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
+    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
     
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
@@ -450,6 +451,29 @@ def near_field_evolution(u_0_shape, z, lambd, extent):
 
     return H
 
+def add_tilts_to_propagator(propagator, tilts, dz, dk):
+    """ Add small crystal tilts to a single propagator """
+    # Ref: https://abtem.readthedocs.io/en/latest/user_guide/walkthrough/multislice.html
+    # tilts angle should be less than 1 deg (17 mrad)
+    # tilt-induced phase shift = exp(2pi*i*dz*(kx*tan(tx)+ky*tan(ty)), note that k in 1/Ang
+    # This is a vectorized function that apply crystall tilts to a single propagator
+    # If tilts.ndim=1, then it'll return a single propagator with (1,Y,X)
+    # Note that the propagator is corner-centered at k-space
+    
+    # Create grid of coordinates
+    device         = propagator.device
+    (ny, nx)       = propagator.shape[-2:]
+    grid_y, grid_x = torch.meshgrid(fftfreq(ny, 1 / ny, device=device), fftfreq(nx, 1 / nx, device=device), indexing='ij')
+    kx             = grid_x * dk # dk in 1/Ang
+    ky             = grid_y * dk
+    
+    tilts_y        = tilts[:,0,None,None] / 1e3 #mrad, tilts_y = (N,Y,X)
+    tilts_x        = tilts[:,1,None,None] / 1e3
+    phase_shift    = 2 * torch.pi * dz * (ky * torch.tan(tilts_y) + kx * torch.tan(tilts_x)) 
+    propagators    = propagator * torch.exp(1j*phase_shift)
+    
+    return propagators
+
 def test_loss_fn(model, indices, loss_fn):
     """ Print loss values for each term for convenient weight tuning """
     # model: PtychoAD model
@@ -467,6 +491,18 @@ def test_loss_fn(model, indices, loss_fn):
             print(f"{loss_name.ljust(11)}: {loss_value.detach().cpu().numpy():.8f}")
     return
 
+def test_constraint_fn(test_model, constraint_fn, plot_forward_pass):
+    """ Test run of the constraint_fn """
+    # Note that this would directly modify the model so we need to make a test one
+
+    indices = np.random.randint(0,len(test_model.measurements),2)
+    
+    constraint_fn(test_model, niter=1) 
+    if plot_forward_pass is not None:
+        plot_forward_pass(test_model, indices, 0.5)
+    del test_model
+    return
+    
 def kv2wavelength(acceleration_voltage):
     # Physical Constants
     PLANCKS = 6.62607015E-34 # m^2*kg / s
@@ -961,8 +997,6 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         complex_object_interp3d = obj_a_interp * xp.exp(obj_p_interp*1j)
         print(f"The object shape is interpolated to {complex_object_interp3d.shape}.")
         return complex_object_interp3d.astype(obj_dtype)
-
-
 
 def Fresnel_propagator(probe, z_distances, lambd, extent):
     # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more

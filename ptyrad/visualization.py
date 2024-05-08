@@ -72,7 +72,7 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     if pass_fig:
         return fig
         
-def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
+def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
@@ -89,7 +89,15 @@ def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(8,8)
         plt.gca().invert_yaxis()  # Pre-flip y-axis so the y-axis is image-like no matter what
     
     if init_pos is None:
-        plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
+        if tilts is None:
+            plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
+        else:
+            tilts = np.broadcast_to(tilts, shape=(len(pos),2))
+            M = np.hypot(tilts[:,0], tilts[:,1])
+            q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
+            cbar = fig.colorbar(q, shrink=0.75)
+            cbar.ax.set_ylabel('mrad')
+            cbar.ax.get_yaxis().labelpad = 15
     else:
         plt.scatter(x=init_pos[:,1], y=init_pos[:,0], c='C0', s=dot_scale, label='Init scan positions')
         plt.scatter(x=pos[:,1],      y=pos[:,0],      c='C1', s=dot_scale, label='Opt scan positions')
@@ -305,11 +313,16 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     fig_probe_modes_fourier_amp.suptitle(f"Probe modes amplitude in fourier space at iter {niter}", fontsize=18)
     fig_probe_modes_fourier_phase.suptitle(f"Probe modes phase in fourier space at iter {niter}", fontsize=18)
 
-    # Scan positions
+    # Scan positions and tilts
     init_pos = init_variables['crop_pos'] + init_variables['probe_pos_shifts']
     pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
+    tilts = model.opt_obj_tilts.detach().cpu().numpy()
+    tilts = np.broadcast_to(tilts, (len(pos), 2)) # tilts has to be (N_scan, 2)
     fig_scan_pos, ax = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, show_fig=False, pass_fig=True)
     ax.set_title(f"Scan positions at iter {niter}", fontsize=16)
+    
+    fig_obj_tilts, ax = plot_scan_positions(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
+    ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
         
     # Show and save fig
     if show_fig:
@@ -319,6 +332,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.show()
         fig_probe_modes_fourier_phase.show()
         fig_scan_pos.show()
+        fig_obj_tilts.show()
 
     if save_fig:
         print(f"Saving summary figures for iter {niter}")
@@ -328,6 +342,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
+        fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts_iter{str(niter).zfill(4)}.png")
         
     # Close figures after saving
     plt.close(fig_loss)
@@ -336,3 +351,4 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     plt.close(fig_probe_modes_fourier_amp)
     plt.close(fig_probe_modes_fourier_phase)
     plt.close(fig_scan_pos)
+    plt.close(fig_obj_tilts)
