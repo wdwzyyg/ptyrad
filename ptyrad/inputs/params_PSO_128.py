@@ -19,7 +19,7 @@ exp_params = {
     'scan_step_size'    : 0.41, # Ang
     'scan_flip'         : (2),  # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
-    'obj_tilts'         : {'tilt_type':'each', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
+    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 8,

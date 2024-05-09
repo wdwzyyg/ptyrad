@@ -54,8 +54,8 @@ class PtychoAD(torch.nn.Module):
             self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
             self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
             self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
-            self.tilt_obj               = (self.opt_obj_tilts != torch.zeros((1,2),         dtype=torch.float32))  # Set tilt_obj to False if opj_tilts = [[0,0]]
-            self.shift_probes           = (self.lr_params['probe_pos_shifts'] != 0) # Set shift_probes to False if lr_params['probe_pos_shifts'] = 0
+            self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
+            self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
             
             # Create grids for shifting
@@ -147,15 +147,22 @@ class PtychoAD(torch.nn.Module):
         self.print_model_summary()
         
     def print_model_summary(self):
-        print('\nPtychoAD optimizable variables:')
+        print('\n### PtychoAD optimizable variables ###')
         for name, tensor in self.optimizable_tensors.items():
             print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
         total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)
-        print('\nMake sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"')
-
+        # When you create a new model, make sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"
+        
+        print('\n### Optimizable variables statitsics ###')
         print(f'\nTotal measurement values:    {self.measurements.numel():,d}\
                 \nTotal optimizing variables:  {total_var:,d}\
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
+        
+        print('\n### Model behavior ###')
+        print(f"Recenter CBEDs:     {True if self.recenter_cbeds is not None else False}")
+        print(f"Tilt propagator:    {self.tilt_obj}") 
+        print(f"Sub-px probe shift: {self.shift_probes}") 
+        print(f"Detector blur:      {True if self.detector_blur_std is not None else False}") 
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """
@@ -187,16 +194,20 @@ class PtychoAD(torch.nn.Module):
     
     def get_propagators(self, indices):
         """ Get propagators for each position """
-        # This function will return a single propagator (H) if self.opt_obj_tilts.ndim == 1 (single tilt_y, tilt_x) 
-        # For self.opt_obj_tilts.ndim == 2 (N,2), it'll return multiple propagtors stacked at axis 0 (N,Y,X)
+        # self.tilt_obj is True as long as we're optimizing the opt_obj_tilts or we have non-zero initial tilt values
+        # This function will return a single propagator (H) if self.opt_obj_tilts has shape = (1,2) (single tilt_y, tilt_x) 
+        # If self.opt_obj_tilts has shape = (N,2), it'll return multiple propagtors stacked at axis 0 (N,Y,X)
+        # Note that 0 tilts is numerically equivalent to the H and can be verified by "torch.allclose(model.H, model.get_propagators([0]))"
 
         if self.tilt_obj is False:
             return self.H[None,:,:] # Make it into (1,Y,X)
         
-        if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.size = (1,2)
-            propagators  = add_tilts_to_propagator(self.H, self.opt_obj_tilts, dz=self.z_distance, dk=self.dk)
+        if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.shape = (1,2)
+            obj_tilts = self.opt_obj_tilts
         else:
-            propagators  = add_tilts_to_propagator(self.H, self.opt_obj_tilts[indices], dz=self.z_distance, dk=self.dk)
+            obj_tilts = self.opt_obj_tilts[indices]
+        
+        propagators  = add_tilts_to_propagator(self.H, obj_tilts, dz=self.z_distance, dk=self.dk)
         return propagators
     
     def get_measurements(self, indices=None):

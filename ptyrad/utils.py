@@ -11,6 +11,12 @@ from torch.fft import fft2, ifft2, fftfreq
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
+def get_date(date_format = '%Y%m%d'):
+    from datetime import date
+    date_format = date_format
+    date_str = date.today().strftime(date_format)
+    return date_str
+
 def has_nan_or_inf(tensor):
     """
     Check if a torch.Tensor contains any NaN or Inf values.
@@ -113,15 +119,19 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                 'source_params'         : source_params,
                 'loss_params'           : loss_params,
                 'constraint_params'     : constraint_params,
-                'model_params':
+                'model_params': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'recenter_cbeds'   : model.recenter_cbeds,
                      'detector_blur_std': model.detector_blur_std,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
-                     'z_distance'       : model.z_distance,
                      'crop_pos'         : model.crop_pos,
+                     'z_distance'       : model.z_distance,
+                     'dx'               : model.dx,
+                     'dk'               : model.dk,
+                     'tilt_obj'         : model.tilt_obj,
                      'shift_probes'     : model.shift_probes,
+                     'probe_int_sum'    : model.probe_int_sum,
                      'avg_cbeds_shift'  : model.avg_cbeds_shift},
                 'recon_params'          : recon_params,
                 'loss_iters'            : loss_iters,
@@ -142,7 +152,7 @@ def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITE
     }
     return recon_params
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, postfix=''):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, prefix='', postfix=''):
     ''' Generate the output folder given indices, recon_params, model, and constraint_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
@@ -176,7 +186,11 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
 
-    output_path  = output_dir + "/" + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
+    # Preprocess prefix and postfix
+    prefix  = prefix + '_' if prefix  != '' else ''
+    postfix = '_'+ postfix if postfix != '' else ''
+    
+    output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
     
     if cbeds_flipT is not None:
         output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
@@ -200,9 +214,6 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         obj_type = constraint_params['obj_blur']['obj_type']
         obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
         output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
-        
-    if constraint_params['probe_mask_r']['freq'] is not None:
-        output_path += f"_pmr{round(constraint_params['probe_mask_r']['radius'],2)}"
         
     if constraint_params['probe_mask_k']['freq'] is not None:
         output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
@@ -375,8 +386,8 @@ def imshift_single(img, shift, grid):
     grid = grid[:,*[None]*(ndim-2), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+1
     shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
-    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim
-    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.abs(). 
+    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim. w is at the center.
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real(). 
     
     # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
     # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.
@@ -419,8 +430,8 @@ def imshift_batch(img, shifts, grid):
     grid = grid[:,*[None]*(ndim-1), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+2
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
-    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1
-    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.abs()
+    w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1. w is at the center.
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real()
     
     # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
     # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.
