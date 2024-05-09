@@ -2,7 +2,7 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, get_center_of_mass, imshift_batch, make_sigmoid_mask, fftshift2, ifftshift2, add_const_phase_shift
+from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, add_const_phase_shift
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 import torch
@@ -84,30 +84,7 @@ class CombinedConstraint(torch.nn.Module):
             probe_int = model.opt_probe.abs().pow(2)
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
             print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
-    
-    def apply_fix_probe_com(self, model, niter):
-        ''' Apply probe CoM constraint to the global probe '''
-        fix_probe_com_freq = self.constraint_params['fix_probe_com']['freq']
-        if fix_probe_com_freq is not None and niter % fix_probe_com_freq == 0:
-            probe_int = model.opt_probe.abs().pow(2).sum(0) # probe_int (Ny,Nx)
-            cy, cx = get_center_of_mass(ifftshift2(probe_int), corner_centered = True) # ifftshift2 is for center->corner
-            model.opt_probe.data = imshift_batch(model.opt_probe, shifts = torch.tensor([(-cy, -cx)], device = model.device), grid = model.shift_probes_grid).squeeze(0) # The return of imshift_batch is (1, pmode, Ny, Nx)
-            print(f"Apply fix probe CoM constraint to the global probe at iter {niter}, shift vec (sy,sx) = {np.round([-cy.item(), -cx.item()], 4)} px")
-    
-    def apply_probe_mask_r(self, model, niter):
-        ''' Apply probe amplitude constraint in real space '''
-        # Note that this will change the total probe intensity, please use this with `fix_probe_int`
-        # Although the mask wouldn't change during the iteration, making a mask takes only ~0.5us on CPU so really no need to pre-calculate it
-        
-        probe_mask_r_freq = self.constraint_params['probe_mask_r']['freq']
-        relative_radius  = self.constraint_params['probe_mask_r']['radius']
-        relative_width   = self.constraint_params['probe_mask_r']['width']
-        if probe_mask_r_freq is not None and niter % probe_mask_r_freq == 0:
-            Npix = model.opt_probe.size(-1)
-            mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device) 
-            model.opt_probe.data = mask * model.opt_probe
-            print(f"Apply real-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
-            
+
     def apply_probe_mask_k(self, model, niter):
         ''' Apply probe amplitude constraint in Fourier space '''
         # Note that this will change the total probe intensity, please use this with `fix_probe_int`
@@ -122,7 +99,7 @@ class CombinedConstraint(torch.nn.Module):
             Npix = model.opt_probe.size(-1)
             mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
             probe_k = fftshift2 (fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k at center for later masking
-            probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for round-trip 
+            probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
             model.opt_probe.data = probe_r
             print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
 
@@ -133,7 +110,7 @@ class CombinedConstraint(torch.nn.Module):
         if fix_probe_phi_freq is not None and niter % fix_probe_phi_freq == 0: 
             probe_k = fft2(ifftshift2(model.opt_probe), norm='ortho') # probe_k at corner for later indexing
             phi0 = probe_k.angle()[:,0,0] # Get the phase of Fourier probes at k=0 (phi0), note that probe_k is at corner of k-space
-            model.opt_probe.data = fftshift2(ifft2(add_const_phase_shift(probe_k, -phi0), norm='ortho')) # Note that the norm='ortho' is explicitly specified but not needed for round-trip 
+            model.opt_probe.data = fftshift2(ifft2(add_const_phase_shift(probe_k, -phi0), norm='ortho')) # Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
             print(f"Apply fix probe phi constraint at iter {niter} for each pmode with original phi0 (phase of F(0)) = {phi0.detach().cpu().numpy().round(2)} rad")
                 
     def apply_fix_probe_int(self, model, niter):
@@ -198,45 +175,15 @@ class CombinedConstraint(torch.nn.Module):
         if objp_postiv_freq is not None and niter % objp_postiv_freq == 0: 
             model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")
-            
-    def apply_obj_chgflip(self, model, niter):
-        ''' Apply charge-flipping constraint on object '''
-        # Note that this `relax` is defined oppositly to PtychoShelves's `positivity_constraint_object` in `ptycho_solver`. 
-        # Here, relax=1 means fully relaxed and essentially no constraint.
-        obj_chgflip_freq = self.constraint_params['obj_chgflip']['freq']
-        obj_type         = self.constraint_params['obj_chgflip']['obj_type']
-        relax            = self.constraint_params['obj_chgflip']['relax']
-        relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_chgflip))' if relax != 0 else 'hard'
-        if obj_chgflip_freq is not None and niter % obj_chgflip_freq == 0: 
-            if obj_type in ['amplitude', 'both']:
-                model.opt_obja.data = relax * model.opt_obja + (1-relax) * (torch.abs(model.opt_obja-1)+1)
-                print(f"Apply {relax_str} charge-flipping constraint around 1 on obja at iter {niter}")
-            if obj_type in ['phase', 'both']:
-                model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.abs()
-                print(f"Apply {relax_str} charge-flipping constraint around 0 on objp at iter {niter}")
-
-    def apply_obj_same(self, model, niter):
-        ''' Apply identical slice constraint on obj, forcing the z slices to be the same '''
-        # This is similar to py4DSTEM's `_object_identical_slices_constraint` method
-        # However, this constraint is probably only appropriate when we're roughly estimating total thickness using BO with a uniform thickness sample and thick ( >10 Ang) slice_thickness
-        # I don't quite see an use case to individually operate on either obja or objp, so it'll apply to both object amplitude and phase
-        # I might remove this feature if kz_filter works fine for thickness estimation.
-        obj_same_freq    = self.constraint_params['obj_same']['freq']
-        relax            = self.constraint_params['obj_same']['relax'] 
-        if obj_same_freq is not None and niter % obj_same_freq == 0: 
-            model.opt_obja.data = relax * model.opt_obja + (1-relax) * torch.broadcast_to(model.opt_obja.mean(dim=1, keepdim=True), model.opt_obja.shape)
-            model.opt_objp.data = relax * model.opt_objp + (1-relax) * torch.broadcast_to(model.opt_objp.mean(dim=1, keepdim=True), model.opt_objp.shape)
-            relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_same))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} identical z-slice constraint on obj at iter {niter}")
+            print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")           
         
     def forward(self, model, niter):
         # Apply in-place constraints if niter satisfies the predetermined frequency
+        # Note that the if check blocks are included in each apply methods so that it's cleaner, and I can print the info with niter
+        
         with torch.no_grad():
             # Probe constraints
             self.apply_ortho_pmode  (model, niter)
-            self.apply_fix_probe_com(model, niter)
-            self.apply_probe_mask_r (model, niter)
             self.apply_probe_mask_k (model, niter)
             self.apply_fix_probe_phi(model, niter)
             self.apply_fix_probe_int(model, niter)
@@ -245,8 +192,6 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_kz_filter    (model, niter)
             self.apply_obja_thresh  (model, niter)
             self.apply_objp_postiv  (model, niter)
-            self.apply_obj_chgflip  (model, niter)
-            self.apply_obj_same     (model, niter)
 
 def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
@@ -306,8 +251,8 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
     W = 1 - torch.atan((beta_regularize_layers * torch.abs(grid_kz) / torch.sqrt(grid_kx**2 + grid_ky**2 + 1e-3))**2) / (torch.pi/2)
     Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
 
-    # Filter the obj with filter funciton Wa    
-    fobj = torch.abs(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
+    # Filter the obj with filter funciton Wa, take the real part because Fourier-filtered obj could contain negative values    
+    fobj = torch.real(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
     
     # Select the original z-range before padding
     if z_pad is not None:

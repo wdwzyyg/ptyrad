@@ -321,8 +321,8 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     fig_scan_pos, ax = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, show_fig=False, pass_fig=True)
     ax.set_title(f"Scan positions at iter {niter}", fontsize=16)
     
-    fig_obj_tilts, ax = plot_scan_positions(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
-    ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
+    # fig_obj_tilts, ax = plot_scan_positions(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
+    # ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
         
     # Show and save fig
     if show_fig:
@@ -332,7 +332,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.show()
         fig_probe_modes_fourier_phase.show()
         fig_scan_pos.show()
-        fig_obj_tilts.show()
+        #fig_obj_tilts.show()
 
     if save_fig:
         print(f"Saving summary figures for iter {niter}")
@@ -342,7 +342,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
         fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
         fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
-        fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts_iter{str(niter).zfill(4)}.png")
+        #fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts_iter{str(niter).zfill(4)}.png")
         
     # Close figures after saving
     plt.close(fig_loss)
@@ -351,4 +351,4 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     plt.close(fig_probe_modes_fourier_amp)
     plt.close(fig_probe_modes_fourier_phase)
     plt.close(fig_scan_pos)
-    plt.close(fig_obj_tilts)
+    #plt.close(fig_obj_tilts)
