@@ -1,4 +1,4 @@
-# CNS
+# multi_obj
 
 ptycho_output_path = 'data/20240328_multi_object/cbed_WSe2_and_Cu_fov_42p86_39p97_dp180/1/roi_1_Ndp_180/MLs_L1_p2_g256_dpFlip_T/Niter100.mat'
 exp_CBED_path      = 'data/20240328_multi_object/cbed_WSe2_and_Cu_fov_42p86_39p97_dp180/1/data_roi_1_Ndp_180_dp.hdf5' 
@@ -19,7 +19,9 @@ exp_params = {
     'scan_step_size'    : 0.3, # Ang
     'scan_flip'         : None, # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
-    'omode_max'         : 4, #1
+    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
+    'omode_max'         : 2, #1
+    'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 2, #2
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
@@ -34,7 +36,7 @@ source_params = {
     'measurements_source': 'hdf5',
     'measurements_params': [exp_CBED_path, 'dp'],
     'obj_source'         : 'simu',
-    'obj_params'         : None, # (1,8,391,403),
+    'obj_params'         : None,
     'probe_source'       : 'simu',
     'probe_params'       : None, 
     'pos_source'         : 'simu',
@@ -45,6 +47,4 @@ source_params = {
     # 'probe_params'       : ptycho_output_path, 
     # 'pos_source'         : 'PtyShv',
     # 'pos_params'         : ptycho_output_path,
-    'omode_occu_source'  : 'uniform',
-    'omode_occu_params'  : None
 }

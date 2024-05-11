@@ -19,7 +19,9 @@ exp_params = {
     'scan_step_size'    : 0.44, # Ang
     'scan_flip'         : (1), # (1) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
     'scan_affine'       : None, #(1,0,-1.5,0), # (scale, asymmetry, rotation, shear)
+    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
     'omode_max'         : 1,
+    'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 12,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
@@ -45,6 +47,4 @@ source_params = {
     # 'probe_params'       : ptycho_output_path, 
     # 'pos_source'         : 'PtyShv',
     # 'pos_params'         : ptycho_output_path,
-    'omode_occu_source'  : 'uniform',
-    'omode_occu_params'  : None
 }

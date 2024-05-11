@@ -5,6 +5,7 @@
 from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, add_const_phase_shift
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
+from torch.nn.functional import interpolate
 import torch
 from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
 
@@ -60,11 +61,34 @@ class CombinedLoss(torch.nn.Module):
             loss_sparse = torch.tensor(0, dtype=torch.float32, device=self.device)
         return loss_sparse
     
+    def get_loss_simlar(self, object_patches, omode_occu):
+        # Calculate loss_simlar by calculating the similarity between different omodes
+        # This loss term is specifically designed for regularizing omode by reducing the std of downsampled obj along the omode dimension 
+        simlar_params = self.loss_params['loss_simlar']
+        if simlar_params['state']:
+            obj_type     = simlar_params['obj_type']
+            scale_factor = simlar_params['scale_factor']
+            obja_patches = object_patches[...,0]
+            objp_patches = object_patches[...,1]
+            temp_loss = torch.tensor(0, dtype=torch.float32, device=self.device)
+            
+            if obj_type in ['amplitude', 'both']:
+                scaled_patches = interpolate(obja_patches, scale_factor = scale_factor, mode = 'area') * omode_occu[:,None,None,None] # scaled_patches = (N,omode,Nz,Ny,Nx)
+                temp_loss += scaled_patches.std(1).mean()
+            if obj_type in ['phase', 'both']:            
+                scaled_patches = interpolate(objp_patches, scale_factor = scale_factor, mode = 'area') * omode_occu[:,None,None,None] # scaled_patches = (N,omode,Nz,Ny,Nx)
+                temp_loss += scaled_patches.std(1).mean()
+            loss_simlar = simlar_params['weight'] * temp_loss
+        else:
+            loss_simlar = torch.tensor(0, dtype=torch.float32, device=self.device)
+        return loss_simlar
+    
     def forward(self, model_CBEDs, measured_CBEDs, object_patches, omode_occu):
         losses = []
         losses.append(self.get_loss_single(model_CBEDs, measured_CBEDs))
         losses.append(self.get_loss_pacbed(model_CBEDs, measured_CBEDs))
         losses.append(self.get_loss_sparse(object_patches[...,1], omode_occu))
+        losses.append(self.get_loss_simlar(object_patches, omode_occu))
         total_loss = sum(losses)
         return total_loss, losses
     
@@ -234,8 +258,10 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
     
     # Pad the tensor with zeros
     if z_pad is not None:
-        obj = torch.nn.functional.pad(obj.permute(0,2,3,1), (z_pad,z_pad)).permute(0,3,1,2) # The padding only applies to dimensions from last to front so permute is needed
-    
+        pad_value = 0 if obj_type=='phase' else 1
+        obj = torch.nn.functional.pad(obj.permute(0,2,3,1), (z_pad,z_pad), value=pad_value).permute(0,3,1,2) # The padding only applies to dimensions from last to front so permute is needed
+        print(f"Padding obj.shape temporarily to {[*obj.shape]} with {pad_value} for kz_filter {obj_type}")
+        
     device = obj.device
     
     # Generate 1D grids along each dimension
@@ -259,7 +285,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
         fobj = fobj[:,z_pad:-z_pad,:,:]
     
     if obj_type == 'amplitude':
-        fobj = 1+0.9*(fobj-1)
+        fobj = 1+0.9*(fobj-1) # This is essentially a soft obja threshold constraint built into the kz_filter routine for obja
         
     return fobj
 
