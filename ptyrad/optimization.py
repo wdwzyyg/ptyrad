@@ -8,6 +8,8 @@ from torchvision.transforms.functional import gaussian_blur
 from torch.nn.functional import interpolate
 import torch
 from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
+from skimage.restoration import unwrap_phase
+
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
@@ -127,16 +129,24 @@ class CombinedConstraint(torch.nn.Module):
             model.opt_probe.data = probe_r
             print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
 
-    def apply_fix_probe_phi(self, model, niter):
-        ''' Apply probe phase constraint '''
-        # fft2 is for real->fourier, while fftshift2 is for corner->center
-        fix_probe_phi_freq = self.constraint_params['fix_probe_phi']['freq']
-        if fix_probe_phi_freq is not None and niter % fix_probe_phi_freq == 0: 
-            probe_k = fft2(ifftshift2(model.opt_probe), norm='ortho') # probe_k at corner for later indexing
-            phi0 = probe_k.angle()[:,0,0] # Get the phase of Fourier probes at k=0 (phi0), note that probe_k is at corner of k-space
-            model.opt_probe.data = fftshift2(ifft2(add_const_phase_shift(probe_k, -phi0), norm='ortho')) # Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
-            print(f"Apply fix probe phi constraint at iter {niter} for each pmode with original phi0 (phase of F(0)) = {phi0.detach().cpu().numpy().round(2)} rad")
-                
+    def apply_pphase_smooth(self, model, niter):
+        ''' Apply probe phase smoothing constraint '''
+        pphase_smooth_freq = self.constraint_params['pphase_smooth']['freq']
+        pphase_smooth_std  = self.constraint_params['pphase_smooth']['std']
+        if pphase_smooth_freq is not None and niter % pphase_smooth_freq == 0: 
+            probe_k       = fftshift2(fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k has 0 frequency at the center
+            probe_k_phase = probe_k.angle().detach().cpu().numpy()
+            unwrapped_phase_k = np.array([unwrap_phase(phase, wrap_around=True) for phase in probe_k_phase]) # (pmode,Y,X), do the unwrap with scikit-image mode by mode
+            unwrapped_phase_k = torch.tensor(unwrapped_phase_k, dtype=torch.float32, device=model.device)
+            if pphase_smooth_std is None or pphase_smooth_std == 0:
+                updated_probe_k = torch.polar(abs=probe_k.abs(), angle=unwrapped_phase_k)
+                model.opt_probe.data = fftshift2(ifft2(ifftshift2(updated_probe_k)))
+                print(f"Apply probe phase unwrapping at iter {niter}")
+            else:
+                updated_probe_k = torch.polar(abs=probe_k.abs(), angle=gaussian_blur(unwrapped_phase_k, kernel_size=5, sigma=pphase_smooth_std))
+                model.opt_probe.data = fftshift2(ifft2(ifftshift2(updated_probe_k)))
+                print(f"Apply probe phase smoothing with std = {pphase_smooth_std} px at iter {niter}")
+    
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
         # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
@@ -201,6 +211,19 @@ class CombinedConstraint(torch.nn.Module):
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
             print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")           
         
+    def apply_tilt_smooth(self, model, niter):
+        ''' Apply Gaussian blur to object tilts '''
+        # Note that the smoothing is applied along the last 2 axes, which are scan dimensions, so the unit of std is "scan positions"
+        # Besides, the relative position of the obj_tilts are neglected for simplicity
+        tilt_smooth_freq = self.constraint_params['tilt_smooth']['freq']
+        tilt_smooth_std  = self.constraint_params['tilt_smooth']['std']
+        N_scan_slow = model.N_scan_slow
+        N_scan_fast = model.N_scan_fast
+        if tilt_smooth_freq is not None and niter % tilt_smooth_freq == 0 and tilt_smooth_std !=0:
+            obj_tilts = (model.opt_obj_tilts.reshape(N_scan_slow, N_scan_fast, 2)).permute(2,0,1)
+            model.opt_obj_tilts.data = gaussian_blur(obj_tilts, kernel_size=5, sigma=tilt_smooth_std).permute(1,2,0).reshape(-1,2)
+            print(f"Apply Gaussian blur with std = {tilt_smooth_std} scan positions on obj_tilts at iter {niter}")
+    
     def forward(self, model, niter):
         # Apply in-place constraints if niter satisfies the predetermined frequency
         # Note that the if check blocks are included in each apply methods so that it's cleaner, and I can print the info with niter
@@ -209,13 +232,15 @@ class CombinedConstraint(torch.nn.Module):
             # Probe constraints
             self.apply_ortho_pmode  (model, niter)
             self.apply_probe_mask_k (model, niter)
-            self.apply_fix_probe_phi(model, niter)
+            self.apply_pphase_smooth(model, niter)
             self.apply_fix_probe_int(model, niter)
             # Object constraints
             self.apply_obj_blur     (model, niter)
             self.apply_kz_filter    (model, niter)
             self.apply_obja_thresh  (model, niter)
             self.apply_objp_postiv  (model, niter)
+            # Local tilt constraint
+            self.apply_tilt_smooth  (model, niter)
 
 def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''

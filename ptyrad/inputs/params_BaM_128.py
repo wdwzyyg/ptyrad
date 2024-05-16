@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 255,
     'N_scan_fast'       : 255,
     'scan_step_size'    : 0.415, # Ang
-    'scan_flip'         : (2),  # (2) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
+    'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
     'omode_max'         : 1,

@@ -50,6 +50,8 @@ class PtychoAD(torch.nn.Module):
             self.omode_occu             = torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device) 
             self.H                      = torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device)
             self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
+            self.N_scan_slow            = torch.tensor(init_variables['N_scan_slow'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.N_scan_fast            = torch.tensor(init_variables['N_scan_fast'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
             self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
@@ -198,7 +200,17 @@ class PtychoAD(torch.nn.Module):
         # This function will return a single propagator (H) if self.opt_obj_tilts has shape = (1,2) (single tilt_y, tilt_x) 
         # If self.opt_obj_tilts has shape = (N,2), it'll return multiple propagtors stacked at axis 0 (N,Y,X)
         # Note that 0 tilts is numerically equivalent to the H and can be verified by "torch.allclose(model.H, model.get_propagators([0]))"
-
+        
+        # If you want to expand the opt_obj_tilts from (1,2) to (N,2), use the following lines
+        # model.opt_obj_tilts.data = torch.broadcast_to(model.opt_obj_tilts, [<N_scans>,2]).clone() # Replace <N_scans> with your actual N_scans
+        # model.set_optimizer(lr_params = {
+        # 'obja'            : 5e-4,
+        # 'objp'            : 5e-4,
+        # 'obj_tilts'       : 1e-4, 
+        # 'probe'           : 1e-4, 
+        # 'probe_pos_shifts': 1e-4})
+        # optimizer=torch.optim.Adam(model.optimizer_params)
+        
         if self.tilt_obj is False:
             return self.H[None,:,:] # Make it into (1,Y,X)
         

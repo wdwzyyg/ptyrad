@@ -1,32 +1,32 @@
-# CNS
+# NNO
 
-ptycho_output_path = 'data/CNS_from_Hari/Niter10000.mat'
-exp_CBED_path      = 'data/CNS_from_Hari/240327_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_2configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
+ptycho_output_path = 'data/20240508_tNNO_Hari/Niter500.mat'
+exp_CBED_path      = 'data/20240508_tNNO_Hari/NNO_tilt_x=2mrad_200crop_pad20_1e6.mat' 
 
 exp_params = {
     'kv'                : 300,  # kV
     'conv_angle'        : 30, # mrad, semi-convergence angle
-    'Npix'              : 164, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
+    'Npix'              : 200, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'rbf'               : None, # Pixels of radius of BF disk
-    'dx_spec'           : 0.1406,# Ang, used to calculate dk
-    'defocus'           : -100, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention, which is opposite from Dr.Probe or TFS UI display
+    'dx_spec'           : 0.1579,# Ang, used to calculate dk
+    'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention, which is opposite from Dr.Probe or TFS UI display
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 10, # Ang
-    'Nlayer'            : 1,
-    'N_scans'           : 7134,
-    'N_scan_slow'       : 87,
-    'N_scan_fast'       : 82,
-    'scan_step_size'    : 0.28, # Ang
+    'z_distance'        : 5, # Ang
+    'Nlayer'            : 48,
+    'N_scans'           : 6400,
+    'N_scan_slow'       : 80,
+    'N_scan_fast'       : 80,
+    'scan_step_size'    : 0.1974, # Ang
     'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
-    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
-    'omode_max'         : 2, #1
+    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # (tilt_y,tilt_x)mrad, 'tilt_type' = 'all' or 'each'
+    'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
-    'pmode_max'         : 2, #2
+    'pmode_max'         : 5, #2
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
     'cbeds_permute'     : (0,1,3,2),
-    'cbeds_reshape'     : (7134,164,164),
+    'cbeds_reshape'     : (6400,200,200),
     'cbeds_flipT'       : None, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'probe_simu_params' : None
     }

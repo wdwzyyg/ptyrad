@@ -1,4 +1,4 @@
-# BaM_128
+# STO
 
 ptycho_output_path = 'data/20240412_STO_bilayer_07_Hari/Niter1000.mat'
 exp_CBED_path      = 'data/20240412_STO_bilayer_07_Hari/data_roi1_Ndp256_dp.hdf5' 
@@ -17,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.393, # Ang
-    'scan_flip'         : (2),  # (2) for simu pos, None for imported pos. Modify scan_flip would change the image orientation.
+    'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, #(1,0,2,0), # (scale, asymmetry, rotation, shear)
     'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
     'omode_max'         : 1,

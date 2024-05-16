@@ -109,6 +109,8 @@ class Initializer:
         print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
         print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
         print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+        self.init_variables['N_scan_slow'] = exp_params['N_scan_slow']
+        self.init_variables['N_scan_fast'] = exp_params['N_scan_fast']
         self.init_variables['dx'] = dx #   Ang
         self.init_variables['dk'] = dk # 1/Ang
         
@@ -276,13 +278,15 @@ class Initializer:
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
         
-        # Postprocess the scan positions if needed        
-        if self.init_params['exp_params']['scan_flip'] is not None:
-            scan_flip = self.init_params['exp_params']['scan_flip']
-            print(f"Flipping scan pattern (N_scan_slow, N_scan_fast, 2) with axes = {scan_flip}")
-            pos = pos.reshape(N_scan_slow, N_scan_fast, 2)
-            pos = np.flip(pos, scan_flip)
-            pos = pos.reshape(-1,2)
+        # Postprocess the scan positions if needed      
+        if self.init_params['exp_params']['scan_flipT'] is not None:
+            flipT_axes = np.nonzero(self.init_params['exp_params']['scan_flipT'])[0]
+            if len(flipT_axes) > 0 :
+                print(f"Flipping scan pattern (N_scan_slow, N_scan_fast, 2) with [flipup, fliplr, transpose] = {flipT_axes}")
+                pos = pos.reshape(N_scan_slow, N_scan_fast, 2)
+                pos = np.flip(pos, flipT_axes)
+                pos = pos.reshape(-1,2)
+            
         if self.init_params['exp_params']['scan_affine'] is not None:
             (scale, asymmetry, rotation, shear) = self.init_params['exp_params']['scan_affine']
             print(f"Applying affine transofrmation to scan pattern with (scale, asymmetry, rotation, shear) = {(scale, asymmetry, rotation, shear)}")

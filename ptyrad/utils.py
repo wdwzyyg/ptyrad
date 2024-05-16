@@ -125,6 +125,8 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
+                     'N_scan_slow'      : model.N_scan_slow,
+                     'N_scan_fast'      : model.N_scan_fast,
                      'crop_pos'         : model.crop_pos,
                      'z_distance'       : model.z_distance,
                      'dx'               : model.dx,
@@ -217,7 +219,13 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         
     if constraint_params['probe_mask_k']['freq'] is not None:
         output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
-            
+    
+    if constraint_params['pphase_smooth']['freq'] is not None:
+        output_path += f"_ppsm{round(constraint_params['pphase_smooth']['std'],2)}"
+    
+    if constraint_params['tilt_smooth']['freq'] is not None:
+        output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
+    
     output_path += postfix
     
     if recon_params['SAVE_ITERS'] is not None:
@@ -239,6 +247,8 @@ def make_batches(indices, pos, batch_size, mode='random'):
     # Note:
     #   The actual batch size would only be "close" if it's not divisible by len(indices) for 'random' grouping
     #   For 'compact' or 'sparse', it's generally fluctuating around the specified batch size
+    #   'sparse' can be quite slow for large scan positions (like 256x256 takes more than 10min, and 128x128 takes more than 1min on a CPU)
+    #   PtychoShelves automatically switches to 'random' for len(pos) > 1e3 and relying on the random statistics 
     #   To check the correctness of each grouping, you may visualize the pos
     #   Also we want to make sure we're not missing any indices, so we can do:
     #
@@ -566,7 +576,7 @@ def make_stem_probe(params_dict):
     # Inputs: 
         #  params_dict: probe parameters and other settings
     
-    from numpy.fft import ifft2, fftshift, ifftshift
+    from numpy.fft import ifft2, fftshift, ifftshift, fftfreq
     
     ## Basic params
     voltage     = params_dict["kv"]         # Ang
@@ -603,8 +613,9 @@ def make_stem_probe(params_dict):
         raise ValueError("Either 'rbf' or 'dx' must be provided to calculate dk sampling.")
     
     # Make k space sampling and probe forming aperture
-    kx = np.linspace(-np.floor(Npix/2),np.ceil(Npix/2)-1,Npix)
-    [kX,kY] = np.meshgrid(kx,kx)
+    kx = fftshift(fftfreq(Npix, 1/Npix))
+    # kx = np.linspace(-np.floor(Npix/2),np.ceil(Npix/2)-1,Npix)
+    [kX,kY] = np.meshgrid(kx,kx, indexing='xy')
 
     kX = kX*dk
     kY = kY*dk
@@ -917,7 +928,7 @@ def get_rbf(cbeds, thresh=0.5):
     cbed = cbeds.sum(0)
     line = cbed.max(0)
     indices = np.where(line > line.max()*thresh)[0]
-    rbf = 0.5*(indices[-1]-indices[0])
+    rbf = 0.5*(indices[-1]-indices[0]) # Return rbf in px
     return rbf
 
 def add_const_phase_shift(cplx, phase_shift):

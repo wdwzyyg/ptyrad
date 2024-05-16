@@ -1,4 +1,4 @@
-# CNS
+# NNO3
 
 ptycho_output_path = 'data/20240417_NNO3PlanviewPtychoRT_Lopa/Niter1000_Yi.mat' #Niter2000.mat
 exp_CBED_path      = 'data/20240417_NNO3PlanviewPtychoRT_Lopa/centered.mat' 
@@ -17,12 +17,12 @@ exp_params = {
     'N_scan_slow'       : 64,
     'N_scan_fast'       : 64,
     'scan_step_size'    : 0.4398, # Ang
-    'scan_flip'         : (1),  # (1) for 'simu' pos, None for loaded pos. Modify scan_flip would change the image orientation.
+    'scan_flipT'        : (0,1,0), # (0,1,0) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # mrad, 'tilt_type' = 'all' or 'each'
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
-    'pmode_max'         : 6,
+    'pmode_max'         : 12,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
     'cbeds_permute'     : (3,2,0,1),
