@@ -130,10 +130,11 @@ class PtychoAD(torch.nn.Module):
         """ Sets the optimizer with lr_params """
         # # Use this to edit learning rate if needed some refinement
 
-        # model.set_optimizer(lr_params={'obja': 1e-4,
-        #                                'objp': 1e-4,
-        #                                'probe': 1e-4, 
-        #                                'probe_pos_shifts': 1e-2})
+        # model.set_optimizer(lr_params={'obja'            : 5e-4,
+        #                                'objp'            : 5e-4,
+        #                                'obj_tilts'       : 1e-4,
+        #                                'probe'           : 1e-4, 
+        #                                'probe_pos_shifts': 1e-4})
         # optimizer=torch.optim.Adam(model.optimizer_params)
         
         self.lr_params = lr_params

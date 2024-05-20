@@ -57,7 +57,7 @@ class Initializer:
         # Note:
         # For caching, at least 2 out of 3 fields are using the same file path
         # Therefore, there's only one possible source for the self.cache_contents
-        # With 2 file source posibilities, the self.cache_contents is either caching from 'pt' or 'PtyShv'
+        # With 2 file source posibilities, the self.cache_contents is either caching from 'PtyRAD' or 'PtyShv'
         # Even we add more file type supports in the future (py4dstem or ptypy), the cache would still be a single file type
         
         print("\n### Initializing cache ###")
@@ -67,18 +67,18 @@ class Initializer:
         self.use_cached_probe = False
         self.use_cached_pos = False
         
-        for source in ('PtyShv', 'pt'):
+        for source in ('PtyShv', 'PtyRAD'):
             self.set_use_cached_flags(source)
             
         if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
-            if self.cache_source == 'pt':
-                print(f"Loading 'pt' file from {self.cache_path} for caching")
+            if self.cache_source == 'PtyRAD':
+                print(f"Loading 'PtyRAD' file from {self.cache_path} for caching")
                 self.cache_contents = load_pt(self.cache_path)
             elif self.cache_source == 'PtyShv':
                 print(f"Loading 'PtyShv' file from {self.cache_path} for caching")
                 self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
             else:
-                raise KeyError(f"File type {source} not implemented for caching yet, please use 'pt', or 'PtyShv'!")
+                raise KeyError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
         print(f"use_cached_obj   = {self.use_cached_obj}")
         print(f"use_cached_probe = {self.use_cached_probe}")
         print(f"use_cached_pos   = {self.use_cached_pos}")
@@ -114,7 +114,6 @@ class Initializer:
         self.init_variables['dx'] = dx #   Ang
         self.init_variables['dk'] = dk # 1/Ang
         
-            
     def init_measurements(self):
         source = self.init_params['source_params']['measurements_source']
         params = self.init_params['source_params']['measurements_params']
@@ -186,7 +185,7 @@ class Initializer:
         # Load file
         if source   == 'custom':
             probe = params
-        elif source == 'pt':
+        elif source == 'PtyRAD':
             pt_path = params
             ckpt = self.cache_contents if self.use_cached_probe else load_pt(pt_path)
             probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
@@ -214,7 +213,7 @@ class Initializer:
                 probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows']) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
                                 
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
+            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
         
         # Postprocess
         if self.init_params['exp_params']['probe_permute'] is not None and source != 'PtyShv':
@@ -254,7 +253,7 @@ class Initializer:
         # Load file
         if source   == 'custom':
             pos = params
-        elif source == 'pt':
+        elif source == 'PtyRAD':
             pt_path = params
             ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
             crop_pos         = ckpt['model_params']['crop_pos'].detach().cpu().numpy()
@@ -276,7 +275,7 @@ class Initializer:
             obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
+            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
         
         # Postprocess the scan positions if needed      
         if self.init_params['exp_params']['scan_flipT'] is not None:
@@ -319,7 +318,7 @@ class Initializer:
         # Load file
         if source   == 'custom':
             obj = params
-        elif source == 'pt':
+        elif source == 'PtyRAD':
             pt_path = params
             ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
             obja, objp = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy(), ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
@@ -352,7 +351,7 @@ class Initializer:
             else:
                 obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'pt', 'PtyShv', or 'simu'!")
+            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
         
         # Select omode range and print summary
         omode_max = self.init_params['exp_params']['omode_max']
@@ -398,12 +397,23 @@ class Initializer:
         print(f"\n### Initializing obj tilts with tilt_type = '{tilt_type}' ###")
         if tilt_type == 'each':
             obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
+            print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
         elif tilt_type == 'all':
             obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
+            print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
+        elif tilt_type == 'load_PtyRAD':
+            # Currently only PtyRAD provides crystal tilt optimization, and it's probably a better strategy to refine tilts from a good object/probe/pos
+            # so I assume you're continuing a PtyRAD reconstruction with everything loaded (or at least 2 out of 3 so you have the self.cache_contents populated)
+            # Loading from ptycho_output_path
+            try:
+                obj_tilts = np.float32(self.cache_contents['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
+                print(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad")
+            except AttributeError:
+                print("Couldn't find the cached_content for obj_tilts from PtyRAD result, check your `source_params`, initialize with gloabl 0 tilts")
+                obj_tilts = np.zeros((1,2), dtype = np.float32)
         else:
-            raise KeyError(f"Unknown tilt_type = {tilt_type}, please use 'each' or 'all'!")
+            raise KeyError(f"Unknown tilt_type = {tilt_type}, please use 'each', 'all', or 'load_PtyRAD'!")
         
-        print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
         self.init_variables['obj_tilts'] = obj_tilts
         print(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}")
     
@@ -456,13 +466,10 @@ class Initializer:
             raise ValueError(f"Found inconsistency between obj.shape[1]({obj.shape[1]}) and Nlayer({Nlayer})")
 
         # Check obj tilts
-        if obj_tilts is None:
-            print(f"obj_tilts is None")
+        if len(obj_tilts) in [1, N_scans]:
+            print(f"obj_tilts is consistent with either 1 or N_scans")
         else:
-            if len(obj_tilts) in [1, N_scans]:
-                print(f"obj_tilts is consistent with either 1 or N_scans")
-            else:
-                raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
+            raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
         
         print(f"Pass the consistency chcek of initialized variables, initialization is done!")
     

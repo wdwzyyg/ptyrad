@@ -2,14 +2,12 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, add_const_phase_shift
+from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 from torch.nn.functional import interpolate
 import torch
 from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
-from skimage.restoration import unwrap_phase
-
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
@@ -128,24 +126,6 @@ class CombinedConstraint(torch.nn.Module):
             probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
             model.opt_probe.data = probe_r
             print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
-
-    def apply_pphase_smooth(self, model, niter):
-        ''' Apply probe phase smoothing constraint '''
-        pphase_smooth_freq = self.constraint_params['pphase_smooth']['freq']
-        pphase_smooth_std  = self.constraint_params['pphase_smooth']['std']
-        if pphase_smooth_freq is not None and niter % pphase_smooth_freq == 0: 
-            probe_k       = fftshift2(fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k has 0 frequency at the center
-            probe_k_phase = probe_k.angle().detach().cpu().numpy()
-            unwrapped_phase_k = np.array([unwrap_phase(phase, wrap_around=True) for phase in probe_k_phase]) # (pmode,Y,X), do the unwrap with scikit-image mode by mode
-            unwrapped_phase_k = torch.tensor(unwrapped_phase_k, dtype=torch.float32, device=model.device)
-            if pphase_smooth_std is None or pphase_smooth_std == 0:
-                updated_probe_k = torch.polar(abs=probe_k.abs(), angle=unwrapped_phase_k)
-                model.opt_probe.data = fftshift2(ifft2(ifftshift2(updated_probe_k)))
-                print(f"Apply probe phase unwrapping at iter {niter}")
-            else:
-                updated_probe_k = torch.polar(abs=probe_k.abs(), angle=gaussian_blur(unwrapped_phase_k, kernel_size=5, sigma=pphase_smooth_std))
-                model.opt_probe.data = fftshift2(ifft2(ifftshift2(updated_probe_k)))
-                print(f"Apply probe phase smoothing with std = {pphase_smooth_std} px at iter {niter}")
     
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
@@ -180,13 +160,12 @@ class CombinedConstraint(torch.nn.Module):
         obj_type               = self.constraint_params['kz_filter']['obj_type']
         beta_regularize_layers = self.constraint_params['kz_filter']['beta']
         alpha_gaussian         = self.constraint_params['kz_filter']['alpha']
-        z_pad                  = self.constraint_params['kz_filter']['z_pad']
         if kz_filter_freq is not None and niter % kz_filter_freq == 0:
             if obj_type in ['amplitude', 'both']:
-                model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='amplitude')
+                model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, obj_type='amplitude')
                 print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on obja at iter {niter}")
             if obj_type in ['phase', 'both']:
-                model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, z_pad, obj_type='phase')
+                model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, obj_type='phase')
                 print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on objp at iter {niter}")
     
     def apply_obja_thresh(self, model, niter):
@@ -232,7 +211,6 @@ class CombinedConstraint(torch.nn.Module):
             # Probe constraints
             self.apply_ortho_pmode  (model, niter)
             self.apply_probe_mask_k (model, niter)
-            self.apply_pphase_smooth(model, niter)
             self.apply_fix_probe_int(model, niter)
             # Object constraints
             self.apply_obj_blur     (model, niter)
@@ -278,14 +256,8 @@ def loss_logger(batch_losses, niter, iter_t):
     loss_iter = sum(avg_losses.values())
     return loss_iter    
 
-def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_type='phase'):
+def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase'):
     # Calculate force of regularization based on the idea that DoF = resolution^2/lambda
-    
-    # Pad the tensor with zeros
-    if z_pad is not None:
-        pad_value = 0 if obj_type=='phase' else 1
-        obj = torch.nn.functional.pad(obj.permute(0,2,3,1), (z_pad,z_pad), value=pad_value).permute(0,3,1,2) # The padding only applies to dimensions from last to front so permute is needed
-        print(f"Padding obj.shape temporarily to {[*obj.shape]} with {pad_value} for kz_filter {obj_type}")
         
     device = obj.device
     
@@ -304,10 +276,6 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, z_pad=None, obj_t
 
     # Filter the obj with filter funciton Wa, take the real part because Fourier-filtered obj could contain negative values    
     fobj = torch.real(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
-    
-    # Select the original z-range before padding
-    if z_pad is not None:
-        fobj = fobj[:,z_pad:-z_pad,:,:]
     
     if obj_type == 'amplitude':
         fobj = 1+0.9*(fobj-1) # This is essentially a soft obja threshold constraint built into the kz_filter routine for obja

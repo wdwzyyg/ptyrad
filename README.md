@@ -1,3 +1,6 @@
+## PtyRAD is now in internal beta test so it's limited to only the Muller group and invited people
+*** Please do NOT share any part of the package to anyone else! ***
+
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
 
 This package performs ptychographic reconstruction on 4D-STEM data using an automatic differation approach.
@@ -14,14 +17,14 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ### Dependencies
 
-* Python 3.10 or above
+* Python 3.11 or above
 * CUDA-supported GPU
-* PyTorch 2 or above
+* PyTorch 2.1 or above
 
 
 ### Create Conda envoronment
 ```bash
-conda create -n ptyrad python ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch torchvision torchmetrics pytorch-cuda=12.1 -c pytorch -c nvidia
+conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
 
 ### Installing
@@ -44,13 +47,8 @@ If you run into problems, have questions or suggested features / modifications, 
 
 Chia-Hao Lee (cl2696@cornell.edu)
 
-## Version History
-
-* 0.1.0
-    * Initial Release
-
 ## License
-(I haven't decided which license to go with)
+(I haven't decided which license to go with, but it's likely to be fully open just like `py4dstem`)
 
 
 ## Acknowledgments

@@ -19,7 +19,7 @@ exp_params = {
     'scan_step_size'    : 0.1974, # Ang
     'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
-    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # (tilt_y,tilt_x)mrad, 'tilt_type' = 'all' or 'each'
+    'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # (tilt_y,tilt_x) mrad, 'tilt_type' = 'all', 'each', or 'load_PtyRAD'
     'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 5, #2
@@ -36,11 +36,17 @@ source_params = {
     'measurements_source': 'mat',
     'measurements_params': [exp_CBED_path, 'cbed'],
     'obj_source'         : 'simu',
-    'obj_params'         : None, # (1,8,391,403),
+    'obj_params'         : None,
     'probe_source'       : 'simu',
     'probe_params'       : None, 
     'pos_source'         : 'simu',
     'pos_params'         : None,
+    # 'obj_source'         : 'PtyRAD', 
+    # 'obj_params'         : ptycho_output_path, 
+    # 'probe_source'       : 'PtyRAD',
+    # 'probe_params'       : ptycho_output_path, 
+    # 'pos_source'         : 'PtyRAD',
+    # 'pos_params'         : ptycho_output_path,
     # 'obj_source'         : 'PtyShv', 
     # 'obj_params'         : ptycho_output_path, 
     # 'probe_source'       : 'PtyShv',

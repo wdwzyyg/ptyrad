@@ -1,6 +1,7 @@
 # NMC
 
-ptycho_output_path = 'data/20240508_NMC_Dasol/4/roi0_Ndp128/MLs_L1_p4_g32_Ndp128_pc1_noModel_vp1_Ns10_dz10_reg0.7/Niter1000.mat'
+#ptycho_output_path = 'data/20240508_NMC_Dasol/4/roi0_Ndp128/MLs_L1_p4_g32_Ndp128_pc1_noModel_vp1_Ns10_dz10_reg0.7/Niter1000.mat'
+ptycho_output_path = 'output/NMC/20240512_full_N4096_dp128_sparse64_p4_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_tlr5e-4_1obj_10slice_dz10.0_kzreg1_pmk0.52/model_iter2000.pt'
 exp_CBED_path      = 'data/20240508_NMC_Dasol/4/data_roi0_Ndp128_dp.hdf5' 
 
 exp_params = {
@@ -18,8 +19,8 @@ exp_params = {
     'N_scan_fast'       : 64,
     'scan_step_size'    : 0.246, # Ang
     'scan_flipT'        : (0,1,0), # (0,1,0) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'scan_affine'       : (1,0,-2.5,-2), # (scale, asymmetry, rotation, shear)
-    'obj_tilts'         : {'tilt_type':'each', 'init_tilts':[[4,2.6]]}, # (tilt_y,tilt_x) mrad, 'tilt_type' = 'all' or 'each'
+    'scan_affine'       : None, #(1,0,-2.5,-2), # (scale, asymmetry, rotation, shear)
+    'obj_tilts'         : {'tilt_type':'load_PtyRAD', 'init_tilts':[[4,2.6]]}, # (tilt_y,tilt_x) mrad, 'tilt_type' = 'all', 'each', or 'load_PtyRAD'
     'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 4, #2
@@ -35,12 +36,18 @@ exp_params = {
 source_params = {
     'measurements_source': 'hdf5',
     'measurements_params': [exp_CBED_path, 'dp'],
-    'obj_source'         : 'simu',
-    'obj_params'         : None, # (1,8,391,403),
-    'probe_source'       : 'simu',
-    'probe_params'       : None, 
-    'pos_source'         : 'simu',
-    'pos_params'         : None,
+    # 'obj_source'         : 'simu',
+    # 'obj_params'         : None,
+    # 'probe_source'       : 'simu',
+    # 'probe_params'       : None, 
+    # 'pos_source'         : 'simu',
+    # 'pos_params'         : None,
+    'obj_source'         : 'PtyRAD', 
+    'obj_params'         : ptycho_output_path, 
+    'probe_source'       : 'PtyRAD',
+    'probe_params'       : ptycho_output_path, 
+    'pos_source'         : 'PtyRAD',
+    'pos_params'         : ptycho_output_path,
     # 'obj_source'         : 'PtyShv', 
     # 'obj_params'         : ptycho_output_path, 
     # 'probe_source'       : 'PtyShv',

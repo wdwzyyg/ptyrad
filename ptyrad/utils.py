@@ -220,9 +220,6 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if constraint_params['probe_mask_k']['freq'] is not None:
         output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
     
-    if constraint_params['pphase_smooth']['freq'] is not None:
-        output_path += f"_ppsm{round(constraint_params['pphase_smooth']['std'],2)}"
-    
     if constraint_params['tilt_smooth']['freq'] is not None:
         output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
     
@@ -930,6 +927,146 @@ def get_rbf(cbeds, thresh=0.5):
     indices = np.where(line > line.max()*thresh)[0]
     rbf = 0.5*(indices[-1]-indices[0]) # Return rbf in px
     return rbf
+
+def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, window_size=9):
+    """ Estimate the local obj tilts from relative atomic column shifts """
+    # objp (Nz, Ny, Nx)
+    # pos: probe position at integer px sites, (N,2)
+
+    import matplotlib.pyplot as plt
+    from skimage.feature import blob_log
+    from scipy.ndimage import center_of_mass
+    from scipy.interpolate import griddata
+    from scipy.optimize import curve_fit
+
+    # Choose the 2 slices from objp and detect blobs from the top slice
+    slice_t, slice_b = slice_indices
+    height = (slice_b - slice_t)*z_distance
+    print(f"The height difference between slices {(slice_t, slice_b)} is {height:.2f} Ang")
+
+    target_stack = objp[[slice_t,slice_b]]
+    blobs = blob_log(target_stack[0], **blob_params)
+    print(f"Found {len(blobs)} blobs with mean radius of {1.414*blobs.mean(0)[-1]:.2f} px or {dx*1.414*blobs.mean(0)[-1]:.2f} Ang")
+    
+    # Plot the detected blobs
+    fig, ax = plt.subplots(figsize=(18,16))
+    ax.imshow(target_stack[0])
+    for blob in blobs:
+        y, x, r = blob
+        c = plt.Circle((x, y), r, linewidth=2, fill=False)
+        ax.add_patch(c)
+    plt.show()
+    
+    # Get the CoM of each atomic column for both top and bottom slices
+    row_start = np.uint32(blobs[:,0]-window_size//2)
+    row_end   = np.uint32(blobs[:,0]+window_size//2+1)
+    col_start = np.uint32(blobs[:,1]-window_size//2)
+    col_end   = np.uint32(blobs[:,1]+window_size//2+1)
+    coord_t   = np.zeros((len(blobs),2))
+    coord_b   = np.zeros((len(blobs),2))
+
+    for i in range(len(blobs)):
+        crop_img_t = target_stack[0][row_start[i]:row_end[i], col_start[i]:col_end[i]]
+        crop_img_b = target_stack[1][row_start[i]:row_end[i], col_start[i]:col_end[i]]
+        coord_t[i] = center_of_mass(crop_img_t) + blobs[i,:-1] - window_size//2
+        coord_b[i] = center_of_mass(crop_img_b) + blobs[i,:-1] - window_size//2
+    shift_vecs = coord_b - coord_t # This is the needed tilt to correct the obj tilt so it's pointing from top to bottom
+
+    # Plot the detected CoM
+    fig, axs = plt.subplots(1,2, figsize=(8,4))
+    im0 = axs[0].imshow(crop_img_t)
+    im1 = axs[1].imshow(crop_img_b)
+    axs[0].set_title(f"crop_img_t \n {coord_t[-1].round(2)}")
+    axs[1].set_title(f"crop_img_b \n {coord_b[-1].round(2)}")
+    fig.colorbar(im0, shrink=0.7)
+    fig.colorbar(im1, shrink=0.7)
+    plt.show()
+    
+    # Plot the tilt vectors
+    X = coord_t[:,1]
+    Y = coord_t[:,0]
+    U = shift_vecs[:,1]
+    V = shift_vecs[:,0]
+    M = np.arctan(np.hypot(U,V)*dx/height)*1e3
+
+    fig, ax = plt.subplots(figsize=(16,12))
+    plt.title("Needed local object tilts", fontsize=16)
+    ax.imshow(target_stack[0], cmap='gray')
+    q = ax.quiver(X, Y, U, V, M, pivot='mid', angles='xy', scale_units='xy')
+    cbar = fig.colorbar(q, shrink=0.75)
+    cbar.ax.set_ylabel('mrad')
+    plt.show()
+    
+    # Interpolate tilt_y, tilt_x map
+    tilt_y = np.arctan(V*dx/height)*1e3
+    tilt_x = np.arctan(U*dx/height)*1e3
+
+    xnew, ynew= np.mgrid[0:target_stack.shape[-2]:1, 0:target_stack.shape[-1]:1]
+    tilt_y_interp = griddata(np.stack([Y,X], -1), tilt_y ,(xnew, ynew), method='cubic')
+    tilt_x_interp = griddata(np.stack([Y,X], -1), tilt_x ,(xnew, ynew), method='cubic')
+
+    fig, axs = plt.subplots(1,2, figsize=(12,6))
+    im0=axs[0].imshow(tilt_y_interp)
+    im1=axs[1].imshow(tilt_x_interp)
+    axs[0].set_title(f"tilt_y_interp")
+    axs[1].set_title(f"tilt_x_interp")
+    cbar0 = fig.colorbar(im0, shrink=0.7)
+    cbar0.ax.set_ylabel('mrad')
+    cbar1 = fig.colorbar(im1, shrink=0.7)
+    cbar1.ax.set_ylabel('mrad')
+    plt.show()
+    
+    # Use curve_fit to extrapolate to the entire FOV
+    def surface_fn(t, a1, b1, c1, d):
+        y,x = t
+        return  a1*x + b1*y + c1*x*y + d
+
+    xdata = np.vstack((Y,X))
+    ydata_tilt_y = tilt_y
+    ydata_tilt_x = tilt_x
+    popt_tilt_y, _ = curve_fit(surface_fn, xdata, ydata_tilt_y)
+    popt_tilt_x, _ = curve_fit(surface_fn, xdata, ydata_tilt_x)
+    
+    # Implanting griddata interpolated values into the fitted background
+    surface_tilt_y = surface_fn(np.stack((ynew,xnew)), *popt_tilt_y)
+    surface_tilt_x = surface_fn(np.stack((ynew,xnew)), *popt_tilt_x)
+
+    mask_tilt_y = ~np.isnan(tilt_y_interp)
+    surface_tilt_y[mask_tilt_y] = tilt_y_interp[mask_tilt_y]
+    mask_tilt_x = ~np.isnan(tilt_x_interp)
+    surface_tilt_x[mask_tilt_x] = tilt_x_interp[mask_tilt_x]
+
+    fig, axs = plt.subplots(1,2, figsize=(12,6))
+    im0=axs[0].imshow(surface_tilt_y)
+    im1=axs[1].imshow(surface_tilt_x)
+    axs[0].set_title(f"surface_tilt_y")
+    axs[1].set_title(f"surface_tilt_x")
+    cbar0 = fig.colorbar(im0, shrink=0.7)
+    cbar0.ax.set_ylabel('mrad')
+    cbar1 = fig.colorbar(im1, shrink=0.7)
+    cbar1.ax.set_ylabel('mrad')
+    plt.show()
+    
+    # Sample the surface with our probe position
+    tilt_ys = surface_tilt_y[pos[:,0], pos[:,1]]
+    tilt_xs = surface_tilt_x[pos[:,0], pos[:,1]]
+    obj_tilts = np.stack([tilt_ys, tilt_xs], axis=-1)
+
+    fig, axs = plt.subplots(1,2, figsize=(12,4))
+    im0=axs[0].scatter(x=pos[:,1], y=pos[:,0], c=obj_tilts[:,0])
+    im1=axs[1].scatter(x=pos[:,1], y=pos[:,0], c=obj_tilts[:,1])
+    axs[0].invert_yaxis()
+    axs[1].invert_yaxis()
+
+    axs[0].set_title(f"tilt_ys")
+    axs[1].set_title(f"tilt_xs")
+    cbar0 = fig.colorbar(im0, shrink=0.7)
+    cbar0.ax.set_ylabel('mrad')
+    cbar1 = fig.colorbar(im1, shrink=0.7)
+    cbar1.ax.set_ylabel('mrad')
+    plt.show()
+
+    return obj_tilts
 
 def add_const_phase_shift(cplx, phase_shift):
     """ Add a constant phase shift to the complex input """

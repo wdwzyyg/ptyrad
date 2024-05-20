@@ -91,7 +91,7 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     if pass_fig:
         return fig
         
-def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, figsize=(8,8), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
+def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, figsize=(16,16), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
@@ -148,7 +148,7 @@ def plot_affine_transformation(scale, asymmetry, rotation, shear):
     Af = compose_affine_matrix(scale, asymmetry, rotation, shear)
     
     plt.figure()
-    plt.title("Visualize affine transformation")
+    plt.title(f"Visualize affine transformation \n (scale, asym, rot, shear) = {scale, asymmetry, rotation, shear}", fontsize=14)
 
     # Add origin and scatter points
     plt.scatter(0, 0, color='gray', marker='o', s=3)
