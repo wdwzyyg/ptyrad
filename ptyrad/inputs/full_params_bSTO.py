@@ -1,6 +1,5 @@
 # bSTO
 
-#ptycho_output_path = 'data/20240508_bSTO_Hari/Niter100.mat'
 ptycho_output_path = 'output/bSTO/20240523_full_N50688_dp128_compact32_p6_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_tlr1e-4_1obj_13slice_dz10.0_kzf1_dpblur0.5_continue/model_iter0200.pt'
 exp_CBED_path      = 'data/20240508_bSTO_Hari/01_crop198_256_x25_y1_centered.mat' 
 
@@ -18,7 +17,7 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 198,
     'scan_step_size'    : 0.415, # Ang
-    'scan_flipT'        : None, # (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'scan_flipT'        : None, # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'obj_tilts'         : {'tilt_type':'load_PtyRAD', 'init_tilts':[[0,0]]}, # (tilt_y,tilt_x) mrad, 'tilt_type' = 'all', 'each', or 'load_PtyRAD'
     'omode_max'         : 1, #1
@@ -55,3 +54,51 @@ source_params = {
     # 'pos_source'         : 'PtyShv',
     # 'pos_params'         : ptycho_output_path,
 }
+
+model_params = {
+    'recenter_cbeds'      : None,    # 'all', 'each', None
+    'detector_blur_std'   : 0.5,    # scalar(px), None
+    'lr_params':{
+        'obja'            : 5e-4,
+        'objp'            : 5e-4,
+        'obj_tilts'       : 0, 
+        'probe'           : 1e-4, 
+        'probe_pos_shifts': 0}}
+
+loss_params = {
+    'loss_single': {'state': True, 'weight': 1.0, 'dp_pow': 0.5},
+    'loss_pacbed': {'state': True, 'weight': 0.5, 'dp_pow': 0.2},
+    'loss_sparse': {'state': True, 'weight': 0.1, 'ln_order': 1},
+    'loss_simlar': {'state': False, 'weight': 1.0, 'obj_type':'both', 'scale_factor':[1,1,1], 'blur_std':1}
+}
+
+constraint_params = {
+    'ortho_pmode'   : {'freq': 1},
+    'probe_mask_k'  : {'freq': None, 'radius':0.22, 'width':0.05}, # k-radius should be larger than 2*rbf/Npix to avoid cutting out the BF disk
+    'fix_probe_int' : {'freq': 1},
+    'obj_blur'      : {'freq': None, 'obj_type':'both', 'std':1},
+    'kr_filter'     : {'freq': None,    'obj_type':'both', 'radius':0.15, 'width':0.05},
+    'kz_filter'     : {'freq': 1,    'obj_type':'both', 'beta':1, 'alpha':1},
+    'obja_thresh'   : {'freq': None, 'relax':0, 'thresh':[0.95**(1/25), 1.05**(1/25)]},
+    'objp_postiv'   : {'freq': 1,    'relax':0},
+    'tilt_smooth'   : {'freq': None, 'std':2}
+}
+
+def get_date(date_format = '%Y%m%d'):
+    from datetime import date
+    date_format = date_format
+    date_str = date.today().strftime(date_format)
+    return date_str
+
+# Recon params
+NITER        = 200
+INDICES_MODE = 'full'   # 'full', 'center', 'sub'
+BATCH_SIZE   = 32
+GROUP_MODE   = 'compact' # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
+SAVE_ITERS   = 5        # scalar or None
+
+# Output folder and pre/postfix, note that the needed / and _ are automatically generated
+output_dir   = 'output/bSTO'
+prefix       = get_date(date_format='%Y%m%d')
+postfix      = 'continue2'
+fig_list     = ['all'] # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures

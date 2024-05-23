@@ -18,14 +18,23 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 ### Dependencies
 
 * Python 3.11 or above
-* CUDA-supported GPU
+* CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
 
 
-### Create Conda envoronment
+### Create Conda envoronment - local
 ```bash
-conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
 ```
+
+### Create Conda envoronment - ALTAS
+```bash
+conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+```
+
+*** Note ***
+-  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
+- `conda` could be taking ~ 10 min to solve the environment, you may try `mamba` that could be faster.
 
 ### Installing
 

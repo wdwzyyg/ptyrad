@@ -63,21 +63,30 @@ class CombinedLoss(torch.nn.Module):
     
     def get_loss_simlar(self, object_patches, omode_occu):
         # Calculate loss_simlar by calculating the similarity between different omodes
-        # This loss term is specifically designed for regularizing omode by reducing the std of downsampled obj along the omode dimension 
+        # This loss term is specifically designed for regularizing omode by reducing the std of Gaussian_blurred / downsampled obj along the omode dimension
+        # obja/p_patches = (N,omode,Nz,Ny,Nx) 
         simlar_params = self.loss_params['loss_simlar']
         if simlar_params['state']:
             obj_type     = simlar_params['obj_type']
+            obj_blur_std = simlar_params['blur_std']
             scale_factor = simlar_params['scale_factor']
             obja_patches = object_patches[...,0]
             objp_patches = object_patches[...,1]
             temp_loss = torch.tensor(0, dtype=torch.float32, device=self.device)
             
             if obj_type in ['amplitude', 'both']:
-                scaled_patches = interpolate(obja_patches, scale_factor = scale_factor, mode = 'area') * omode_occu[:,None,None,None] # scaled_patches = (N,omode,Nz,Ny,Nx)
-                temp_loss += scaled_patches.std(1).mean()
-            if obj_type in ['phase', 'both']:            
-                scaled_patches = interpolate(objp_patches, scale_factor = scale_factor, mode = 'area') * omode_occu[:,None,None,None] # scaled_patches = (N,omode,Nz,Ny,Nx)
-                temp_loss += scaled_patches.std(1).mean()
+                if obj_blur_std is not None and obj_blur_std != 0:
+                    # The torch stack and list comp is needed because gaussian_blur defaulted "replicate" padding, and for 2D padding it's only supporting 4D tenosr while the obja_patches is 5D
+                    obja_patches = torch.stack([gaussian_blur(obja_patch, kernel_size=5, sigma=obj_blur_std) for obja_patch in obja_patches]) 
+                if scale_factor is not None and any(scale != 1 for scale in scale_factor):
+                    obja_patches = interpolate(obja_patches, scale_factor = scale_factor, mode = 'area')  
+                temp_loss += (obja_patches * omode_occu[:,None,None,None]).std(1).mean()
+            if obj_type in ['phase', 'both']:
+                if obj_blur_std is not None and obj_blur_std != 0:
+                    objp_patches = torch.stack([gaussian_blur(objp_patch, kernel_size=5, sigma=obj_blur_std) for objp_patch in objp_patches])
+                if scale_factor is not None and any(scale != 1 for scale in scale_factor):
+                    objp_patches = interpolate(objp_patches, scale_factor = scale_factor, mode = 'area')  
+                temp_loss += (objp_patches * omode_occu[:,None,None,None]).std(1).mean()
             loss_simlar = simlar_params['weight'] * temp_loss
         else:
             loss_simlar = torch.tensor(0, dtype=torch.float32, device=self.device)
@@ -153,6 +162,22 @@ class CombinedConstraint(torch.nn.Module):
                 model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=5, sigma=obj_blur_std)
                 print(f"Apply lateral (y,x) Gaussian blur with std = {obj_blur_std} px on objp at iter {niter}")
                 
+    def apply_kr_filter(self, model, niter):
+        ''' Apply kr Fourier filter constraint on object '''
+        # Note that the `kr_filter` is applied on stacked 2D FFT of object, so it's applying on (omode,z,ky,kx)
+        # The kr filter is similar to a top-hat, so it's more like a cut-off, instead of the weak lateral Gaussian blurring (alpha) included in the `kz_filter` 
+        kr_filter_freq   = self.constraint_params['kr_filter']['freq']
+        obj_type         = self.constraint_params['kr_filter']['obj_type']
+        relative_radius  = self.constraint_params['kr_filter']['radius']
+        relative_width   = self.constraint_params['kr_filter']['width']
+        if kr_filter_freq is not None and niter % kr_filter_freq == 0:
+            if obj_type in ['amplitude', 'both']:
+                model.opt_obja.data = kr_filter(model.opt_obja, relative_radius, relative_width)
+                print(f"Apply kr_filter constraint with kr_radius = {relative_radius} on obja at iter {niter}")
+            if obj_type in ['phase', 'both']:
+                model.opt_objp.data = kr_filter(model.opt_objp, relative_radius, relative_width)
+                print(f"Apply kr_filter constraint with kr_radius = {relative_radius} on objp at iter {niter}")
+        
     def apply_kz_filter(self, model, niter):
         ''' Apply kz Fourier filter constraint on object '''
         # Note that the `kz_filter`` behaves differently for 'amplitude' and 'phase', see `kz_filter` implementaion for details
@@ -187,7 +212,7 @@ class CombinedConstraint(torch.nn.Module):
         relax            = self.constraint_params['objp_postiv']['relax'] 
         if objp_postiv_freq is not None and niter % objp_postiv_freq == 0: 
             model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
-            relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
+            relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_postiv))' if relax != 0 else 'hard'
             print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")           
         
     def apply_tilt_smooth(self, model, niter):
@@ -214,6 +239,7 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_fix_probe_int(model, niter)
             # Object constraints
             self.apply_obj_blur     (model, niter)
+            self.apply_kr_filter    (model, niter)
             self.apply_kz_filter    (model, niter)
             self.apply_obja_thresh  (model, niter)
             self.apply_objp_postiv  (model, niter)
@@ -256,8 +282,22 @@ def loss_logger(batch_losses, niter, iter_t):
     loss_iter = sum(avg_losses.values())
     return loss_iter    
 
+def kr_filter(obj, radius, width):
+    ''' Apply kr_filter using the 2D sigmoid filter '''
+    
+    # Create the filter function W, note that the W has to be corner-centered
+    Ny, Nx = obj.shape[-2:]
+    mask = make_sigmoid_mask(min(Ny,Nx), radius, width).to(obj.device)
+    W = ifftshift2(interpolate(mask[None,None,], size=(Ny,Nx))).squeeze() # interpolate needs 2 additional dimension (N,C,...) for the input than the output dimension
+        
+    # Filter the obj with filter funciton Wa, take the real part because Fourier-filtered obj could contain negative values    
+    fobj = torch.real(ifft2(fft2(obj) * W[None,None,])) # Apply fft2/ifft2 for only the r(y,x) dimension so the omode and z would be broadcasted
+    
+    return fobj
+
 def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase'):
-    # Calculate force of regularization based on the idea that DoF = resolution^2/lambda
+    ''' Apply kz_filter using the arctan filter '''
+    # Note: Calculate force of regularization based on the idea that DoF = resolution^2/lambda
         
     device = obj.device
     

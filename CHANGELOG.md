@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [TODO]
+- Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be needed. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
+- Add `plot_cbeds` to `visualization`. Should take 4D cbeds input and let us plot a single CBED or pacbed based on indices with display option dp_pow.
+- Add `plot_obj_tilts` to `visualization`. Decouple the functionality from `plot_scan_pos`, should have options of interpolated tilt_y, tilt_x (doing griddata interp is probably faster than scatter plot of 65k dots) or the quiver plot form
+- Reimplement the `gaussian_blur` used in `optimization` for `obj_blur` constraint into `gaussian_blur3d` with a Conv3d operation and a pre-weighted Gaussian kernel so we can apply z-blur as a z-regularization, which should solve the wrap-around issue of `kz_filter`. (https://stackoverflow.com/questions/67633879/implementing-a-3d-gaussian-blur-using-separable-2d-convolutions-in-pytorch)
+
+## [v0.1.0-beta1.0] - 2024-05-23
+### Added
+- Add `blur_std` option for `loss_simlar` so we could compare the std between Gaussian blurred object modes
+- Add `kr_filter` as additional obj constraint to `optimization` so we could set our desirable maximum kr that contributes to the object image. Note that the positivity clipping could be doubling the apparent spatial frequencies
+- Add `run_ptyrad_altas.py`, `run_ptyrad_local.py`, and `slurm_run_ptyrad.sub` as demo scripts
+- Add `docs/` and `params_description.md` for some more explanation
+### Change
+- Rename the `kz_filter` output folder string in `make_output_folder` from `kzreg` into `kzf` for simplicity, and to be consistent with `krf` for `kr_filter` 
+- Change the `shift_cbeds` in `models` from `.abs()` to `.real.clamp(min=0)` because it seems that taking the real part of the complex Fourier filtered output from a real-valued input is a more correct approach
+- Use the `plt.show(block=False)` flag for `plot_pos_grouping` so that the non-interactive python execution wouldn't be block by the `plt.show()` when executed from script
+- Update `README.md` with the new conda install commands for local and altas usage
+
 ## [v0.1.0-alpha3.10] - 2024-05-20
 ### Added
 - Add `load_PtyRAD` option for `obj_tilts` initialization in `exp_params` so we can reconstuct from previous PtyRAD runs with `opt_obj_tilts`

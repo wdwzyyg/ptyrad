@@ -203,11 +203,17 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance}"
     
+    if constraint_params['kr_filter']['freq'] is not None:
+        obj_type = constraint_params['kr_filter']['obj_type']
+        kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
+        radius = constraint_params['kr_filter']['radius']
+        output_path += f"_{kr_str}f{radius}"
+    
     if constraint_params['kz_filter']['freq'] is not None:
         obj_type = constraint_params['kz_filter']['obj_type']
         kz_str = {'both': 'kz', 'amplitude': 'kza', 'phase': 'kzp'}.get(obj_type)
         beta = constraint_params['kz_filter']['beta']
-        output_path += f"_{kz_str}reg{beta}"
+        output_path += f"_{kz_str}f{beta}"
     
     if model.detector_blur_std is not None and model.detector_blur_std != 0:
         output_path += f"_dpblur{model.detector_blur_std}"
@@ -394,7 +400,7 @@ def imshift_single(img, shift, grid):
     shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim. w is at the center.
-    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real(). 
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real. 
     
     # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
     # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.
@@ -438,7 +444,7 @@ def imshift_batch(img, shifts, grid):
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1. w is at the center.
-    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real()
+    shifted_img = ifft2(ifftshift2(fftshift2(fft2(img)) * w))                         # For real-valued input, take shifted_img.real
     
     # Note that for imshift, it's better to keep fft2(img) than fft2(ifftshift2(img))
     # While fft2(img).angle() might seem serrated, it's indeed better to keep it as is, which is essentially setting the center as the origin for FFT.

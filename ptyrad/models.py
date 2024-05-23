@@ -93,7 +93,7 @@ class PtychoAD(torch.nn.Module):
         grid = self.shift_probes_grid
         # For CBEDs it's unlikely to do imshift_batch due to GPU memory constraints
         for idx, shift in enumerate(shifts):
-            self.measurements.data[idx] = imshift_single(self.measurements[idx], shift=shift, grid=grid).abs()
+            self.measurements.data[idx] = imshift_single(self.measurements[idx], shift=shift, grid=grid).real.clamp(min=0) # Generally it seems better to take the real part of Fourier filtered real-valued input. The clamp(0) is to ensure CBED has only positive values.
             print(f"Shifting cbed {idx} with (sy,sx) = {shifts[idx].detach().cpu().numpy().round(4)} px") 
 
         print(f'Finished recentering {self.recenter_cbeds} CBEDs with {shift_str} (sy,sx) = {shifts.mean(0).detach().cpu().numpy().round(4)} px')

@@ -1,4 +1,5 @@
 # Directories that don't need to backup
 data/
 output/
+logs/
 __pycache__/

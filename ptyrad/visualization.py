@@ -209,7 +209,7 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, diameter_type='90%', 
         ax.set_aspect('equal', adjustable='box')
     
     plt.tight_layout()
-    plt.show()
+    plt.show(block=False)
     if pass_fig:
         return fig
     
