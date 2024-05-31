@@ -28,6 +28,7 @@ This .md doc gives some mild introduction to the available parameters/options of
 - `scan_step_size`    : Step size between scan positions in Ang
 - `scan_flipT`        : Additional flip and transpose for scan patterns. Usually set to `None` for loaded pos. Note that modifying `scan_flipT` would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
 - `scan_affine`       : Global affine transformation for the scan pattern. (scale, asymmetry, rotation, shear)
+- `scan_rand_std`     : None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
 - `obj_tilts`         : Object tilts along object y and x direction in mrad. 'tilt_type' = 'all', 'each', or 'load_PtyRAD'. `
 - `omode_max`         : Maximum number of mixed object modes. For simulated initial object, it'll be generated with the same number of object modes. For loaded object, the omode dimension would be capped at this number
 - `omode_init_occu`   : Specified weight (occupancy) for each object weights. Typically we do 'uniform' for frozen phonon like configurations. {'occu_type':'uniform', 'init_occu':None},
@@ -41,7 +42,7 @@ This .md doc gives some mild introduction to the available parameters/options of
 
 ## source_params
 - `measurements_source`: Data type of the CBED patterns. Currently supporting `.mat`, `.tif`, `.hdf5`
-- `measurements_params`: Path and dict key to retrieve the data matrix. For example: [exp_CBED_path, 'cbed']
+- `measurements_params`: Path and dict key to retrieve the data matrix. For example: [exp_CBED_path, 'cbed']. For py4dstem processed cbeds, use `'/datacube_root/datacube/data'` to retrieve the 4D-STEM data
 - `obj_source`         : Source of the object. Currently supporting `simu`, `custom`, `PtyShv`, and `PtyRAD`
 - `obj_params`         : Params of the object. Provide `ptycho_output_path` if you're loading from `PtyShv` or `PtyRAD`, provide `None` for `simu`, and provide np array for `custom`
 - `probe_source`       : Source of the probe. Currently supporting `simu`, `custom`, `PtyShv`, and `PtyRAD`
@@ -67,7 +68,10 @@ Note that the obj, probe, and pos do not need to be coming from the same type of
 - `loss_params`: Use `state` to switch on/off each loss term, and use `weight` to determine their relative importance. Each loss term would generate their corresponding grad to the variable, and the final update is determined by the sum of all grad coming from all participating loss terms. Some loss terms have finer control params like `dp_pow` would raise the diffraction pattern to a power before the calculation, and `ln_order` means the L_n norm used to regularize object phase (`objp`) 
     ```
     'loss_single': {'state': True, 'weight': 1.0, 'dp_pow': 0.5}, 
-    # MSE loss for a single CBED, same as the maximum-likelihood
+    # MSE loss for a single CBED, same as the maximum-likelihood with Gaussian statistics (high dose)
+
+    'loss_poissn': {'state': True, 'weight': 1.0, 'dp_pow':1.0, 'eps':0},
+    # Poisson loss for a single CBED, same as the maximum-likelihood with Poisson statistics (low dose)
 
     'loss_pacbed': {'state': True, 'weight': 0.5, 'dp_pow': 0.2}, 
     # Loss that compares the PACBED, should use it with compact grouping and a reduced `dp_pow` to emphasize the DF region of the CBED

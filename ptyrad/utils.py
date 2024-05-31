@@ -1,5 +1,4 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "4" # This suppress the MiniBatchKMeans Windows MKL memory leak warning from make_batches
 import warnings
 from time import time
 from math import floor, ceil
@@ -154,8 +153,8 @@ def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITE
     }
     return recon_params
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, prefix='', postfix=''):
-    ''' Generate the output folder given indices, recon_params, model, and constraint_params '''
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix='', postfix='', show_lr=True, show_constraint=True, show_model=True, show_loss=True):
+    ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
     
@@ -192,43 +191,76 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     prefix  = prefix + '_' if prefix  != '' else ''
     postfix = '_'+ postfix if postfix != '' else ''
     
+    # Setup basic params   
     output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
     
+    # Attach cbeds flipping
     if cbeds_flipT is not None:
         output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
-        
-    output_path += f"_{group_mode}{batch_size}_p{pmode}_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}_{obj_shape[0]}obj_{obj_shape[1]}slice"
     
+    # Attach recon mode and pmode 
+    output_path += f"_{group_mode}{batch_size}_p{pmode}"
+    
+    # Attach obj shape and dz
+    output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance}"
     
-    if constraint_params['kr_filter']['freq'] is not None:
-        obj_type = constraint_params['kr_filter']['obj_type']
-        kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
-        radius = constraint_params['kr_filter']['radius']
-        output_path += f"_{kr_str}f{radius}"
+    # Attach learning rate (optional)
+    if show_lr:
+        output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
     
-    if constraint_params['kz_filter']['freq'] is not None:
-        obj_type = constraint_params['kz_filter']['obj_type']
-        kz_str = {'both': 'kz', 'amplitude': 'kza', 'phase': 'kzp'}.get(obj_type)
-        beta = constraint_params['kz_filter']['beta']
-        output_path += f"_{kz_str}f{beta}"
-    
-    if model.detector_blur_std is not None and model.detector_blur_std != 0:
-        output_path += f"_dpblur{model.detector_blur_std}"
-    
-    if constraint_params['obj_blur']['freq'] is not None and constraint_params['obj_blur']['std'] != 0:
-        obj_type = constraint_params['obj_blur']['obj_type']
-        obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-        output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
+    # Attach constraint params (optional)
+    if show_constraint:
+        if constraint_params['kr_filter']['freq'] is not None:
+            obj_type = constraint_params['kr_filter']['obj_type']
+            kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
+            radius = constraint_params['kr_filter']['radius']
+            output_path += f"_{kr_str}f{radius}"
         
-    if constraint_params['probe_mask_k']['freq'] is not None:
-        output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
+        if constraint_params['kz_filter']['freq'] is not None:
+            obj_type = constraint_params['kz_filter']['obj_type']
+            kz_str = {'both': 'kz', 'amplitude': 'kza', 'phase': 'kzp'}.get(obj_type)
+            beta = constraint_params['kz_filter']['beta']
+            output_path += f"_{kz_str}f{beta}"
+            
+        if constraint_params['obj_blur']['freq'] is not None and constraint_params['obj_blur']['std'] != 0:
+            obj_type = constraint_params['obj_blur']['obj_type']
+            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
+            output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
+
+        if constraint_params['objp_postiv']['freq'] is not None:
+            output_path += f"_opos"
+        
+        if constraint_params['tilt_smooth']['freq'] is not None:
+            output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
+            
+        if constraint_params['probe_mask_k']['freq'] is not None:
+            output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
     
-    if constraint_params['tilt_smooth']['freq'] is not None:
-        output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
-    
+    # Attach model params (optional)
+    if show_model:    
+        if model.detector_blur_std is not None and model.detector_blur_std != 0:
+            output_path += f"_dpblur{model.detector_blur_std}"
+
+    # Attach loss params (optional)
+    if show_loss:    
+        if loss_params['loss_single']['state']:
+            output_path += f"_sng{round(loss_params['loss_single']['weight'],2)}"
+
+        if loss_params['loss_poissn']['state']:
+            output_path += f"_psn{round(loss_params['loss_poissn']['weight'],2)}"
+
+        if loss_params['loss_pacbed']['state']:
+            output_path += f"_pcb{round(loss_params['loss_pacbed']['weight'],2)}"
+        
+        if loss_params['loss_sparse']['state']:
+            output_path += f"_spr{round(loss_params['loss_sparse']['weight'],2)}"
+
+        if loss_params['loss_simlar']['state']:
+            output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
+
     output_path += postfix
     
     if recon_params['SAVE_ITERS'] is not None:

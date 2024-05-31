@@ -19,6 +19,7 @@ exp_params = {
     'scan_step_size'    : 0.4398, # Ang
     'scan_flipT'        : (0,1,0), # (0,1,0) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
+    'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'obj_tilts'         : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # (tilt_y,tilt_x) mrad, 'tilt_type' = 'all', 'each', or 'load_PtyRAD'
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},

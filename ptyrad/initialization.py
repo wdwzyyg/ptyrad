@@ -244,6 +244,7 @@ class Initializer:
         params          = self.init_params['source_params']['pos_params']
         dx_spec         = self.init_params['exp_params']['dx_spec']
         scan_step_size  = self.init_params['exp_params']['scan_step_size']
+        scan_rand_std   = self.init_params['exp_params']['scan_rand_std']
         N_scan_slow     = self.init_params['exp_params']['N_scan_slow']
         N_scan_fast     = self.init_params['exp_params']['N_scan_fast']
         probe_shape     = np.array([self.init_params['exp_params']['Npix']]*2)
@@ -292,6 +293,10 @@ class Initializer:
             pos = pos - pos.mean(0) # Center scan around origin
             pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift back to obj coordinate
+        
+        if scan_rand_std is not None:
+            print(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions")
+            pos = pos + scan_rand_std * np.random.randn(*pos.shape)
         
         self.obj_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
         
@@ -471,7 +476,7 @@ class Initializer:
         else:
             raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
         
-        print(f"Pass the consistency chcek of initialized variables, initialization is done!")
+        print(f"Pass the consistency check of initialized variables, initialization is done!")
     
     def init_all(self):
         # Run this method to initialize all

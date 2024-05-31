@@ -22,7 +22,7 @@ from ptyrad.visualization import plot_summary, plot_pos_grouping
 from ptyrad.utils import select_scan_indices, make_batches, make_recon_params_dict, make_output_folder, save_results, get_blob_size
 
 # Load params from current directory, change this to the correct params file
-from ptyrad.inputs.full_params_bSTO import exp_params, source_params, model_params, loss_params, constraint_params, NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS, output_dir, prefix, postfix, fig_list
+from ptyrad.inputs.full_params_tBL_WSe2 import exp_params, source_params, model_params, loss_params, constraint_params, NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS, output_dir, prefix, postfix, fig_list
 
 # Init variables, model, optimizer, loss, constraint
 init          = Initializer(exp_params, source_params).init_all()
@@ -39,9 +39,9 @@ d_out        = get_blob_size(dx, probe_int, output='d90') # d_out unit is in Ang
 indices      = select_scan_indices(exp_params['N_scan_slow'], exp_params['N_scan_fast'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE)
 batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE)
 recon_params = make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS)
-output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, prefix, postfix)
+output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix, postfix)
 
-fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, pass_fig=True)
+fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
 fig_grouping.savefig(output_path + f"/summary_pos_grouping.png")
 
 # Optimization loop

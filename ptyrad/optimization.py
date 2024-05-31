@@ -26,6 +26,9 @@ class CombinedLoss(torch.nn.Module):
 
     def get_loss_single(self, model_CBEDs, measured_CBEDs):
         # Calculate loss_single
+        # This loss function emulates the likelihood function of cbeds with Gaussian statistics (higher dose)
+        # For exact Gaussian statistics, the dp_pow should be 0.5
+        
         single_params = self.loss_params['loss_single']
         if single_params['state']:
             dp_pow = single_params.get('dp_pow', 0.5)
@@ -35,6 +38,30 @@ class CombinedLoss(torch.nn.Module):
         else:
             loss_single = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         return loss_single
+    
+    def get_loss_poissn(self, model_CBEDs, measured_CBEDs):
+        # Calculate loss_poissn
+        # This loss function emulates the likelihood function of cbeds with Poisson statistics (low dose)
+        # For exact Poisson statistics, the dp_pow should be 1
+        # No need to worry about the CBED having most pixel value smaller than 1, CBED int scaling has no effect to the reconstruction
+        # The eps in log is needed for numerical stability during optimization and to avoid negative infinite when the CBED intensity is approaching 0
+        # Typical eps is within 1e-3 to 1e-9
+        
+        # function L = get_loglik(modF, aPsi)
+        # modF2 = modF.^2; # exp
+        # aPsi2 = aPsi.^2; # model
+        # L = -(modF2 .* log(aPsi2+1e-6) - aPsi2) ;
+        poissn_params = self.loss_params['loss_poissn']
+        
+        if poissn_params['state']:
+            dp_pow = poissn_params.get('dp_pow', 1)
+            eps = poissn_params.get('eps', 1e-6)
+            data_mean = measured_CBEDs.pow(dp_pow).mean()
+            loss_poissn = -torch.mean(measured_CBEDs.pow(dp_pow) * torch.log(model_CBEDs.pow(dp_pow) + eps) - model_CBEDs.pow(dp_pow)) / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
+            loss_poissn *= poissn_params['weight']
+        else:
+            loss_poissn = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
+        return loss_poissn
     
     def get_loss_pacbed(self, model_CBEDs, measured_CBEDs):
         # Calculate loss_pacbed
@@ -95,6 +122,7 @@ class CombinedLoss(torch.nn.Module):
     def forward(self, model_CBEDs, measured_CBEDs, object_patches, omode_occu):
         losses = []
         losses.append(self.get_loss_single(model_CBEDs, measured_CBEDs))
+        losses.append(self.get_loss_poissn(model_CBEDs, measured_CBEDs))
         losses.append(self.get_loss_pacbed(model_CBEDs, measured_CBEDs))
         losses.append(self.get_loss_sparse(object_patches[...,1], omode_occu))
         losses.append(self.get_loss_simlar(object_patches, omode_occu))

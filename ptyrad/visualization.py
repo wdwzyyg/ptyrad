@@ -175,8 +175,9 @@ def plot_affine_transformation(scale, asymmetry, rotation, shear):
     plt.legend()
     plt.show()
 
-def plot_pos_grouping(pos, batches, circle_diameter=False, diameter_type='90%', figsize=(16,8), dot_scale=1, pass_fig=False):
+def plot_pos_grouping(pos, batches, circle_diameter=False, diameter_type='90%', figsize=(16,8), dot_scale=1, show_fig=True, pass_fig=False):
     
+    plt.ioff() # Temporaily disable the interactive plotting mode
     fig, axs = plt.subplots(1,2, figsize = figsize)
     
     for i, ax in enumerate(axs):
@@ -209,7 +210,8 @@ def plot_pos_grouping(pos, batches, circle_diameter=False, diameter_type='90%', 
         ax.set_aspect('equal', adjustable='box')
     
     plt.tight_layout()
-    plt.show(block=False)
+    if show_fig:
+        plt.show(block=False)
     if pass_fig:
         return fig
     

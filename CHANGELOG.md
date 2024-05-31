@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `plot_obj_tilts` to `visualization`. Decouple the functionality from `plot_scan_pos`, should have options of interpolated tilt_y, tilt_x (doing griddata interp is probably faster than scatter plot of 65k dots) or the quiver plot form
 - Reimplement the `gaussian_blur` used in `optimization` for `obj_blur` constraint into `gaussian_blur3d` with a Conv3d operation and a pre-weighted Gaussian kernel so we can apply z-blur as a z-regularization, which should solve the wrap-around issue of `kz_filter`. (https://stackoverflow.com/questions/67633879/implementing-a-3d-gaussian-blur-using-separable-2d-convolutions-in-pytorch)
 
+## [v0.1.0-beta1.1] - 2024-05-31
+### Added
+- Add `scan_rand_std` option to `initialization` for Guassian displacements of scan positions to reduce the raster grid pathology
+- Add `loss_poissn` to `optimization` for loss calculation with Poisson noise statistics
+### Change
+- Add the `show_fig` flag and `plt.ioff` to `plot_pos_grouping` so that it's consistent with other plotting functions
+- Remove the `os.environ["OMP_NUM_THREADS"] = "4"` in  `utils` since I somehow don't get the warning from `MiniBatchKMeans` anymore
+- Add the description about reading py4dstem-processed .hdf5 with data key `'/datacube_root/datacube/data'` found by Desheng to `params_description.md`
+- Rearrange output strings in `make_output_folder` and add keywords to disable optional info like learning rates, constraints, detector blur, and losses
+
 ## [v0.1.0-beta1.0] - 2024-05-23
 ### Added
 - Add `blur_std` option for `loss_simlar` so we could compare the std between Gaussian blurred object modes
