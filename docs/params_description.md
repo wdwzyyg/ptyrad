@@ -29,7 +29,6 @@ This .md doc gives some mild introduction to the available parameters/options of
 - `scan_flipT`        : Additional flip and transpose for scan patterns. Usually set to `None` for loaded pos. Note that modifying `scan_flipT` would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
 - `scan_affine`       : Global affine transformation for the scan pattern. (scale, asymmetry, rotation, shear)
 - `scan_rand_std`     : None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
-- `obj_tilts`         : Object tilts along object y and x direction in mrad. 'tilt_type' = 'all', 'each', or 'load_PtyRAD'. `
 - `omode_max`         : Maximum number of mixed object modes. For simulated initial object, it'll be generated with the same number of object modes. For loaded object, the omode dimension would be capped at this number
 - `omode_init_occu`   : Specified weight (occupancy) for each object weights. Typically we do 'uniform' for frozen phonon like configurations. {'occu_type':'uniform', 'init_occu':None},
 - `pmode_max`         : Maximum number of mixed probe modes. For simulated initial probe, it'll be generated with the same number of probe modes. For loaded probe, the pmode dimension would be capped at this number
@@ -49,6 +48,8 @@ This .md doc gives some mild introduction to the available parameters/options of
 - `probe_params`       : Params of the probe. Provide `ptycho_output_path` if you're loading from `PtyShv` or `PtyRAD`, provide `None` or `probe_simu_params` for `simu`, and provide numpy array for `custom`
 - `pos_source`         : Source of the position. Currently supporting `simu`, `custom`, `PtyShv`, and `PtyRAD`
 - `pos_params`         : Params of the position. Provide `ptycho_output_path` if you're loading from `PtyShv` or `PtyRAD`, provide `None` for `simu`, and provide np array for `custom`
+- `tilt_source`        : Source of the object tilt. Currently supporting `simu`, `custom`, and `PtyRAD`
+- `tilt_params`        : Params of the object tilt. Provide `path` if you're loading fro `PtyRAD`, provede a dict like `{'tilt_type':'each', 'init_tilts':[[0,0]]}` if you're using `simu`. `'tilt_type'` can be `'each'` or `'all'`. Provide `'init_tilts'` as an (1,2) array (tilt_y,tilt_x) mrad
 
 Note that the obj, probe, and pos do not need to be coming from the same type of source. You can mix-match PtychoShelves results with PtyRAD results, or load probes/obj/pos from different paths as long as you have the correct pair of [source, params]
 
@@ -95,9 +96,12 @@ Note that the obj, probe, and pos do not need to be coming from the same type of
     'fix_probe_int' : {'freq': 1}, 
     # Apply a scaling to probe intensity to make it consistent with the total CBED intensity, essentially fixing the probe intensity. This is needed to stabilize the object amplitude update because the probe update could change the total intensity. This removes the scaling constant ambiguity between probe and object.
     
-    'obj_blur'      : {'freq': None, 'obj_type':'both', 'std':1},
-    # Apply a "lateral" Gaussian blur to the object. You may choose whether you want to apply to object amplitude ('obja'), phase ('objp'), or 'both' with a specified 'std' in obj px
+    'obj_rblur'      : {'freq': 1, 'obj_type':'both', 'kernel_size': 5, 'std':1},
+    # Apply a "lateral" 2D Gaussian blur to the object. You may choose whether you want to apply to object amplitude ('obja'), phase ('objp'), or 'both' with a specified 'std' in obj px
     
+    'obj_zblur'      : {'freq': 1, 'obj_type':'both', 'kernel_size': 5, 'std':0.4},
+    # Apply a "z-direction" 1D Gaussian blur to the object. You may choose whether you want to apply to object amplitude ('obja'), phase ('objp'), or 'both' with a specified 'std' and 'kernel_size' in obj px
+
     'kr_filter'     : {'freq': None,    'obj_type':'both', 'radius':0.15, 'width':0.05},
     # Apply a "lateral" Fourier low-pass filtering to the object. This is similar to the band-pass filter in Digital Micrograph that the k-space filter has a sigmoid-like profile, essentially a cut-off spatial frequency. Typically we're reconstucting object all the way to kMax (Nyquist frequency) so there's not much room for us to filter out hence it's recommended to keep this off unless you want to exclude certain spatial frequencies.
 

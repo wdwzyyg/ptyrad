@@ -90,8 +90,34 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
         plt.show()
     if pass_fig:
         return fig
-        
-def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, figsize=(16,16), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
+
+def plot_obj_tilts(pos, tilts, figsize=(16,16), show_fig=True, pass_fig=False):
+    """ Plot the obj tilts given the probe position and pos-dependent tilts """
+    
+    plt.ioff() # Temporaily disable the interactive plotting mode
+    fig = plt.figure(figsize = figsize)
+    ax = plt.gca() # There's only 1 ax for plt.figure(), and plt.title is an Axes-level attribute so I need to pass the Axes out because I like plt.title layout better
+    plt.title("Object tilts", fontsize=16)
+    
+    tilts = np.broadcast_to(tilts, shape=(len(pos),2))
+    M = np.hypot(tilts[:,0], tilts[:,1])
+    q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
+    cbar = fig.colorbar(q, shrink=0.75)
+    cbar.ax.set_ylabel('mrad')
+    cbar.ax.get_yaxis().labelpad = 15
+    
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
+    plt.xlabel('X (obj coord, px)')
+    plt.ylabel('Y (obj coord, px)')
+    
+    plt.tight_layout()
+    if show_fig:
+        plt.show()
+    if pass_fig:
+        return fig, ax
+
+def plot_scan_positions(pos, init_pos=None, img=None, offset=None, figsize=(16,16), dot_scale=0.001, show_arrow=True, show_fig=True, pass_fig=False):
     """ Plot the scan positions given an array of (N,2) """
     # The array is expected to have shape (N,2)
     # Each row is rendered as (y, x), or equivalently (height, width)
@@ -108,15 +134,7 @@ def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, f
         plt.gca().invert_yaxis()  # Pre-flip y-axis so the y-axis is image-like no matter what
     
     if init_pos is None:
-        if tilts is None:
-            plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
-        else:
-            tilts = np.broadcast_to(tilts, shape=(len(pos),2))
-            M = np.hypot(tilts[:,0], tilts[:,1])
-            q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
-            cbar = fig.colorbar(q, shrink=0.75)
-            cbar.ax.set_ylabel('mrad')
-            cbar.ax.get_yaxis().labelpad = 15
+        plt.scatter(x=pos[:,1], y=pos[:,0], c=np.arange(len(pos)), s=dot_scale*np.arange(len(pos)), label='Scan positions')
     else:
         plt.scatter(x=init_pos[:,1], y=init_pos[:,0], c='C0', s=dot_scale, label='Init scan positions')
         plt.scatter(x=pos[:,1],      y=pos[:,0],      c='C1', s=dot_scale, label='Opt scan positions')
@@ -125,7 +143,6 @@ def plot_scan_positions(pos, init_pos=None, tilts=None, img=None, offset=None, f
     
     plt.gca().set_aspect('equal', adjustable='box')
     plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
-        
     plt.xlabel('X (obj coord, px)')
     plt.ylabel('Y (obj coord, px)')
     
@@ -384,7 +401,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
             fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
     
     if 'tilt' in fig_list or 'all' in fig_list:
-        fig_obj_tilts, ax = plot_scan_positions(pos=pos[indices], tilts=tilts[indices], show_arrow=False, show_fig=False, pass_fig=True)
+        fig_obj_tilts, ax = plot_obj_tilts(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
         ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
         if show_fig:
             fig_obj_tilts.show()

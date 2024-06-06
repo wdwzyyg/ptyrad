@@ -67,6 +67,31 @@ def compose_affine_matrix(scale, asymmetry, rotation, shear):
 
     return affine_mat
 
+def get_decomposed_affine_matrix(A, B):
+    """ Fit the affine matrix components from input and output matrices A and B """
+    # This util function is used to quickly estimate the needed affine transformation for scan positions
+    # If we know the lattice constant and angle between lattice vectors, then we can easily correct the scale, asymmetry, and shear
+    # The global rotation of the object is NOT defined by lattice constant/angle so we still need to compare with the actual CBED
+    # Typical usage of this function is to first construct A by measuring the lattice vectors of a reconstructed object suffers from affine transformation
+    # Then estimate ideal lattice vectors with prior knowledge (lattice constant and angle)
+    # Lastly we use this function to estimate the needed F such that B = F @ A
+    
+    from scipy.optimize import minimize
+
+    def objective(params, A, B):
+        scale, asymmetry, rotation, shear = params
+        F = compose_affine_matrix(scale, asymmetry, rotation, shear)
+        return np.linalg.norm(B - F @ A)
+
+    initial_guess = [1, 0, 0, 0]  # Initial guess for scale, asymmetry, rotation, shear
+    result = minimize(objective, initial_guess, args=(A, B), method='L-BFGS-B')
+    
+    if result.success:
+        (scale, asymmetry, rotation, shear) = result.x
+        return (scale, asymmetry, rotation, shear)
+    else:
+        raise ValueError("Optimization failed")
+
 def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full'):
     
     N_scans = N_scan_slow * N_scan_fast
@@ -225,11 +250,19 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             beta = constraint_params['kz_filter']['beta']
             output_path += f"_{kz_str}f{beta}"
             
-        if constraint_params['obj_blur']['freq'] is not None and constraint_params['obj_blur']['std'] != 0:
-            obj_type = constraint_params['obj_blur']['obj_type']
+        if constraint_params['obj_rblur']['freq'] is not None and constraint_params['obj_rblur']['std'] != 0:
+            obj_type = constraint_params['obj_rblur']['obj_type']
             obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-            output_path += f"_{obj_str}blur{constraint_params['obj_blur']['std']}"
+            output_path += f"_{obj_str}rblur{constraint_params['obj_rblur']['std']}"
 
+        if constraint_params['obj_zblur']['freq'] is not None and constraint_params['obj_zblur']['std'] != 0:
+            obj_type = constraint_params['obj_zblur']['obj_type']
+            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
+            output_path += f"_{obj_str}zblur{constraint_params['obj_zblur']['std']}"
+        
+        if constraint_params['obja_thresh']['freq'] is not None:
+            output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
+        
         if constraint_params['objp_postiv']['freq'] is not None:
             output_path += f"_opos"
         
@@ -1116,6 +1149,28 @@ def add_const_phase_shift(cplx, phase_shift):
     ones = torch.ones_like(cplx.abs())
     phi = torch.polar(abs=ones, angle=ones * phase_shift[:,None,None])
     return cplx*phi
+
+def get_gaussian1d(size, std, norm=False):
+    from scipy.signal.windows import gaussian as gaussian1d
+
+    k = gaussian1d(size, std)
+    if norm:
+        k /= k.sum()
+    return k
+
+def gaussian_blur_1d(tensor, kernel_size=5, sigma=0.5):
+    # Note that the F.con1d does not have `padding_mode`, so it's default to be 0 padding, which is not ideal for obja
+    # tensor_blur = F.conv1d(input=tensor.reshape(-1, 1, tensor.size(-1)), weight=k1d, padding='same').view(*tensor.shape)
+
+    dtype  = tensor.dtype
+    device = tensor.device 
+    k = torch.from_numpy(get_gaussian1d(kernel_size, sigma, norm=True)).type(dtype).to(device)
+    k1d = k.view(1, 1, -1)
+    
+    gaussian1d = torch.nn.Conv1d(1,1,kernel_size,padding='same', bias=False, padding_mode='replicate')
+    gaussian1d.weight = torch.nn.Parameter(k1d)
+    tensor_blur = gaussian1d(tensor.reshape(-1, 1, tensor.size(-1))).view(*tensor.shape)
+    return tensor_blur
 
 def fftshift2(x):
     """ A wrapper over torch.fft.fftshift for the last 2 dims """

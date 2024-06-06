@@ -2,7 +2,7 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2
+from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 from torch.nn.functional import interpolate
@@ -175,21 +175,39 @@ class CombinedConstraint(torch.nn.Module):
             model.opt_probe.data = model.opt_probe * target_amp/current_amp
             print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
             
-    def apply_obj_blur(self, model, niter):
+    def apply_obj_rblur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last 2 dimension (...,H,W) '''
         # Note that it's not clear whether applying blurring after every iteration would ever reach a steady state
         # However, this is at least similar to PtychoShelves' eng. reg_mu
-        obj_blur_freq = self.constraint_params['obj_blur']['freq']
-        obj_type      = self.constraint_params['obj_blur']['obj_type']
-        obj_blur_std  = self.constraint_params['obj_blur']['std']
-        if obj_blur_freq is not None and niter % obj_blur_freq == 0 and obj_blur_std !=0:
+        obj_rblur_freq = self.constraint_params['obj_rblur']['freq']
+        obj_type       = self.constraint_params['obj_rblur']['obj_type']
+        obj_rblur_ks   = self.constraint_params['obj_rblur']['kernel_size']
+        obj_rblur_std  = self.constraint_params['obj_rblur']['std']
+        
+        if obj_rblur_freq is not None and niter % obj_rblur_freq == 0 and obj_rblur_std !=0:
             if obj_type in ['amplitude', 'both']:
-                model.opt_obja.data = gaussian_blur(model.opt_obja, kernel_size=5, sigma=obj_blur_std)
-                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_blur_std} px on obja at iter {niter}")
+                model.opt_obja.data = gaussian_blur(model.opt_obja, kernel_size=obj_rblur_ks, sigma=obj_rblur_std)
+                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on obja at iter {niter}")
             if obj_type in ['phase', 'both']:
-                model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=5, sigma=obj_blur_std)
-                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_blur_std} px on objp at iter {niter}")
-                
+                model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=obj_rblur_ks, sigma=obj_rblur_std)
+                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on objp at iter {niter}")
+    
+    def apply_obj_zblur(self, model, niter):
+        ''' Apply Gaussian blur to object, this only applies to the last dimension (...,L) '''
+        obj_zblur_freq = self.constraint_params['obj_zblur']['freq']
+        obj_type       = self.constraint_params['obj_zblur']['obj_type']
+        obj_zblur_ks   = self.constraint_params['obj_zblur']['kernel_size']
+        obj_zblur_std  = self.constraint_params['obj_zblur']['std']
+        if obj_zblur_freq is not None and niter % obj_zblur_freq == 0 and obj_zblur_std !=0:
+            if obj_type in ['amplitude', 'both']:
+                tensor = model.opt_obja.permute(0,2,3,1)
+                model.opt_obja.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2)
+                print(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on obja at iter {niter}")
+            if obj_type in ['phase', 'both']:
+                tensor = model.opt_objp.permute(0,2,3,1)
+                model.opt_objp.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2)
+                print(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on objp at iter {niter}")
+    
     def apply_kr_filter(self, model, niter):
         ''' Apply kr Fourier filter constraint on object '''
         # Note that the `kr_filter` is applied on stacked 2D FFT of object, so it's applying on (omode,z,ky,kx)
@@ -266,7 +284,8 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_probe_mask_k (model, niter)
             self.apply_fix_probe_int(model, niter)
             # Object constraints
-            self.apply_obj_blur     (model, niter)
+            self.apply_obj_rblur    (model, niter)
+            self.apply_obj_zblur    (model, niter)
             self.apply_kr_filter    (model, niter)
             self.apply_kz_filter    (model, niter)
             self.apply_obja_thresh  (model, niter)

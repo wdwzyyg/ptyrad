@@ -22,8 +22,7 @@ from ptyrad.visualization import plot_summary, plot_pos_grouping
 from ptyrad.utils import select_scan_indices, make_batches, make_recon_params_dict, make_output_folder, save_results, get_blob_size
 
 # Load params from current directory, change this to the correct params file
-from ptyrad.inputs.full_params_tBL_WSe2 import exp_params, source_params, model_params, loss_params, constraint_params, NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS, output_dir, prefix, postfix, fig_list
-
+from ptyrad.inputs.full_params_eCNS10 import exp_params, source_params, model_params, loss_params, constraint_params, NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS, output_dir, prefix, postfix, fig_list
 # Init variables, model, optimizer, loss, constraint
 init          = Initializer(exp_params, source_params).init_all()
 model         = PtychoAD(init.init_variables, model_params, device=DEVICE)

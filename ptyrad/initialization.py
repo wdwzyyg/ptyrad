@@ -123,11 +123,11 @@ class Initializer:
         if source   == 'custom':
             cbeds = params
         elif source == 'tif':
-            cbeds = load_tif(params)
+            cbeds = load_tif(params.get('path')) # key is ignored because it's not needed for tif files
         elif source == 'mat':
-            cbeds = load_fields_from_mat(params[0], params[1])[0]
+            cbeds = load_fields_from_mat(params.get('path'), params.get('key'))[0]
         elif source == 'hdf5':
-            cbeds = load_hdf5(params[0], params[1])
+            cbeds = load_hdf5(params.get('path'), params.get('key'))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', or 'hdf5'!!")
         print(f"Imported meausrements shape = {cbeds.shape}")
@@ -248,7 +248,6 @@ class Initializer:
         N_scan_slow     = self.init_params['exp_params']['N_scan_slow']
         N_scan_fast     = self.init_params['exp_params']['N_scan_fast']
         probe_shape     = np.array([self.init_params['exp_params']['Npix']]*2)
-        
         print(f"\n### Initializing probe pos from '{source}' ###")
 
         # Load file
@@ -396,29 +395,33 @@ class Initializer:
         self.init_variables['H'] = H
     
     def init_obj_tilts(self):
-        N_scans    = self.init_params['exp_params']['N_scans']
-        init_tilts = self.init_params['exp_params']['obj_tilts']['init_tilts'] 
-        tilt_type  = self.init_params['exp_params']['obj_tilts']['tilt_type'] 
-        print(f"\n### Initializing obj tilts with tilt_type = '{tilt_type}' ###")
-        if tilt_type == 'each':
-            obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
-            print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
-        elif tilt_type == 'all':
-            obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
-            print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
-        elif tilt_type == 'load_PtyRAD':
-            # Currently only PtyRAD provides crystal tilt optimization, and it's probably a better strategy to refine tilts from a good object/probe/pos
-            # so I assume you're continuing a PtyRAD reconstruction with everything loaded (or at least 2 out of 3 so you have the self.cache_contents populated)
-            # Loading from ptycho_output_path
-            try:
-                obj_tilts = np.float32(self.cache_contents['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
-                print(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad")
-            except AttributeError:
-                print("Couldn't find the cached_content for obj_tilts from PtyRAD result, check your `source_params`, initialize with gloabl 0 tilts")
-                obj_tilts = np.zeros((1,2), dtype = np.float32)
-        else:
-            raise KeyError(f"Unknown tilt_type = {tilt_type}, please use 'each', 'all', or 'load_PtyRAD'!")
+        source     = self.init_params['source_params']['tilt_source']
+        params     = self.init_params['source_params']['tilt_params']
+        print(f"\n### Initializing obj tilts from = '{source}' ###")
         
+        if source == 'custom':
+            obj_tilts = params
+        elif source == 'PtyRAD':
+            pt_path = params
+            ckpt = self.cache_contents if pt_path == self.cache_path else load_pt(pt_path)            
+            obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
+            print(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad")
+        elif source == 'simu':
+            N_scans    = self.init_params['exp_params']['N_scans']
+            tilt_type  = params.get('tilt_type')
+            init_tilts = params.get('init_tilts') 
+            if tilt_type == 'each':
+                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
+                print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
+            elif tilt_type == 'all':
+                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
+                print(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad")
+            else:
+                raise KeyError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
+        else:
+            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
+        
+        # Print summary
         self.init_variables['obj_tilts'] = obj_tilts
         print(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}")
     

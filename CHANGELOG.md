@@ -6,20 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [TODO]
-- Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be needed. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
-- Add `plot_cbeds` to `visualization`. Should take 4D cbeds input and let us plot a single CBED or pacbed based on indices with display option dp_pow.
-- Add `plot_obj_tilts` to `visualization`. Decouple the functionality from `plot_scan_pos`, should have options of interpolated tilt_y, tilt_x (doing griddata interp is probably faster than scatter plot of 65k dots) or the quiver plot form
-- Reimplement the `gaussian_blur` used in `optimization` for `obj_blur` constraint into `gaussian_blur3d` with a Conv3d operation and a pre-weighted Gaussian kernel so we can apply z-blur as a z-regularization, which should solve the wrap-around issue of `kz_filter`. (https://stackoverflow.com/questions/67633879/implementing-a-3d-gaussian-blur-using-separable-2d-convolutions-in-pytorch)
+### Code clarity
+- (Optional) Use `einops` and `einsum` for code readability
+- Unified meshgrid usage, naming, and unit would be nice
+### New recon feature
+- Add BO routine as a preprocessing step for total thickness, global scan affine transform. Might be able to get some idea from py4dstem .preprocess methods.
+- Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
+- Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
+- Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
+### Recon improvements
+- Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
+- Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
+- Can we do other mode decomposition other than SVD for the ortho_pmode?
+### Utils and plotting
+- Add a shadow-image based position correction routine `get_pos_correction_from_ronchi`, similar usage as the `get_obj_tilts`
+- Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
+- Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
+- Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
+- Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
+
+## [v0.1.0-beta1.2] - 2024-06-05
+### Added
+- Add `obj_zblur` to `optimization` for a real-space substitution of `kz_filter`. By convolving a 1D Gaussian filter along z-direciton, we could remove the wrap-around while maintaining the z-regularization behavior. Note that there's no free lunch so instead of the wrap-around from `kz_filter`, the `obj_zblur` would still introduce edge effect due to the convolution. The default is "same" padding with "replicate" padding mode, so the object is padded with edge elements like abc|ccc, where | stands for the object edge 
+- Add `get_decomposed_affine_matrix` to `utils` to quickly estimate the needed scan affine transformation components if we already have a reconstructed object and we know the ideal lattice constant and the angle between lattice vectors
+### Change
+- Move `obj_tilts` to `source_params` so that we can decouple it with the `init_cache` and use it freely from scratch (e.g. start from random object, probe, pos but with known local tilts from previous reconstructions)
+- Change the `measurements_params` for `'mat'` and `'hdf5'` from a `list` to a `dict` for better clarity, i.e. [path, 'cbed'] -> {'path':<path>, 'key':'cbed'}
+- Modify `make_output_folder` to include `obja_thresh` values in accordance with the added `obj_zblur` feature. Because the `kz_filter` automatically contains a soft thresholding for obja so in order to fully replace it with `obj_zblur`, we'll need to additionally specify `obja_thresh` as well
+- Decouple the obj tilts from `plot_scan_pos` by adding `plot_obj_tilts` to `visualization`
 
 ## [v0.1.0-beta1.1] - 2024-05-31
 ### Added
 - Add `scan_rand_std` option to `initialization` for Guassian displacements of scan positions to reduce the raster grid pathology
-- Add `loss_poissn` to `optimization` for loss calculation with Poisson noise statistics
+- Add `loss_poissn` to `optimization` for loss calculation with Poisson noise statistics. This should be helpful for low dose data.
 ### Change
 - Add the `show_fig` flag and `plt.ioff` to `plot_pos_grouping` so that it's consistent with other plotting functions
 - Remove the `os.environ["OMP_NUM_THREADS"] = "4"` in  `utils` since I somehow don't get the warning from `MiniBatchKMeans` anymore
 - Add the description about reading py4dstem-processed .hdf5 with data key `'/datacube_root/datacube/data'` found by Desheng to `params_description.md`
-- Rearrange output strings in `make_output_folder` and add keywords to disable optional info like learning rates, constraints, detector blur, and losses
+- Rearrange output strings in `make_output_folder` and add keywords (`show_lr`, `show_constraint`, `show_model`, `show_loss`)to disable optional info like learning rates, constraints, detector blur, and losses
 
 ## [v0.1.0-beta1.0] - 2024-05-23
 ### Added
