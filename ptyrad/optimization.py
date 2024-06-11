@@ -103,14 +103,18 @@ class CombinedLoss(torch.nn.Module):
             
             if obj_type in ['amplitude', 'both']:
                 if obj_blur_std is not None and obj_blur_std != 0:
-                    # The torch stack and list comp is needed because gaussian_blur defaulted "replicate" padding, and for 2D padding it's only supporting 4D tenosr while the obja_patches is 5D
-                    obja_patches = torch.stack([gaussian_blur(obja_patch, kernel_size=5, sigma=obj_blur_std) for obja_patch in obja_patches]) 
+                    obja_shape = obja_patches.shape
+                    obja = obja_patches.reshape(-1, obja_shape[-2], obja_shape[-1])
+                    obja_patches = gaussian_blur(obja, kernel_size=5, sigma=obj_blur_std).reshape(obja_shape)
                 if scale_factor is not None and any(scale != 1 for scale in scale_factor):
                     obja_patches = interpolate(obja_patches, scale_factor = scale_factor, mode = 'area')  
                 temp_loss += (obja_patches * omode_occu[:,None,None,None]).std(1).mean()
+                
             if obj_type in ['phase', 'both']:
                 if obj_blur_std is not None and obj_blur_std != 0:
-                    objp_patches = torch.stack([gaussian_blur(objp_patch, kernel_size=5, sigma=obj_blur_std) for objp_patch in objp_patches])
+                    objp_shape = objp_patches.shape
+                    objp = objp_patches.reshape(-1, objp_shape[-2], objp_shape[-1])
+                    objp_patches = gaussian_blur(objp, kernel_size=5, sigma=obj_blur_std).reshape(objp_shape)
                 if scale_factor is not None and any(scale != 1 for scale in scale_factor):
                     objp_patches = interpolate(objp_patches, scale_factor = scale_factor, mode = 'area')  
                 temp_loss += (objp_patches * omode_occu[:,None,None,None]).std(1).mean()

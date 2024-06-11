@@ -11,14 +11,14 @@ exp_params = {
     'dx_spec'           : 0.1427,# Ang, used to calculate dk
     'defocus'           : -110, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention, which is opposite from Dr.Probe or TFS UI display
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 20, # Ang
-    'Nlayer'            : 9,
+    'z_distance'        : 10, # Ang
+    'Nlayer'            : 18,
     'N_scans'           : 65536,
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.415, # Ang
     'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
+    'scan_affine'       : (1,0,0,-4), # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
@@ -106,5 +106,5 @@ SAVE_ITERS   = 10        # scalar or None
 # Output folder and pre/postfix, note that the needed / and _ are automatically generated
 output_dir   = 'output/eCNS10'
 prefix       = get_date(date_format='%Y%m%d')
-postfix      = ''
+postfix      = 'aff_1_0_0_-4'
 fig_list     = ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'] # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures

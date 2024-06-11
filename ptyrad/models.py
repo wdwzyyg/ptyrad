@@ -40,6 +40,7 @@ class PtychoAD(torch.nn.Module):
             self.device                 = device
             self.recenter_cbeds         = model_params['recenter_cbeds']
             self.detector_blur_std      = model_params['detector_blur_std']
+            self.obj_preblur_std        = model_params['obj_preblur_std']
             self.lr_params              = model_params['lr_params']
             
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
@@ -162,10 +163,11 @@ class PtychoAD(torch.nn.Module):
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         
         print('\n### Model behavior ###')
-        print(f"Recenter CBEDs:     {True if self.recenter_cbeds is not None else False}")
-        print(f"Tilt propagator:    {self.tilt_obj}") 
+        print(f"Recenter CBEDs    : {True if self.recenter_cbeds is not None else False}")
+        print(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
+        print(f"Tilt propagator   : {self.tilt_obj}") 
         print(f"Sub-px probe shift: {self.shift_probes}") 
-        print(f"Detector blur:      {True if self.detector_blur_std is not None else False}") 
+        print(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """
@@ -240,6 +242,14 @@ class PtychoAD(torch.nn.Module):
         # It's a design choice to put it here, instead of putting it under optimization.py
         
         object_patches = self.get_obj_ROI(indices)
+        
+        if self.obj_preblur_std is not None and self.obj_preblur_std != 0:
+            # Permute and reshape approach, this is much faster than the stack/list comprehension version
+            obj = object_patches.permute(5,0,1,2,3,4) # Move the r/i to the front
+            obj_shape = obj.shape
+            obj = obj.reshape(-1, obj_shape[-2], obj_shape[-1])
+            object_patches = gaussian_blur(obj, kernel_size=5, sigma=self.obj_preblur_std).reshape(obj_shape).permute(1,2,3,4,5,0)
+        
         probes         = self.get_probes(indices)
         propagators    = self.get_propagators(indices)
         dp_fwd         = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, propagators)

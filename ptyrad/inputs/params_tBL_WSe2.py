@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1494,# Ang
     'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 1, # Ang
-    'Nlayer'            : 12,
+    'z_distance'        : 12, # Ang
+    'Nlayer'            : 1,
     'N_scans'           : 16384,
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
@@ -20,7 +20,7 @@ exp_params = {
     'scan_flipT'        : None, # None for both 'simu' and loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
-    'omode_max'         : 1,
+    'omode_max'         : 4,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 16,
     'pmode_init_pows'   : [0.02],

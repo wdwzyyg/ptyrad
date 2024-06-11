@@ -1,7 +1,7 @@
 # CNS
 
 ptycho_output_path = 'data/CNS_from_Hari/Niter10000.mat'
-exp_CBED_path      = 'data/CNS_from_Hari/240327_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_2configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
+exp_CBED_path      = 'data/CNS_from_Hari/231002_fov_23p044A_x_24p402A_thickness_9p978A_step0p28_conv30_dfm100_det70_TDS_500configs_xdirection_Co_0p25_Nb_0_S_0.mat' 
 
 exp_params = {
     'kv'                : 300,  # kV
@@ -20,7 +20,7 @@ exp_params = {
     'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
-    'omode_max'         : 2, #1
+    'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 2, #2
     'pmode_init_pows'   : [0.02],

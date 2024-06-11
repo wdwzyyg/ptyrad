@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
 - Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
 ### Recon improvements
+- It's possible to get some speed up if we replace the torch.stack in `get_obj_ROI` into a simple list
 - Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
 - Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
 - Can we do other mode decomposition other than SVD for the ortho_pmode?
@@ -24,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
+
+## [Unrelease]
+### Added
+- Add `obj_preblur_std` to `model` for an effective real space deconvolution with a 2D Gaussian kernel. By pre-convolving the obj with a 2D Gaussian before simulating the diffraction pattern, the reconstructed obj is essentially the deconvolution version of the transmission function.
+### Change
+- Modify `make_output_folder` to include `obj_preblue_std` values
+- Modify the gaussian_blur implementation in `loss_simlar` from a stack/list comp version to a reshape version and gets a 25% speed up (45 sec vs. 1min /iter)!
 
 ## [v0.1.0-beta1.2] - 2024-06-05
 ### Added

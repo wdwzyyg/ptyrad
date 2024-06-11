@@ -17,8 +17,8 @@ exp_params = {
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.415, # Ang
-    'scan_flipT'        : None, # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
+    'scan_flipT'        : (0,0,1), # (0,0,1) for 'simu' pos, None for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'scan_affine'       : (1,0,0,-4), # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : None, # 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1, #1
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
@@ -35,12 +35,12 @@ exp_params = {
 source_params = {
     'measurements_source': 'mat',
     'measurements_params': {'path': exp_CBED_path, 'key':'cbed'},
-    # 'obj_source'         : 'simu',
-    # 'obj_params'         : None,
-    # 'probe_source'       : 'simu',
-    # 'probe_params'       : None, 
-    # 'pos_source'         : 'simu',
-    # 'pos_params'         : None,
+    'obj_source'         : 'simu',
+    'obj_params'         : None,
+    'probe_source'       : 'simu',
+    'probe_params'       : None, 
+    'pos_source'         : 'simu',
+    'pos_params'         : None,
     'tilt_source'        : 'simu',
     'tilt_params'        : {'tilt_type':'all', 'init_tilts':[[0,0]]}, # 'init_tilts' = (tilt_y,tilt_x) mrad, 'tilt_type' = 'all', 'each' 
     # 'obj_source'         : 'PtyRAD', 
@@ -51,10 +51,10 @@ source_params = {
     # 'pos_params'         : ptycho_output_path,
     # 'tilt_source'        : 'PtyRAD',
     # 'tilt_params'        : 'ptycho_output_path,
-    'obj_source'         : 'PtyShv', 
-    'obj_params'         : ptycho_output_path, 
-    'probe_source'       : 'PtyShv',
-    'probe_params'       : ptycho_output_path, 
-    'pos_source'         : 'PtyShv',
-    'pos_params'         : ptycho_output_path,
+    # 'obj_source'         : 'PtyShv', 
+    # 'obj_params'         : ptycho_output_path, 
+    # 'probe_source'       : 'PtyShv',
+    # 'probe_params'       : ptycho_output_path, 
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : ptycho_output_path,
 }

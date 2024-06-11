@@ -236,6 +236,14 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if show_lr:
         output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
     
+    # Attach model params (optional)
+    if show_model:    
+        if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
+            output_path += f"_opreb{model.obj_preblur_std}"
+            
+        if model.detector_blur_std is not None and model.detector_blur_std != 0:
+            output_path += f"_dpblur{model.detector_blur_std}"
+    
     # Attach constraint params (optional)
     if show_constraint:
         if constraint_params['kr_filter']['freq'] is not None:
@@ -271,11 +279,6 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             
         if constraint_params['probe_mask_k']['freq'] is not None:
             output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
-    
-    # Attach model params (optional)
-    if show_model:    
-        if model.detector_blur_std is not None and model.detector_blur_std != 0:
-            output_path += f"_dpblur{model.detector_blur_std}"
 
     # Attach loss params (optional)
     if show_loss:    
