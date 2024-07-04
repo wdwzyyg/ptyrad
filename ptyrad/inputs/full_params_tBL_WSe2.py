@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1494,# Ang
     'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 1, # Ang
-    'Nlayer'            : 12,
+    'z_distance'        : 12, # Ang
+    'Nlayer'            : 1,
     'N_scans'           : 16384,
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
@@ -20,7 +20,7 @@ exp_params = {
     'scan_flipT'        : None, # None for both 'simu' and loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
-    'omode_max'         : 1,
+    'omode_max'         : 16,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
     'pmode_max'         : 16,
     'pmode_init_pows'   : [0.02],
@@ -62,7 +62,7 @@ source_params = {
 model_params = {
     'recenter_cbeds'      : None,    # 'all', 'each', None
     'detector_blur_std'   : None,    # scalar(px), None
-    'obj_preblur_std'     : 1,       # scalar(px), None
+    'obj_preblur_std'     : None,       # scalar(px), None
     'lr_params':{
         'obja'            : 5e-4,
         'objp'            : 5e-4,
@@ -75,18 +75,18 @@ loss_params = {
     'loss_poissn': {'state': False, 'weight': 1.0, 'dp_pow':1.0, 'eps':1e-6},
     'loss_pacbed': {'state': False, 'weight': 0.5, 'dp_pow': 0.2}, # Usually weight:0.5, dp_pow:0.2
     'loss_sparse': {'state': True, 'weight': 0.1, 'ln_order': 1},
-    'loss_simlar': {'state': False, 'weight': 5.0, 'obj_type':'both', 'scale_factor':[1,1,1], 'blur_std':1}
+    'loss_simlar': {'state': True, 'weight': 0.1, 'obj_type':'both', 'scale_factor':[1,1,1], 'blur_std':1}
 }
 
 constraint_params = {
     'ortho_pmode'   : {'freq': 1},
     'probe_mask_k'  : {'freq': None, 'radius':0.22, 'width':0.05}, # k-radius should be larger than 2*rbf/Npix to avoid cutting out the BF disk
     'fix_probe_int' : {'freq': 1},
-    'obj_rblur'     : {'freq': 1, 'obj_type':'both', 'kernel_size': 5, 'std':0.2}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
-    'obj_zblur'     : {'freq': 1, 'obj_type':'both', 'kernel_size': 5, 'std':1},
+    'obj_rblur'     : {'freq': None, 'obj_type':'both', 'kernel_size': 5, 'std':0.2}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
+    'obj_zblur'     : {'freq': None, 'obj_type':'both', 'kernel_size': 5, 'std':1},
     'kr_filter'     : {'freq': None,    'obj_type':'both', 'radius':0.15, 'width':0.05},
     'kz_filter'     : {'freq': None,    'obj_type':'both', 'beta':0.1, 'alpha':1},
-    'obja_thresh'   : {'freq': 1, 'relax':0, 'thresh':[0.6**(1/12), 1.4**(1/12)]},
+    'obja_thresh'   : {'freq': None, 'relax':0, 'thresh':[0.6**(1/12), 1.4**(1/12)]},
     'objp_postiv'   : {'freq': 1,    'relax':0},
     'tilt_smooth'   : {'freq': None, 'std':2}
 }

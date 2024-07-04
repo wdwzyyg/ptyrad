@@ -9,13 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Code clarity
 - (Optional) Use `einops` and `einsum` for code readability
 - Unified meshgrid usage, naming, and unit would be nice
+- Add type hints, method decorators, and standardize doc strings. Might use ChatGPT to help me with that
 ### New recon feature
 - Add BO routine as a preprocessing step for total thickness, global scan affine transform. Might be able to get some idea from py4dstem .preprocess methods.
 - Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
 - Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
 - Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
 ### Recon improvements
-- It's possible to get some speed up if we replace the torch.stack in `get_obj_ROI` into a simple list
 - Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
 - Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
 - Can we do other mode decomposition other than SVD for the ortho_pmode?

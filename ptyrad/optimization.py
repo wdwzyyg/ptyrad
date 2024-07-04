@@ -353,7 +353,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase')
     device = obj.device
     
     # Generate 1D grids along each dimension
-    Npix = obj.shape[1:]
+    Npix = obj.shape[-3:]
     kz = fftfreq(Npix[0]).to(device) 
     ky = fftfreq(Npix[1]).to(device) 
     kx = fftfreq(Npix[2]).to(device) 
@@ -366,7 +366,7 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase')
     Wa = W * torch.exp(-alpha_gaussian * (grid_kx**2 + grid_ky**2))
 
     # Filter the obj with filter funciton Wa, take the real part because Fourier-filtered obj could contain negative values    
-    fobj = torch.real(ifftn(fftn(obj, dim=(1,2,3)) * Wa[None,], dim=(1,2,3))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
+    fobj = torch.real(ifftn(fftn(obj, dim=(-3,-2,-1)) * Wa[None,], dim=(-3,-2,-1))) # Apply fftn/ifftn for only spatial dimension so the omode would be broadcasted
     
     if obj_type == 'amplitude':
         fobj = 1+0.9*(fobj-1) # This is essentially a soft obja threshold constraint built into the kz_filter routine for obja
