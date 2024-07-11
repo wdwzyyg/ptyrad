@@ -38,7 +38,6 @@ class PtychoAD(torch.nn.Module):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device                 = device
-            self.recenter_cbeds         = model_params['recenter_cbeds']
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
             self.lr_params              = model_params['lr_params']
@@ -63,12 +62,6 @@ class PtychoAD(torch.nn.Module):
             
             # Create grids for shifting
             self.create_grids()
-            
-            # Recenter the cbeds
-            if self.recenter_cbeds is not None:
-                self.avg_cbeds_shift = self.shift_cbeds()
-            else:
-                self.avg_cbeds_shift = None
 
             # Create a dictionary to store the optimizable tensors
             self.optimizable_tensors = {
@@ -78,32 +71,6 @@ class PtychoAD(torch.nn.Module):
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.set_optimizer(self.lr_params)
-            
-    def shift_cbeds(self):
-        assert self.recenter_cbeds in ['all', 'each'], f"Specified recenter_cbeds method {self.recenter_cbeds} does not exist!"
-        
-        cbeds = self.measurements
-        if self.recenter_cbeds =='all':
-            shift_str = 'fixed'
-            cbeds = cbeds.sum(0)
-        elif self.recenter_cbeds =='each':
-            shift_str = 'averaged'
-            
-        cy, cx = get_center_of_mass(ifftshift2(cbeds), corner_centered = True) # ifftshift2 is for center->corner
-        shifts = torch.stack((-cy, -cx), dim=1) if self.recenter_cbeds == 'each' else torch.stack((-cy, -cx)).broadcast_to((len(self.measurements),2)) # make shifts (N,2)
-        grid = self.shift_probes_grid
-        # For CBEDs it's unlikely to do imshift_batch due to GPU memory constraints
-        for idx, shift in enumerate(shifts):
-            self.measurements.data[idx] = imshift_single(self.measurements[idx], shift=shift, grid=grid).real.clamp(min=0) # Generally it seems better to take the real part of Fourier filtered real-valued input. The clamp(0) is to ensure CBED has only positive values.
-            print(f"Shifting cbed {idx} with (sy,sx) = {shifts[idx].detach().cpu().numpy().round(4)} px") 
-
-        print(f'Finished recentering {self.recenter_cbeds} CBEDs with {shift_str} (sy,sx) = {shifts.mean(0).detach().cpu().numpy().round(4)} px')
-        
-        # Update total probe intensity after the CBED shift
-        self.probe_int_sum.data = self.measurements.mean(0).sum()
-        print(f"Update probe_int_sum into {self.probe_int_sum:.4f} after CBEDs shifting")
-        
-        return (-cy.mean(), -cx.mean())
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -163,7 +130,6 @@ class PtychoAD(torch.nn.Module):
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         
         print('\n### Model behavior ###')
-        print(f"Recenter CBEDs    : {True if self.recenter_cbeds is not None else False}")
         print(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
         print(f"Tilt propagator   : {self.tilt_obj}") 
         print(f"Sub-px probe shift: {self.shift_probes}") 

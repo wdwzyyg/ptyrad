@@ -1,13 +1,14 @@
 ## Initialization
 
 import numpy as np
+from scipy.ndimage import zoom, gaussian_filter
 from .data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
 from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params, compose_affine_matrix, get_rbf
 
 
 class Initializer:
     def __init__(self, exp_params, source_params):
-        self.init_params = {'exp_params':exp_params, 'source_params':source_params}
+        self.init_params = {'exp_params':exp_params.copy(), 'source_params':source_params} # Note that self.init_params is a copy of exp_params so they could have different values 
         self.init_variables = {}
     
     def set_use_cached_flags(self, source):
@@ -90,12 +91,15 @@ class Initializer:
         for key, value in exp_params.items():
             print(f"{key}: {value}")
             
-        voltage    = exp_params['kv']
-        wavelength = kv2wavelength(voltage)
-        conv_angle = exp_params['conv_angle']
-        Npix       = exp_params['Npix']
-        dx         = exp_params['dx_spec']
-        dk         = dk = 1/(dx*Npix)
+        voltage     = exp_params['kv']
+        wavelength  = kv2wavelength(voltage)
+        conv_angle  = exp_params['conv_angle']
+        Npix        = exp_params['Npix']
+        N_scan_slow = exp_params['N_scan_slow']
+        N_scan_fast = exp_params['N_scan_fast']
+        N_scans     = N_scan_slow * N_scan_fast
+        dx          = exp_params['dx_spec']
+        dk          = dk = 1/(dx*Npix)
         
         # Print some derived values for sanity check
         print("Derived values given input exp_params:")
@@ -109,73 +113,134 @@ class Initializer:
         print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
         print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
         print(f'Real space probe extent = {dx*Npix:.4f} Ang')
-        self.init_variables['N_scan_slow'] = exp_params['N_scan_slow']
-        self.init_variables['N_scan_fast'] = exp_params['N_scan_fast']
-        self.init_variables['dx'] = dx #   Ang
-        self.init_variables['dk'] = dk # 1/Ang
+        self.init_variables['Npix']        = Npix
+        self.init_variables['N_scan_slow'] = N_scan_slow
+        self.init_variables['N_scan_fast'] = N_scan_fast
+        self.init_variables['N_scans']     = N_scans
+        self.init_variables['dx']          = dx #   Ang
+        self.init_variables['dk']          = dk # 1/Ang
         
     def init_measurements(self):
         source = self.init_params['source_params']['measurements_source']
         params = self.init_params['source_params']['measurements_params']
         print(f"\n### Initializing measurements from '{source}' ###")
-
+        
         # Load file
         if source   == 'custom':
-            cbeds = params
+            meas = params
         elif source == 'tif':
-            cbeds = load_tif(params.get('path')) # key is ignored because it's not needed for tif files
+            meas = load_tif(params.get('path')) # key is ignored because it's not needed for tif files
         elif source == 'mat':
-            cbeds = load_fields_from_mat(params.get('path'), params.get('key'))[0]
+            meas = load_fields_from_mat(params.get('path'), params.get('key'))[0]
         elif source == 'hdf5':
-            cbeds = load_hdf5(params.get('path'), params.get('key'))
+            meas = load_hdf5(params.get('path'), params.get('key'))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', or 'hdf5'!!")
-        print(f"Imported meausrements shape = {cbeds.shape}")
-        print(f"Imported meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
-
-        # Correct negative values if any
-        if (cbeds < 0).any():
-            min_value = cbeds.min()
-            cbeds -= min_value
-            # Subtraction is more general, but clipping might be more noise-robust due to the inherent denoising
-            print(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements")
+        print(f"Imported meausrements shape = {meas.shape}")
+        print(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})")
         
         # Permute, reshape, and flip
-        if self.init_params['exp_params']['cbeds_permute'] is not None:
-            permute_order = self.init_params['exp_params']['cbeds_permute']
+        if self.init_params['exp_params']['meas_permute'] is not None:
+            permute_order = self.init_params['exp_params']['meas_permute']
             print(f"Permuting measurements with {permute_order}")
-            cbeds = cbeds.transpose(permute_order)
+            meas = meas.transpose(permute_order)
             
-        if self.init_params['exp_params']['cbeds_reshape'] is not None:
-            cbeds_shape = self.init_params['exp_params']['cbeds_reshape']
-            print(f"Reshaping measurements into {cbeds_shape}")
-            cbeds = cbeds.reshape(cbeds_shape)
+        if self.init_params['exp_params']['meas_reshape'] is not None:
+            meas_shape = self.init_params['exp_params']['meas_reshape']
+            print(f"Reshaping measurements into {meas_shape}")
+            meas = meas.reshape(meas_shape)
             
-        if self.init_params['exp_params']['cbeds_flipT'] is not None:
-            flipT_axes = self.init_params['exp_params']['cbeds_flipT']
+        if self.init_params['exp_params']['meas_flipT'] is not None:
+            flipT_axes = self.init_params['exp_params']['meas_flipT']
             print(f"Flipping measurements with [flipup, fliplr, transpose] = {flipT_axes}")
             
             if flipT_axes[0] != 0:
-                cbeds = np.flip(cbeds, 1)
+                meas = np.flip(meas, 1)
             if flipT_axes[1] != 0:
-                cbeds = np.flip(cbeds, 2)
+                meas = np.flip(meas, 2)
             if flipT_axes[2] != 0:
-                cbeds = np.transpose(cbeds, (0,2,1))
+                meas = np.transpose(meas, (0,2,1))
+
+        # Crop out a sub-region from meas
+        if self.init_params['exp_params']['meas_crop'] is not None:
+            print(f"Reshaping measurements into {meas.shape} for cropping")
+            meas = meas.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], meas.shape[-2], meas.shape[-1])
+
+            crop_indices = np.array(self.init_params['exp_params']['meas_crop'])
+            print(f"Cropping measurements with [N_slow, N_fast, ky, kx] = {crop_indices}")
+            Nslow_i, Nslow_f = crop_indices[0]
+            Nfast_i, Nfast_f = crop_indices[1]
+            ky_i,    ky_f    = crop_indices[2]
+            kx_i,    kx_f    = crop_indices[3]
+            meas = meas[Nslow_i:Nslow_f, Nfast_i:Nfast_f, ky_i:ky_f, kx_i:kx_f]
+            print(f"Cropped measurements have shape (N_slow, N_fast, ky, kx) = {meas.shape}")
             
-        # Normalizing cbeds
+            # Update self.init_params['exp_params'], note that this wouldn't update the initial `exp_params` and the original exp_params will be saved into .pt
+            # The updated self.init_params['exp_params'] is for initialization purpose only
+            print("Update `exp_params` (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping")
+            self.init_params['exp_params']['dx_spec'] = self.init_params['exp_params']['dx_spec'] * self.init_params['exp_params']['Npix'] / meas.shape[-1]
+            self.init_params['exp_params']['Npix'] = meas.shape[-1]
+            self.init_params['exp_params']['N_scans'] = meas.shape[0] * meas.shape[1]
+            self.init_params['exp_params']['N_scan_slow'] = meas.shape[0]
+            self.init_params['exp_params']['N_scan_fast'] = meas.shape[1]
+            self.init_exp_params()
+            meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
+            print(f"Reshape measurements back to (N, ky, kx) = {meas.shape}")
+            
+        # Resample diffraction patterns along the ky, kx dimension
+        if self.init_params['exp_params']['meas_resample'] is not None:
+            zoom_factors = np.array([1, *self.init_params['exp_params']['meas_resample']]) # scipy.ndimage.zoom applies to all axes
+            meas = zoom(meas, zoom_factors, order=1)
+            print("Update `exp_params` (Npix) after the measurements resampling")
+            self.init_params['exp_params']['Npix'] = meas.shape[-1]
+            self.init_exp_params()
+            print(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}")
+            
+        # Add source size (partial spatial coherence)
+        if self.init_params['exp_params']['meas_add_source_size'] is not None:
+            print(f"Reshaping measurements into {meas.shape} for adding partial spatial coherence (source size)")
+            meas = meas.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], meas.shape[-2], meas.shape[-1])
+            source_size_std_ang = self.init_params['exp_params']['meas_add_source_size']
+            source_size_std_px = source_size_std_ang / self.init_params['exp_params']['scan_step_size'] # The source size blur std is now in unit of scan steps
+            meas = gaussian_filter(meas, sigma=source_size_std_ang, axes=(0,1)) # Partial spatial coherence is approximated by mixing DPs at nearby probe positions
+            print(f"Adding source size (partial spatial coherence) of Gaussian blur std = {source_size_std_px:.4f} scan_step sizes or {source_size_std_ang:.4f} Ang to measurements along the scan directions")
+            meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
+            print(f"Reshape measurements back to (N, ky, kx) = {meas.shape}")
+        
+        # Add detector blur (point-spread function of the detector)
+        if self.init_params['exp_params']['meas_add_detector_blur'] is not None:
+            detector_blur_std = self.init_params['exp_params']['meas_add_detector_blur'] # The detector blur std is in unit of final detector px
+            meas = gaussian_filter(meas, sigma=detector_blur_std, axes=(-2,-1)) # Detector blur is essentially the Gaussian blur along ky, kx
+            print(f"Adding detector blur (point-spread function of the detector) of Gaussian blur std = {detector_blur_std:.4f} px to measurements along the ky, kx directions")
+        
+        # Correct negative values if any
+        if (meas < 0).any():
+            min_value = meas.min()
+            meas -= min_value
+            # Subtraction is more general, but clipping might be more noise-robust due to the inherent denoising
+            print(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements")
+        
+        # Add Poisson noise given electron per Ang^2
+        if self.init_params['exp_params']['meas_add_poisson_noise'] is not None:
+            total_electron = self.init_params['exp_params']['meas_add_poisson_noise'] * self.init_params['exp_params']['scan_step_size'] **2 # Number of electron per diffraction pattern
+            meas = meas / meas.sum((-2,-1))[:,None,None]
+            meas = np.random.poisson(meas * total_electron)
+            print(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}")
+            
+        # Normalizing meas
         print("Normalizing measurements so the averaged measurement has max intensity at 1")
-        cbeds = cbeds / (np.mean(cbeds, 0).max()) # Normalizing the cbeds_data so that the averaged CBED has max at 1. This will make each CBED has max somewhere ~ 1
-        cbeds = cbeds.astype('float32')
+        meas = meas / (np.mean(meas, 0).max()) # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
+        meas = meas.astype('float32')
         
         # Get rbf related values
-        rbf = get_rbf(cbeds)
-        suggested_probe_mask_k_radius = 2*rbf/cbeds.shape[-1]
+        rbf = get_rbf(meas)
+        suggested_probe_mask_k_radius = 2*rbf/meas.shape[-1]
         
         # Print out some measurements statistics
         print(f"Radius of bright field disk             (rbf) = {rbf} px, suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}")
-        print(f"meausrements int. statistics (min, mean, max) = ({cbeds.min():.4f}, {cbeds.mean():.4f}, {cbeds.max():.4f})")
-        print(f"measurements                      (N, Ky, Kx) = {cbeds.dtype}, {cbeds.shape}")
-        self.init_variables['measurements'] = cbeds
+        print(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})")
+        print(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}")
+        self.init_variables['measurements'] = meas
         
     def init_probe(self):
         source = self.init_params['source_params']['probe_source']
@@ -205,8 +270,8 @@ class Initializer:
             probe = probe.transpose(2,0,1)
         elif source == 'simu':
             probe_simu_params = params
-            if probe_simu_params is None or type(probe_simu_params) == str:
-                print(f"exp_params[`probe_simu_params`] is set to `{probe_simu_params}`, use exp_params and default values instead for simulation")
+            if probe_simu_params is None:
+                print(f"Use exp_params and default values instead for simulation")
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
@@ -224,19 +289,19 @@ class Initializer:
         # Normalizing probe intensity
         pmode_max = self.init_params['exp_params']['pmode_max']
         try:
-            cbeds = self.init_variables['measurements']
+            meas = self.init_variables['measurements']
         except KeyError:
             # If 'measurements' doesn't exist, initialize it
             print("Warning: 'measurements' key not found. Initializing measurements for probe intensity normalization...")
             self.init_measurements()
-            cbeds = self.init_variables['measurements']
+            meas = self.init_variables['measurements']
             
         # Select pmode range and print summary
         probe = probe[:pmode_max]
-        probe = probe / (np.sum(np.abs(probe)**2)/np.sum(cbeds)*len(cbeds))**0.5 # Normalizing the probe_data so that the sum(|probe_data|**2) is the same with an averaged single CBED
+        probe = probe / (np.sum(np.abs(probe)**2)/np.sum(meas)*len(meas))**0.5 # Normalizing the probe_data so that the sum(|probe_data|**2) is the same with an averaged single DP
         probe = probe.astype('complex64')
         print(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}")
-        print(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while sum(cbeds)/len(cbeds) = {np.sum(cbeds)/len(cbeds):.2f}")
+        print(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while sum(meas)/len(meas) = {np.sum(meas)/len(meas):.2f}")
         self.init_variables['probe'] = probe
    
     def init_pos(self):
@@ -442,7 +507,7 @@ class Initializer:
         N_scan_fast = exp_params['N_scan_fast']
         
         # Initialized variables
-        cbeds            = self.init_variables['measurements']
+        meas            = self.init_variables['measurements']
         probe            = self.init_variables['probe']
         crop_pos         = self.init_variables['crop_pos']
         probe_pos_shifts = self.init_variables['probe_pos_shifts']
@@ -451,16 +516,16 @@ class Initializer:
         H                = self.init_variables['H']
         obj_tilts        = self.init_variables['obj_tilts']
         
-        # Check CBED shape
-        if Npix == cbeds.shape[-2] == cbeds.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
-            print(f"Npix, CBED measurements, probe, and H shapes are consistent as '{Npix}'")
+        # Check DP shape
+        if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            print(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'")
         else:
-            raise ValueError(f"Found inconsistency between Npix({Npix}), CBED measurements({cbeds.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
+            raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
         # Check scan pattern
-        if N_scans == len(cbeds) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
-            print(f"N_scans, len(cbeds), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'")
+        if N_scans == len(meas) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
+            print(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'")
         else:
-            raise ValueError(f"Found inconstency between N_scans({N_scans}), len(cbeds)({len(cbeds)}), N_scan_slow({N_scan_slow})*N_scan_fast({N_scan_fast}), len(crop_pos)({len(crop_pos)}), and len(probe_pos_shifts)({len(probe_pos_shifts)})")
+            raise ValueError(f"Found inconstency between N_scans({N_scans}), len(meas)({len(meas)}), N_scan_slow({N_scan_slow})*N_scan_fast({N_scan_fast}), len(crop_pos)({len(crop_pos)}), and len(probe_pos_shifts)({len(probe_pos_shifts)})")
         
         # Check object shape
         if obj.shape[0] == len(omode_occu):

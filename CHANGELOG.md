@@ -26,18 +26,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
 
-## [Unrelease]
+## [v0.1.0-beta1.3] - 2024-07-10
 ### Added
+- Add 4D-STEM preprocessing methods including `meas_crop`, `meas_resample`, `meas_add_source_size`, `meas_add_detector_blur`, `meas_add_poisson_noise` to `initialization` for better handling of input simulated 4D-STEM data. With these new methods, users can easily reconstruct with different 4D-STEM data conditions without manually generating and saving each 4D-STEM variants. We may create 4D-STEM datasets with different collection angles, k-space sampling, partial spatial coherence, detector blur, and noise level from a single dataset right before the reconstruction.
 - Add `obj_preblur_std` to `model` for an effective real space deconvolution with a 2D Gaussian kernel. By pre-convolving the obj with a 2D Gaussian before simulating the diffraction pattern, the reconstructed obj is essentially the deconvolution version of the transmission function.
 ### Change
-- Modify `make_output_folder` to include `obj_preblue_std` values
+- Rename `cbeds` variables/keys into `meas` or `DP` for generalizability. Changes are primarily made inside `initialization`, `optimization`, and `visualization` but you will need to modify the params files.
+- Modify `make_output_folder` to include `obj_preblur_std` values
 - Modify the gaussian_blur implementation in `loss_simlar` from a stack/list comp version to a reshape version and gets a 25% speed up (45 sec vs. 1min /iter)!
+### Remove
+- Remove `recenter_cbeds` in `model_params` because sub-px shifting noisy CBEDs is really not a good idea and leaves quite some artifact as well. We should directly handle the obj linear phase ramp from the off-centered CBEDs.
+- Remove `run_ptyrad_local.py` for simplicity as I don't expect a lot of users would need it anymore. One can modify the atlas script by changing the path of `ptyrad` package.
 
 ## [v0.1.0-beta1.2] - 2024-06-05
 ### Added
 - Add `obj_zblur` to `optimization` for a real-space substitution of `kz_filter`. By convolving a 1D Gaussian filter along z-direciton, we could remove the wrap-around while maintaining the z-regularization behavior. Note that there's no free lunch so instead of the wrap-around from `kz_filter`, the `obj_zblur` would still introduce edge effect due to the convolution. The default is "same" padding with "replicate" padding mode, so the object is padded with edge elements like abc|ccc, where | stands for the object edge 
 - Add `get_decomposed_affine_matrix` to `utils` to quickly estimate the needed scan affine transformation components if we already have a reconstructed object and we know the ideal lattice constant and the angle between lattice vectors
-### Change
+### Changed
 - Move `obj_tilts` to `source_params` so that we can decouple it with the `init_cache` and use it freely from scratch (e.g. start from random object, probe, pos but with known local tilts from previous reconstructions)
 - Change the `measurements_params` for `'mat'` and `'hdf5'` from a `list` to a `dict` for better clarity, i.e. [path, 'cbed'] -> {'path':<path>, 'key':'cbed'}
 - Modify `make_output_folder` to include `obja_thresh` values in accordance with the added `obj_zblur` feature. Because the `kz_filter` automatically contains a soft thresholding for obja so in order to fully replace it with `obj_zblur`, we'll need to additionally specify `obja_thresh` as well
@@ -47,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `scan_rand_std` option to `initialization` for Guassian displacements of scan positions to reduce the raster grid pathology
 - Add `loss_poissn` to `optimization` for loss calculation with Poisson noise statistics. This should be helpful for low dose data.
-### Change
+### Changed
 - Add the `show_fig` flag and `plt.ioff` to `plot_pos_grouping` so that it's consistent with other plotting functions
 - Remove the `os.environ["OMP_NUM_THREADS"] = "4"` in  `utils` since I somehow don't get the warning from `MiniBatchKMeans` anymore
 - Add the description about reading py4dstem-processed .hdf5 with data key `'/datacube_root/datacube/data'` found by Desheng to `params_description.md`
@@ -59,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `kr_filter` as additional obj constraint to `optimization` so we could set our desirable maximum kr that contributes to the object image. Note that the positivity clipping could be doubling the apparent spatial frequencies
 - Add `run_ptyrad_altas.py`, `run_ptyrad_local.py`, and `slurm_run_ptyrad.sub` as demo scripts
 - Add `docs/` and `params_description.md` for some more explanation
-### Change
+### Changed
 - Rename the `kz_filter` output folder string in `make_output_folder` from `kzreg` into `kzf` for simplicity, and to be consistent with `krf` for `kr_filter` 
 - Change the `shift_cbeds` in `models` from `.abs()` to `.real.clamp(min=0)` because it seems that taking the real part of the complex Fourier filtered output from a real-valued input is a more correct approach
 - Use the `plt.show(block=False)` flag for `plot_pos_grouping` so that the non-interactive python execution wouldn't be block by the `plt.show()` when executed from script

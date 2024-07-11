@@ -10,7 +10,7 @@ import torch
 from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
-# The CBED related loss takes a parameter of dp_pow which raise the CBED with certain power, 
+# The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
 # usually 0.5 for loss_single and 0.2 for loss_pacbed to emphasize the diffuse background
 # The obj-dependent regularization loss_sparse is using the objp_patches as input
 # In this way it'll only calculate values within the ROI, so the edges of the object would not be included
@@ -24,27 +24,27 @@ class CombinedLoss(torch.nn.Module):
         self.loss_params = loss_params
         self.mse = torch.nn.MSELoss(reduction='mean')
 
-    def get_loss_single(self, model_CBEDs, measured_CBEDs):
+    def get_loss_single(self, model_DP, measured_DP):
         # Calculate loss_single
-        # This loss function emulates the likelihood function of cbeds with Gaussian statistics (higher dose)
+        # This loss function emulates the likelihood function of diffraction patterns with Gaussian statistics (higher dose)
         # For exact Gaussian statistics, the dp_pow should be 0.5
         
         single_params = self.loss_params['loss_single']
         if single_params['state']:
-            dp_pow = single_params.get('dp_pow', 0.5)
-            data_mean = measured_CBEDs.pow(dp_pow).mean()
-            loss_single = self.mse(model_CBEDs.pow(dp_pow), measured_CBEDs.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
+            dp_pow      = single_params.get('dp_pow', 0.5)
+            data_mean   = measured_DP.pow(dp_pow).mean()
+            loss_single = self.mse(model_DP.pow(dp_pow), measured_DP.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_single *= single_params['weight']
         else:
             loss_single = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         return loss_single
     
-    def get_loss_poissn(self, model_CBEDs, measured_CBEDs):
+    def get_loss_poissn(self, model_DP, measured_DP):
         # Calculate loss_poissn
-        # This loss function emulates the likelihood function of cbeds with Poisson statistics (low dose)
+        # This loss function emulates the likelihood function of diffraction patterns with Poisson statistics (low dose)
         # For exact Poisson statistics, the dp_pow should be 1
-        # No need to worry about the CBED having most pixel value smaller than 1, CBED int scaling has no effect to the reconstruction
-        # The eps in log is needed for numerical stability during optimization and to avoid negative infinite when the CBED intensity is approaching 0
+        # No need to worry about the DP having most pixel value smaller than 1, DP int scaling has no effect to the reconstruction
+        # The eps in log is needed for numerical stability during optimization and to avoid negative infinite when the DP intensity is approaching 0
         # Typical eps is within 1e-3 to 1e-9
         
         # function L = get_loglik(modF, aPsi)
@@ -56,19 +56,19 @@ class CombinedLoss(torch.nn.Module):
         if poissn_params['state']:
             dp_pow = poissn_params.get('dp_pow', 1)
             eps = poissn_params.get('eps', 1e-6)
-            data_mean = measured_CBEDs.pow(dp_pow).mean()
-            loss_poissn = -torch.mean(measured_CBEDs.pow(dp_pow) * torch.log(model_CBEDs.pow(dp_pow) + eps) - model_CBEDs.pow(dp_pow)) / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
+            data_mean   = measured_DP.pow(dp_pow).mean()
+            loss_poissn = -torch.mean(measured_DP.pow(dp_pow) * torch.log(model_DP.pow(dp_pow) + eps) - model_DP.pow(dp_pow)) / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_poissn *= poissn_params['weight']
         else:
             loss_poissn = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         return loss_poissn
     
-    def get_loss_pacbed(self, model_CBEDs, measured_CBEDs):
+    def get_loss_pacbed(self, model_DP, measured_DP):
         # Calculate loss_pacbed
         pacbed_params = self.loss_params['loss_pacbed']
         if pacbed_params['state']:
             dp_pow = pacbed_params.get('dp_pow', 0.2)
-            loss_pacbed = self.mse(model_CBEDs.mean(0).pow(dp_pow), measured_CBEDs.mean(0).pow(dp_pow))**0.5
+            loss_pacbed = self.mse(model_DP.mean(0).pow(dp_pow), measured_DP.mean(0).pow(dp_pow))**0.5
             loss_pacbed *= pacbed_params['weight']
         else:
             loss_pacbed = torch.tensor(0, dtype=torch.float32, device=self.device)
@@ -123,11 +123,11 @@ class CombinedLoss(torch.nn.Module):
             loss_simlar = torch.tensor(0, dtype=torch.float32, device=self.device)
         return loss_simlar
     
-    def forward(self, model_CBEDs, measured_CBEDs, object_patches, omode_occu):
+    def forward(self, model_DP, measured_DP, object_patches, omode_occu):
         losses = []
-        losses.append(self.get_loss_single(model_CBEDs, measured_CBEDs))
-        losses.append(self.get_loss_poissn(model_CBEDs, measured_CBEDs))
-        losses.append(self.get_loss_pacbed(model_CBEDs, measured_CBEDs))
+        losses.append(self.get_loss_single(model_DP, measured_DP))
+        losses.append(self.get_loss_poissn(model_DP, measured_DP))
+        losses.append(self.get_loss_pacbed(model_DP, measured_DP))
         losses.append(self.get_loss_sparse(object_patches[...,1], omode_occu))
         losses.append(self.get_loss_simlar(object_patches, omode_occu))
         total_loss = sum(losses)
@@ -306,9 +306,9 @@ def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         optimizer.zero_grad()
-        model_CBEDs, object_patches = model(batch)
-        measured_CBEDs = model.get_measurements(batch)
-        loss_batch, losses = loss_fn(model_CBEDs, measured_CBEDs, object_patches, model.omode_occu)
+        model_DP, object_patches = model(batch)
+        measured_DP = model.get_measurements(batch)
+        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
         loss_batch.backward()
         optimizer.step() # batch update
         batch_t = time_sync() - start_batch_t

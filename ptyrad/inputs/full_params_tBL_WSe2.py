@@ -25,10 +25,15 @@ exp_params = {
     'pmode_max'         : 16,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
-    'cbeds_permute'     : None,
-    'cbeds_reshape'     : None,
-    'cbeds_flipT'       : [1,0,0], # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'probe_simu_params' : None
+    'meas_permute'           : None,
+    'meas_reshape'           : None,
+    'meas_flipT'             : [1,0,0], # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'meas_crop'              : [[0,64],[0,64],[1,128],[1,128]], # None or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
+    'meas_resample'          : [0.5,0.5], # None or (2,1) array-like for [ky_zoom, kx_zoom]
+    'meas_add_source_size'   : 1, # None or a scalar of std (Ang)
+    'meas_add_detector_blur' : 1, # None or a scalar of std (px)
+    'meas_add_poisson_noise' : 1e5, # None or a scalar of electrons/Ang^2
+    'probe_simu_params'      : None
     }
 
 # Source and params, note that these should be changed in accordance with each other
@@ -60,9 +65,8 @@ source_params = {
 }
 
 model_params = {
-    'recenter_cbeds'      : None,    # 'all', 'each', None
-    'detector_blur_std'   : None,    # scalar(px), None
-    'obj_preblur_std'     : None,       # scalar(px), None
+    'obj_preblur_std'     : None, # scalar(px), None
+    'detector_blur_std'   : None, # scalar(px), None
     'lr_params':{
         'obja'            : 5e-4,
         'objp'            : 5e-4,

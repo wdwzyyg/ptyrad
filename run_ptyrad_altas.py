@@ -33,9 +33,9 @@ constraint_fn = CombinedConstraint(constraint_params, device=DEVICE)
 # Generate the indices, batches, recon_params, output_path, etc
 pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
 probe_int    = model.opt_probe[0].abs().pow(2).detach().cpu().numpy()
-dx           = exp_params['dx_spec']
+dx           = init.init_variables['dx']
 d_out        = get_blob_size(dx, probe_int, output='d90') # d_out unit is in Ang
-indices      = select_scan_indices(exp_params['N_scan_slow'], exp_params['N_scan_fast'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE)
+indices      = select_scan_indices(init.init_variables['N_scan_slow'], init.init_variables['N_scan_fast'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE)
 batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE)
 recon_params = make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS)
 output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix, postfix)
@@ -53,6 +53,7 @@ for niter in range(1,NITER+1):
     
     ## Saving intermediate results
     if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
+        # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
         save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses)
         
         ## Saving summary

@@ -25,10 +25,15 @@ exp_params = {
     'pmode_max'         : 6,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
-    'cbeds_permute'     : (0,2,1),
-    'cbeds_reshape'     : None,
-    'cbeds_flipT'       : None, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'probe_simu_params' : None
+    'meas_permute'           : (0,2,1),
+    'meas_reshape'           : None,
+    'meas_flipT'             : None, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'meas_crop'              : None, # None or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
+    'meas_resample'          : None, # None or (2,1) array-like for [ky_zoom, kx_zoom]
+    'meas_add_source_size'   : None, # None or a scalar of std (Ang)
+    'meas_add_detector_blur' : None, # None or a scalar of std (px)
+    'meas_add_poisson_noise' : None, # None or a scalar of electrons/Ang^2
+    'probe_simu_params'      : None
     }
 
 # Source and params, note that these should be changed in accordance with each other

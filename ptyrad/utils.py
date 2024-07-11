@@ -139,13 +139,12 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : model.optimizable_tensors,
-                'exp_params'            : exp_params,
+                'exp_params'            : exp_params, # This `exp_params` is the initial exp_params, N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from actual value due to the meas_crop, meas_resample
                 'source_params'         : source_params,
                 'loss_params'           : loss_params,
                 'constraint_params'     : constraint_params,
                 'model_params': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
-                    {'recenter_cbeds'   : model.recenter_cbeds,
-                     'detector_blur_std': model.detector_blur_std,
+                    {'detector_blur_std': model.detector_blur_std,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
@@ -157,8 +156,8 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                      'dk'               : model.dk,
                      'tilt_obj'         : model.tilt_obj,
                      'shift_probes'     : model.shift_probes,
-                     'probe_int_sum'    : model.probe_int_sum,
-                     'avg_cbeds_shift'  : model.avg_cbeds_shift},
+                     'probe_int_sum'    : model.probe_int_sum
+                     },
                 'recon_params'          : recon_params,
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
@@ -199,7 +198,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # output_path  = make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix)
     
     output_path  = output_dir
-    cbeds_flipT  = exp_params['cbeds_flipT']
+    meas_flipT   = exp_params['meas_flipT']
     indices_mode = recon_params['INDICES_MODE']
     group_mode   = recon_params['GROUP_MODE']
     batch_size   = recon_params['BATCH_SIZE']
@@ -219,9 +218,9 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # Setup basic params   
     output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
     
-    # Attach cbeds flipping
-    if cbeds_flipT is not None:
-        output_path = output_path + '_flipT' + ''.join(str(x) for x in cbeds_flipT)
+    # Attach meas flipping
+    if meas_flipT is not None:
+        output_path = output_path + '_flipT' + ''.join(str(x) for x in meas_flipT)
     
     # Attach recon mode and pmode 
     output_path += f"_{group_mode}{batch_size}_p{pmode}"
@@ -992,14 +991,14 @@ def make_sigmoid_mask(Npix, relative_radius=2/3, relative_width=0.2):
     
     return sigmoid_mask
 
-def get_rbf(cbeds, thresh=0.5):
+def get_rbf(meas, thresh=0.5):
     """ Utility function that returns an estimate of the radius of rbf from CBEDs """
-    # cbeds: 3D array of (N,ky,kx) so that we can take an average 
+    # meas: 3D array of (N,ky,kx) so that we can take an average 
     # thresh: 0.5 for FWHM, 0.1 for Full-width at 10th maximum
-    cbed = cbeds.sum(0)
-    line = cbed.max(0)
+    dp      = meas.sum(0)
+    line    = dp.max(0)
     indices = np.where(line > line.max()*thresh)[0]
-    rbf = 0.5*(indices[-1]-indices[0]) # Return rbf in px
+    rbf     = 0.5*(indices[-1]-indices[0]) # Return rbf in px
     return rbf
 
 def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, window_size=9):

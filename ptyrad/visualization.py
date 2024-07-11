@@ -50,15 +50,15 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     with torch.no_grad():
         probes                   = model.get_probes(indices)
         probes_int               = probes.abs().pow(2).sum(1)
-        model_CBEDs, obj_patches = model(indices)
+        model_DP, obj_patches = model(indices)
         omode_occu               = model.omode_occu
-        measured_CBEDs           = model.get_measurements(indices)
+        measured_DP           = model.get_measurements(indices)
         
         probes_int     = probes_int.detach().cpu().numpy()
         obja_ROI        = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
         objp_ROI        = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
-        model_CBEDs    = model_CBEDs.detach().cpu().numpy()
-        measured_CBEDs = measured_CBEDs.detach().cpu().numpy()
+        model_DP    = model_DP.detach().cpu().numpy()
+        measured_DP = measured_DP.detach().cpu().numpy()
     
     plt.ioff() # Temporaily disable the interactive plotting mode
     fig, axs = plt.subplots(len(indices), 5, figsize=(24, 5*len(indices)))
@@ -78,12 +78,12 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
         axs[i,2].set_title(f"Object phase (osum, zsum) idx{idx}", fontsize=16)
         fig.colorbar(im02, shrink=0.6)
 
-        im03 = axs[i,3].imshow((model_CBEDs[i]**dp_power))
-        axs[i,3].set_title(f"Model CBED^{dp_power} idx{idx}", fontsize=16)
+        im03 = axs[i,3].imshow((model_DP[i]**dp_power))
+        axs[i,3].set_title(f"Model DP^{dp_power} idx{idx}", fontsize=16)
         fig.colorbar(im03, shrink=0.6)
         
-        im04 = axs[i,4].imshow((measured_CBEDs[i]**dp_power))
-        axs[i,4].set_title(f"Data CBED^{dp_power} idx{idx}", fontsize=16)
+        im04 = axs[i,4].imshow((measured_DP[i]**dp_power))
+        axs[i,4].set_title(f"Data DP^{dp_power} idx{idx}", fontsize=16)
         fig.colorbar(im04, shrink=0.6)
     plt.tight_layout()
     if show_fig:
