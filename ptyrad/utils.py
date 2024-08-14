@@ -229,7 +229,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
-        output_path += f"_dz{z_distance}"
+        output_path += f"_dz{z_distance:.3g}"
     
     # Attach learning rate (optional)
     if show_lr:

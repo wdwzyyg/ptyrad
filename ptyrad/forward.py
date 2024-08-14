@@ -13,7 +13,7 @@ import torch
 # Note that element-wise multiplication of tensor (*) is defaulted as out-of-place operation
 # So new tensor is being created and referenced to the old graph to keep the gradient flowing
 
-def multislice_forward_model_vec_all(object, omode_occu, probe, H):
+def multislice_forward_model_vec_all(object, omode_occu, probe, H, eps=1e-10):
     """ multislice electron diffraction with multiple incoherent probe and object modes """
     # Example usage:
     # dp_fwd = multislice_forward_model_vec_all(object_patches, omode_occu, probes, H)
@@ -51,5 +51,5 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H):
     # dp_fwd = sum(weighted_psi_k)
     # Note that norm = 'ortho' is needed to ensure that for each sample, sum(|psi|^2) and sum(dp) has the same scale (should be 1) 
     
-    dp_fwd = torch.sum((fftshift2(fft2(psi, norm='ortho'))).abs().square() * omode_occu[:,None,None], dim=(1, 2))
+    dp_fwd = torch.sum((fftshift2(fft2(psi, norm='ortho'))).abs().square() * omode_occu[:,None,None], dim=(1, 2)) + eps # Add eps for numerical stability
     return dp_fwd

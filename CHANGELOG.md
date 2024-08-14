@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - (Optional) Use `einops` and `einsum` for code readability
 - Unified meshgrid usage, naming, and unit would be nice
 - Add type hints, method decorators, and standardize doc strings. Might use ChatGPT to help me with that
+= Might want to remove `rbf` once and for all for better clarity, we should encourage users to calibrate their dk for each camera length
 ### New recon feature
 - Add BO routine as a preprocessing step for total thickness, global scan affine transform. Might be able to get some idea from py4dstem .preprocess methods.
 - Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
@@ -25,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
+- Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
+
+## [Unreleased]
+### Change
+- Fix `make_out_folder` so that dz will only print 3 significant figures after rounded to 2 decimal points. So dz = 12.8 would be printed as 12.8 instead of 12.800000190734863.
+- Add the eps=1e-10 back to `forward` so that the dp.pow() is more numerically stable, especially for large collection angles with very weak intensities
 
 ## [v0.1.0-beta1.3] - 2024-07-10
 ### Added
