@@ -10,6 +10,11 @@ from torch.fft import fft2, ifft2, fftfreq
 from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
 
+def vprint(*args, verbose=True, **kwargs):
+    """ Verbose print with individual control """ 
+    if verbose:
+        print(*args, **kwargs)
+
 def get_date(date_format = '%Y%m%d'):
     from datetime import date
     date_format = date_format
@@ -92,11 +97,10 @@ def get_decomposed_affine_matrix(A, B):
     else:
         raise ValueError("Optimization failed")
 
-def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full'):
+def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full', verbose=True):
     
     N_scans = N_scan_slow * N_scan_fast
-    
-    print(f"Selecting indices with the '{mode}' mode ")
+    vprint(f"Selecting indices with the '{mode}' mode ", verbose=verbose)
     # Generate flattened indices for the entire FOV
     if mode == 'full':
         indices = np.arange(N_scans)
@@ -104,13 +108,13 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
 
     # Set default values for subscan params
     if subscan_slow is None and subscan_fast is None:
-        print(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions")
+        vprint(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
         subscan_slow = N_scan_slow//2
         subscan_fast = N_scan_fast//2
         
     # Generate flattened indices for the center rectangular region
     if mode == 'center':
-        print(f"Choosing subscan with {(subscan_slow, subscan_fast)}") 
+        vprint(f"Choosing subscan with {(subscan_slow, subscan_fast)}", verbose=verbose) 
         start_row = (N_scan_slow - subscan_slow) // 2
         end_row = start_row + subscan_slow
         start_col = (N_scan_fast - subscan_fast) // 2
@@ -119,7 +123,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
 
     # Generate flattened indices for the entire FOV with sub-sampled indices
     elif mode == 'sub':
-        print(f"Choosing subscan with {(subscan_slow, subscan_fast)}") 
+        vprint(f"Choosing subscan with {(subscan_slow, subscan_fast)}", verbose=verbose) 
         full_indices = np.arange(N_scans).reshape(N_scan_slow, N_scan_fast)
         subscan_slow_id = np.linspace(0, N_scan_slow-1, num=subscan_slow, dtype=int)
         subscan_fast_id = np.linspace(0, N_scan_fast-1, num=subscan_fast, dtype=int)
@@ -177,7 +181,7 @@ def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITE
     }
     return recon_params
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix='', postfix='', show_lr=True, show_constraint=True, show_model=True, show_loss=True):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix='', postfix='', show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=False, verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
@@ -210,6 +214,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
     tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
+    scan_affine  = model.scan_affine.cpu().numpy()
+    init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
@@ -296,16 +302,26 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         if loss_params['loss_simlar']['state']:
             output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
 
+    # # Attach init params (optional)
+    if show_init:
+        if scan_affine is not None:
+            affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
+            output_path += f"_aff{affine_str}"
+        
+        if np.any(init_tilts):
+            tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel())
+            output_path += f"_tilt{tilts_str}"
+    
     output_path += postfix
     
     if recon_params['SAVE_ITERS'] is not None:
         os.makedirs(output_path, exist_ok=True)
-        print(f"output_path = '{output_path}' is generated!")
+        vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
     else:
-        print(f"output_path = '{output_path}' but is NOT generated!")
+        vprint(f"output_path = '{output_path}' but is NOT generated!", verbose=verbose)
     return output_path
 
-def make_batches(indices, pos, batch_size, mode='random'):
+def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     ''' Make batches from input indices '''
     # Input:
     #   indices: int, (Ns,) array. indices could be a subset of all indices.
@@ -338,8 +354,8 @@ def make_batches(indices, pos, batch_size, mode='random'):
     if mode == 'random':
         rng = np.random.default_rng()
         shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
-        random_batches = np.array_split(shuffled_indices, num_batch) 
-        print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
+        random_batches = np.array_split(shuffled_indices, num_batch)
+        vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
         return random_batches
         
     else: # Either 'compact' or 'sparse'
@@ -357,7 +373,7 @@ def make_batches(indices, pos, batch_size, mode='random'):
             compact_batches.append(indices[batch_indices_s])
 
         if mode == 'compact':
-            print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
+            vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
             return compact_batches
 
         else: # 'sparse' mode
@@ -400,7 +416,7 @@ def make_batches(indices, pos, batch_size, mode='random'):
             flatten_indices.sort()
             indices.sort()
             assert all(flatten_indices == indices), "Sorry, something went wrong with the sparse grouping, please try 'random' for now"
-            print(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec")
+            vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
             
             return sparse_batches
 
@@ -867,7 +883,7 @@ def get_center_of_mass(image, corner_centered=False):
     
     return center_y, center_x
 
-def get_blob_size(dx, blob, output='d90', plot_profile=False):
+def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
     import matplotlib.pyplot as plt
     """ Get the probe / blob size
 
@@ -968,7 +984,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False):
     else:
         raise KeyError(f"output ={output} not implemented!")
     
-    if output not in ['radial_profile', 'radial_sum', 'fig']:
+    if output not in ['radial_profile', 'radial_sum', 'fig'] and verbose:
         print(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')
     return out
 

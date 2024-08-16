@@ -4,6 +4,7 @@ from .forward import  multislice_forward_model_vec_all
 from .utils import get_center_of_mass, imshift_single, imshift_batch, ifftshift2, add_tilts_to_propagator
 from torchvision.transforms.functional import gaussian_blur
 import torch
+from .visualization import plot_scan_positions
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -34,7 +35,7 @@ class PtychoAD(torch.nn.Module):
     # model = PtychoAD(init_variables, model_params, device=DEVICE)
     # optimizer = torch.optim.Adam(model.optimizer_params)
 
-    def __init__(self, init_variables, model_params, device='cuda:0'):
+    def __init__(self, init_variables, model_params, device='cuda:0', verbose=True):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device                 = device
@@ -56,6 +57,7 @@ class PtychoAD(torch.nn.Module):
             self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
             self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
             self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
+            self.scan_affine            = torch.tensor(init_variables['scan_affine'],       dtype=torch.float32,   device=device) # Saving this for reference
             self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
@@ -70,7 +72,7 @@ class PtychoAD(torch.nn.Module):
                 'obj_tilts'       : self.opt_obj_tilts,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
-            self.set_optimizer(self.lr_params)
+            self.set_optimizer(self.lr_params, verbose)
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -94,7 +96,7 @@ class PtychoAD(torch.nn.Module):
         self.roy_grid = roy # real space grid with y-indices spans across object extent
         self.rox_grid = rox
     
-    def set_optimizer(self, lr_params):
+    def set_optimizer(self, lr_params, verbose=True):
         """ Sets the optimizer with lr_params """
         # # Use this to edit learning rate if needed some refinement
 
@@ -114,8 +116,8 @@ class PtychoAD(torch.nn.Module):
                 self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
                 if lr != 0:
                     self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
-
-        self.print_model_summary()
+        if verbose:
+            self.print_model_summary()
         
     def print_model_summary(self):
         print('\n### PtychoAD optimizable variables ###')

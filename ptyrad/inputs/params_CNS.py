@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1406,# Ang, used to calculate dk
     'defocus'           : -100, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention, which is opposite from Dr.Probe or TFS UI display
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 10, # Ang
-    'Nlayer'            : 1,
+    'z_distance'        : 1, # Ang
+    'Nlayer'            : 10,
     'N_scans'           : 7134,
     'N_scan_slow'       : 87,
     'N_scan_fast'       : 82,

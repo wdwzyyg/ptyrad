@@ -11,8 +11,8 @@ exp_params = {
     'dx_spec'           : 0.1494,# Ang
     'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 12, # Ang
-    'Nlayer'            : 1,
+    'z_distance'        : 6, # Ang
+    'Nlayer'            : 2,
     'N_scans'           : 16384,
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
@@ -20,19 +20,19 @@ exp_params = {
     'scan_flipT'        : None, # None for both 'simu' and loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : None, # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
-    'omode_max'         : 16,
+    'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':None},
-    'pmode_max'         : 16,
+    'pmode_max'         : 4,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : None,
     'meas_permute'           : None,
     'meas_reshape'           : None,
     'meas_flipT'             : [1,0,0], # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'meas_crop'              : [[0,64],[0,64],[1,128],[1,128]], # None or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
-    'meas_resample'          : [0.5,0.5], # None or (2,1) array-like for [ky_zoom, kx_zoom]
-    'meas_add_source_size'   : 1, # None or a scalar of std (Ang)
-    'meas_add_detector_blur' : 1, # None or a scalar of std (px)
-    'meas_add_poisson_noise' : 1e5, # None or a scalar of electrons/Ang^2
+    'meas_crop'              : None, # None or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
+    'meas_resample'          : None, # None or (2,1) array-like for [ky_zoom, kx_zoom]
+    'meas_add_source_size'   : None, # None or a scalar of std (Ang)
+    'meas_add_detector_blur' : None, # None or a scalar of std (px)
+    'meas_add_poisson_noise' : None, # None or a scalar of electrons/Ang^2
     'probe_simu_params'      : None
     }
 
@@ -79,7 +79,7 @@ loss_params = {
     'loss_poissn': {'state': False, 'weight': 1.0, 'dp_pow':1.0, 'eps':1e-6},
     'loss_pacbed': {'state': False, 'weight': 0.5, 'dp_pow': 0.2}, # Usually weight:0.5, dp_pow:0.2
     'loss_sparse': {'state': True, 'weight': 0.1, 'ln_order': 1},
-    'loss_simlar': {'state': True, 'weight': 0.1, 'obj_type':'both', 'scale_factor':[1,1,1], 'blur_std':1}
+    'loss_simlar': {'state': False, 'weight': 0.1, 'obj_type':'both', 'scale_factor':[1,1,1], 'blur_std':1}
 }
 
 constraint_params = {
@@ -102,8 +102,8 @@ def get_date(date_format = '%Y%m%d'):
     return date_str
 
 # Recon params
-NITER        = 200
-INDICES_MODE = 'full'   # 'full', 'center', 'sub'
+NITER        = 10
+INDICES_MODE = 'center'   # 'full', 'center', 'sub'
 BATCH_SIZE   = 32
 GROUP_MODE   = 'random' # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
 SAVE_ITERS   = 10        # scalar or None

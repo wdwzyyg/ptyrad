@@ -2,7 +2,7 @@
 ## Define the constraint class for iter-wist constraints
 ## Define the optimization loop related functions
 
-from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d
+from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d, vprint
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 from torch.nn.functional import interpolate
@@ -136,10 +136,11 @@ class CombinedLoss(torch.nn.Module):
 class CombinedConstraint(torch.nn.Module):
     ''' Apply iteration-wise in-place constraints on the optimizable tensors '''
     
-    def __init__(self, constraint_params, device='cuda:0'):
+    def __init__(self, constraint_params, device='cuda:0', verbose=True):
         super(CombinedConstraint, self).__init__()
         self.device = device
         self.constraint_params = constraint_params
+        self.verbose = verbose
 
     def apply_ortho_pmode(self, model, niter):
         ''' Apply orthogonality constraint to probe modes '''
@@ -148,7 +149,7 @@ class CombinedConstraint(torch.nn.Module):
             model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
             probe_int = model.opt_probe.abs().pow(2)
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
-            print(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+            vprint(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
 
     def apply_probe_mask_k(self, model, niter):
         ''' Apply probe amplitude constraint in Fourier space '''
@@ -166,7 +167,7 @@ class CombinedConstraint(torch.nn.Module):
             probe_k = fftshift2 (fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k at center for later masking
             probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
             model.opt_probe.data = probe_r
-            print(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+            vprint(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
     
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
@@ -177,7 +178,7 @@ class CombinedConstraint(torch.nn.Module):
             current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
             target_amp  = model.probe_int_sum**0.5   
             model.opt_probe.data = model.opt_probe * target_amp/current_amp
-            print(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}")
+            vprint(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
             
     def apply_obj_rblur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last 2 dimension (...,H,W) '''
@@ -191,10 +192,10 @@ class CombinedConstraint(torch.nn.Module):
         if obj_rblur_freq is not None and niter % obj_rblur_freq == 0 and obj_rblur_std !=0:
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = gaussian_blur(model.opt_obja, kernel_size=obj_rblur_ks, sigma=obj_rblur_std)
-                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on obja at iter {niter}")
+                vprint(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on obja at iter {niter}", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = gaussian_blur(model.opt_objp, kernel_size=obj_rblur_ks, sigma=obj_rblur_std)
-                print(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on objp at iter {niter}")
+                vprint(f"Apply lateral (y,x) Gaussian blur with std = {obj_rblur_std} px on objp at iter {niter}", verbose=self.verbose)
     
     def apply_obj_zblur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last dimension (...,L) '''
@@ -206,11 +207,11 @@ class CombinedConstraint(torch.nn.Module):
             if obj_type in ['amplitude', 'both']:
                 tensor = model.opt_obja.permute(0,2,3,1)
                 model.opt_obja.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2)
-                print(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on obja at iter {niter}")
+                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on obja at iter {niter}", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
                 tensor = model.opt_objp.permute(0,2,3,1)
                 model.opt_objp.data = gaussian_blur_1d(tensor, kernel_size=obj_zblur_ks, sigma=obj_zblur_std).permute(0,3,1,2)
-                print(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on objp at iter {niter}")
+                vprint(f"Apply z-direction Gaussian blur with std = {obj_zblur_std} px on objp at iter {niter}", verbose=self.verbose)
     
     def apply_kr_filter(self, model, niter):
         ''' Apply kr Fourier filter constraint on object '''
@@ -223,10 +224,10 @@ class CombinedConstraint(torch.nn.Module):
         if kr_filter_freq is not None and niter % kr_filter_freq == 0:
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = kr_filter(model.opt_obja, relative_radius, relative_width)
-                print(f"Apply kr_filter constraint with kr_radius = {relative_radius} on obja at iter {niter}")
+                vprint(f"Apply kr_filter constraint with kr_radius = {relative_radius} on obja at iter {niter}", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = kr_filter(model.opt_objp, relative_radius, relative_width)
-                print(f"Apply kr_filter constraint with kr_radius = {relative_radius} on objp at iter {niter}")
+                vprint(f"Apply kr_filter constraint with kr_radius = {relative_radius} on objp at iter {niter}", verbose=self.verbose)
         
     def apply_kz_filter(self, model, niter):
         ''' Apply kz Fourier filter constraint on object '''
@@ -238,10 +239,10 @@ class CombinedConstraint(torch.nn.Module):
         if kz_filter_freq is not None and niter % kz_filter_freq == 0:
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = kz_filter(model.opt_obja, beta_regularize_layers, alpha_gaussian, obj_type='amplitude')
-                print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on obja at iter {niter}")
+                vprint(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on obja at iter {niter}", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, obj_type='phase')
-                print(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on objp at iter {niter}")
+                vprint(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on objp at iter {niter}", verbose=self.verbose)
     
     def apply_obja_thresh(self, model, niter):
         ''' Apply thresholding on obja at voxel level '''
@@ -252,7 +253,7 @@ class CombinedConstraint(torch.nn.Module):
         if obja_thresh_freq is not None and niter % obja_thresh_freq == 0: 
             model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp(min=thresh[0], max=thresh[1])
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} threshold constraint with thresh = {np.round(thresh,5)} on obja at iter {niter}")
+            vprint(f"Apply {relax_str} threshold constraint with thresh = {np.round(thresh,5)} on obja at iter {niter}", verbose=self.verbose)
 
     def apply_objp_postiv(self, model, niter):
         ''' Apply positivity constraint on objp at voxel level '''
@@ -263,7 +264,7 @@ class CombinedConstraint(torch.nn.Module):
         if objp_postiv_freq is not None and niter % objp_postiv_freq == 0: 
             model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_postiv))' if relax != 0 else 'hard'
-            print(f"Apply {relax_str} positivity constraint on objp at iter {niter}")           
+            vprint(f"Apply {relax_str} positivity constraint on objp at iter {niter}", verbose=self.verbose)           
         
     def apply_tilt_smooth(self, model, niter):
         ''' Apply Gaussian blur to object tilts '''
@@ -276,7 +277,7 @@ class CombinedConstraint(torch.nn.Module):
         if tilt_smooth_freq is not None and niter % tilt_smooth_freq == 0 and tilt_smooth_std !=0:
             obj_tilts = (model.opt_obj_tilts.reshape(N_scan_slow, N_scan_fast, 2)).permute(2,0,1)
             model.opt_obj_tilts.data = gaussian_blur(obj_tilts, kernel_size=5, sigma=tilt_smooth_std).permute(1,2,0).reshape(-1,2)
-            print(f"Apply Gaussian blur with std = {tilt_smooth_std} scan positions on obj_tilts at iter {niter}")
+            vprint(f"Apply Gaussian blur with std = {tilt_smooth_std} scan positions on obj_tilts at iter {niter}", verbose=self.verbose)
     
     def forward(self, model, niter):
         # Apply in-place constraints if niter satisfies the predetermined frequency
@@ -297,7 +298,7 @@ class CombinedConstraint(torch.nn.Module):
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
 
-def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
+def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
     ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
@@ -316,7 +317,7 @@ def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
 
-        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
+        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int) and verbose:
             print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
     
     # Apply iter-wise constraint
@@ -325,11 +326,11 @@ def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter):
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t
 
-def loss_logger(batch_losses, niter, iter_t):
+def loss_logger(batch_losses, niter, iter_t, verbose=True):
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
-    print(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
-          f"in {iter_t // 60} min {iter_t % 60:03f} sec")
+    vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
+          f"in {iter_t // 60} min {iter_t % 60:03f} sec", verbose=verbose)
     loss_iter = sum(avg_losses.values())
     return loss_iter    
 

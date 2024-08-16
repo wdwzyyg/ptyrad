@@ -326,7 +326,7 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     if pass_fig:
         return fig
 
-def plot_summary(output_path, loss_iters, niter, indices, init_variables, model, fig_list, show_fig=True, save_fig=False):
+def plot_summary(output_path, loss_iters, niter, indices, init_variables, model, fig_list, show_fig=True, save_fig=False, verbose=True):
     """ Wrapper function for most visualization function """
     # fig_list can take 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all'
     # Note: Set show_fig=False and save_fig=True if you just want to save the figure without showing
@@ -335,7 +335,7 @@ def plot_summary(output_path, loss_iters, niter, indices, init_variables, model,
     if show_fig is False and save_fig is False:
         save_fig = True 
         
-    if save_fig:
+    if save_fig and verbose:
         print(f"Saving summary figures for iter {niter}")
     
     # loss curves
