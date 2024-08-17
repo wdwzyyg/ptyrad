@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # Define parameters
-SUBDIR="./"  # No spaces around '=' in variable assignments
-N=5          # No spaces around '=' in variable assignments
-script="slurm_run_ptyrad_optuna.sub"  # No spaces around '=' in variable assignments
+# No spaces around '=' in variable assignments
+# Default N = 5, but can be updated by passing "-n $N" in the command-line argument
+SUBDIR="./scripts"
+N=5
+script="slurm_run_ptyrad.sub"
 
 # Parse the command-line argument for -n
 while getopts n: flag

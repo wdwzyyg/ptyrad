@@ -1,8 +1,7 @@
 ## Define the loss function class with loss and regularizations
 ## Define the constraint class for iter-wist constraints
-## Define the optimization loop related functions
 
-from .utils import time_sync, make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d, vprint
+from .utils import make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d, vprint
 import numpy as np
 from torchvision.transforms.functional import gaussian_blur
 from torch.nn.functional import interpolate
@@ -297,42 +296,6 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_objp_postiv  (model, niter)
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
-
-def ptycho_recon(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
-    ''' Perform 1 iteration of the ptycho reconstruciton in the optimization loop '''
-    batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
-    start_iter_t = time_sync()
-    
-    # Start mini-batch optimization
-    for batch_idx, batch in enumerate(batches):
-        start_batch_t = time_sync()
-        optimizer.zero_grad()
-        model_DP, object_patches = model(batch)
-        measured_DP = model.get_measurements(batch)
-        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
-        loss_batch.backward()
-        optimizer.step() # batch update
-        batch_t = time_sync() - start_batch_t
-
-        for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
-            batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
-
-        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int) and verbose:
-            print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
-    
-    # Apply iter-wise constraint
-    constraint_fn(model, niter)
-    
-    iter_t = time_sync() - start_iter_t
-    return batch_losses, iter_t
-
-def loss_logger(batch_losses, niter, iter_t, verbose=True):
-    avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
-    loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
-    vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
-          f"in {iter_t // 60} min {iter_t % 60:03f} sec", verbose=verbose)
-    loss_iter = sum(avg_losses.values())
-    return loss_iter    
 
 def kr_filter(obj, radius, width):
     ''' Apply kr_filter using the 2D sigmoid filter '''

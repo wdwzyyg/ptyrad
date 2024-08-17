@@ -39,6 +39,7 @@ class PtychoAD(torch.nn.Module):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device                 = device
+            self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
             self.lr_params              = model_params['lr_params']
@@ -57,7 +58,7 @@ class PtychoAD(torch.nn.Module):
             self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
             self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
             self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
-            self.scan_affine            = torch.tensor(init_variables['scan_affine'],       dtype=torch.float32,   device=device) # Saving this for reference
+            self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
             self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
@@ -72,7 +73,7 @@ class PtychoAD(torch.nn.Module):
                 'obj_tilts'       : self.opt_obj_tilts,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
-            self.set_optimizer(self.lr_params, verbose)
+            self.set_optimizer(self.lr_params, self.verbose)
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -127,7 +128,7 @@ class PtychoAD(torch.nn.Module):
         # When you create a new model, make sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"
         
         print('\n### Optimizable variables statitsics ###')
-        print(f'\nTotal measurement values:    {self.measurements.numel():,d}\
+        print(  f'Total measurement values:    {self.measurements.numel():,d}\
                 \nTotal optimizing variables:  {total_var:,d}\
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         

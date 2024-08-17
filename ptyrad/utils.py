@@ -181,7 +181,7 @@ def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITE
     }
     return recon_params
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, prefix='', postfix='', show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=False, verbose=True):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=True, verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
@@ -206,6 +206,9 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     indices_mode = recon_params['INDICES_MODE']
     group_mode   = recon_params['GROUP_MODE']
     batch_size   = recon_params['BATCH_SIZE']
+    prefix_date  = recon_params['prefix_date']
+    prefix       = recon_params['prefix']
+    postfix      = recon_params['postfix']
     pmode        = model.opt_probe.size(0)
     dp_size      = model.measurements.size(1)
     obj_shape    = model.opt_objp.shape
@@ -214,12 +217,15 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
     tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
-    scan_affine  = model.scan_affine.cpu().numpy()
+    scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
     postfix = '_'+ postfix if postfix != '' else ''
+    if prefix_date:
+        prefix = get_date() + '_' + prefix 
+    
     
     # Setup basic params   
     output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -632,7 +638,6 @@ def get_default_probe_simu_params(exp_params):
                     "Npix"           : exp_params['Npix'],
                     "rbf"            : exp_params['rbf'], # dk = conv_angle/1e3/rbf/wavelength
                     "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                    "print_info"     : False,
                     "pmodes"         : exp_params['pmode_max'],
                     "pmode_init_pows": exp_params['pmode_init_pows'],
                     ## Aberration coefficients
@@ -650,7 +655,7 @@ def get_default_probe_simu_params(exp_params):
                     }
     return probe_simu_params
 
-def make_stem_probe(params_dict):
+def make_stem_probe(params_dict, verbose=True):
     # MAKE_TEM_PROBE Generate probe functions produced by object lens in 
     # transmission electron microscope.
     # Written by Yi Jiang based on Eq.(2.10) in Advanced Computing in Electron 
@@ -687,13 +692,13 @@ def make_stem_probe(params_dict):
     wavelength = 12.398/np.sqrt((2*511.0+voltage)*voltage) #angstrom
     k_cutoff = conv_angle/1e3/wavelength
     
-    print("Start simulating STEM probe")
+    vprint("Start simulating STEM probe", verbose=verbose)
     if rbf is not None and dx is None:
-        print("Using 'rbf' for dk sampling")
+        vprint("Using 'rbf' for dk sampling", verbose=verbose)
         dk = conv_angle/1e3/wavelength/rbf
         dx = 1/(dk*Npix) # Populate dx with the calculated value
     elif dx is not None:
-        print("Using 'dx' for dk sampling")
+        vprint("Using 'dx' for dk sampling", verbose=verbose)
         dk = 1/(dx*Npix)
     else:
         raise ValueError("Either 'rbf' or 'dx' must be provided to calculate dk sampling.")
@@ -732,7 +737,7 @@ def make_stem_probe(params_dict):
     probe = fftshift(ifft2(ifftshift(probe))) # Propagate the wave function from aperture to the sample plane. 
     probe = probe/np.sqrt(np.sum((np.abs(probe))**2)) # Normalize the probe so sum(abs(probe)^2) = 1
 
-    if params_dict['print_info']:
+    if verbose:
         # Print some useful values
         print(f'kv          = {voltage} kV')    
         print(f'wavelength  = {wavelength:.4f} Ang')
@@ -747,7 +752,7 @@ def make_stem_probe(params_dict):
     
     return probe
 
-def make_mixed_probe(probe, pmodes, pmode_init_pows):
+def make_mixed_probe(probe, pmodes, pmode_init_pows, verbose=True):
     ''' Make a mixed state probe from a single state probe '''
     # Input:
     #   probe: (Ny,Nx) complex array
@@ -757,7 +762,7 @@ def make_mixed_probe(probe, pmodes, pmode_init_pows):
     #   mixed_probe: A mixed state probe with (pmode,Ny,Nx)
        
     # Prepare a mixed-state probe `mixed_probe`
-    print(f"Start making mixed-state STEM probe with {pmodes} incoherent probe modes")
+    vprint(f"Start making mixed-state STEM probe with {pmodes} incoherent probe modes", verbose=verbose)
     M = np.ceil(pmodes**0.5)-1
     N = np.ceil(pmodes/(M+1))-1
     mixed_probe = hermite_like(probe, M,N)[:pmodes]
@@ -775,7 +780,7 @@ def make_mixed_probe(probe, pmodes, pmode_init_pows):
         pmode_pows[0] = 1-sum(pmode_pows)
 
     mixed_probe = mixed_probe * np.sqrt(pmode_pows)[:,None,None]
-    print(f"Relative power of probe modes = {pmode_pows}")
+    vprint(f"Relative power of probe modes = {pmode_pows}", verbose=verbose)
     return mixed_probe
 
 def hermite_like(fundam, M, N):
@@ -1299,4 +1304,3 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
         prop_probes[i] = fftshift(ifft2(H * fft2(ifftshift(probe, axes=(-2,-1)))), axes=(-2,-1))
     
     return prop_probes
-

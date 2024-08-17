@@ -64,6 +64,22 @@ source_params = {
     # 'pos_params'         : ptycho_output_path,
 }
 
+hypertune_params = {
+    'n_trials'      : 10,
+    'use_pruning'   : True,
+    'storage_path'  : 'sqlite:///hypertune_database.sqlite3',
+    'study_name'    : 'ptyrad_tBL_WSe2',
+    'tune_params'   : {
+        'z_distance': {'state': True, 'min': 4, 'max': 8, 'step': 0.5},
+        'scale'     : {'state': True, 'min': 0.9, 'max': 1.1, 'step': 0.05},
+        'asymmetry' : {'state': True, 'min': -0.2, 'max': 0.2, 'step': 0.05},
+        'rotation'  : {'state': True, 'min': -4, 'max': 4, 'step': 0.5},
+        'shear'     : {'state': True, 'min': -4, 'max': 4, 'step': 0.5},
+        'tilt_y'    : {'state': True, 'min': -5, 'max': 5, 'step': 0.5},
+        'tilt_x'    : {'state': True, 'min': -5, 'max': 5, 'step': 0.5}
+    }
+}
+
 model_params = {
     'obj_preblur_std'     : None, # scalar(px), None
     'detector_blur_std'   : None, # scalar(px), None
@@ -95,21 +111,15 @@ constraint_params = {
     'tilt_smooth'   : {'freq': None, 'std':2}
 }
 
-def get_date(date_format = '%Y%m%d'):
-    from datetime import date
-    date_format = date_format
-    date_str = date.today().strftime(date_format)
-    return date_str
-
-# Recon params
-NITER        = 10
-INDICES_MODE = 'center'   # 'full', 'center', 'sub'
-BATCH_SIZE   = 32
-GROUP_MODE   = 'random' # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-SAVE_ITERS   = 10        # scalar or None
-
-# Output folder and pre/postfix, note that the needed / and _ are automatically generated
-output_dir   = 'output/tBL-WSe2'
-prefix       = get_date(date_format='%Y%m%d')
-postfix      = ''
-fig_list     = ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'] # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
+recon_params = {
+    'NITER'         : 10,
+    'INDICES_MODE'  : 'center',  # 'full', 'center', 'sub'
+    'BATCH_SIZE'    : 32,
+    'GROUP_MODE'    : 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
+    'SAVE_ITERS'    : 10,  # scalar or None
+    'output_dir'    : 'output/tBL-WSe2',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+    'prefix_date'   : True,
+    'prefix'        : '',
+    'postfix'       : '',
+    'fig_list'      : ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
+}

@@ -104,7 +104,7 @@ class Initializer:
         
         # Print some derived values for sanity check
         if self.verbose:
-            print("Derived values given input exp_params:")
+            print("\nDerived values given input exp_params:")
             print(f'kv          = {voltage} kV')    
             print(f'wavelength  = {wavelength:.4f} Ang')
             print(f'conv_angle  = {conv_angle} mrad')
@@ -275,7 +275,7 @@ class Initializer:
             if probe_simu_params is None:
                 vprint(f"Use exp_params and default values instead for simulation", verbose=self.verbose)
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
-            probe = make_stem_probe(probe_simu_params)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
+            probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
                 probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows']) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
                                 
@@ -527,7 +527,7 @@ class Initializer:
             raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
         # Check scan pattern
         if N_scans == len(meas) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
-            vprint(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'")
+            vprint(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconstency between N_scans({N_scans}), len(meas)({len(meas)}), N_scan_slow({N_scan_slow})*N_scan_fast({N_scan_fast}), len(crop_pos)({len(crop_pos)}), and len(probe_pos_shifts)({len(probe_pos_shifts)})")
         
