@@ -1,10 +1,19 @@
-## Initialization
+## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
 
 import numpy as np
-from scipy.ndimage import zoom, gaussian_filter
-from .data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
-from .utils import kv2wavelength, near_field_evolution, make_stem_probe, make_mixed_probe, get_default_probe_simu_params, compose_affine_matrix, get_rbf, vprint
+from scipy.ndimage import gaussian_filter, zoom
 
+from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
+from ptyrad.utils import (
+    compose_affine_matrix,
+    get_default_probe_simu_params,
+    get_rbf,
+    kv2wavelength,
+    make_mixed_probe,
+    make_stem_probe,
+    near_field_evolution,
+    vprint,
+)
 
 class Initializer:
     def __init__(self, exp_params, source_params, verbose=True):
@@ -323,7 +332,7 @@ class Initializer:
         elif source == 'PtyRAD':
             pt_path = params
             ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
-            crop_pos         = ckpt['model_params']['crop_pos'].detach().cpu().numpy()
+            crop_pos         = ckpt['model_attributes']['crop_pos'].detach().cpu().numpy()
             probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
             pos = crop_pos + probe_pos_shifts
         elif source == 'PtyShv':

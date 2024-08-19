@@ -1,8 +1,9 @@
 ## Defining multislice forward model for electron diffraction with mixed probe/object modes of 3D objects
 
-from torch.fft import fft2, ifft2
-from .utils import fftshift2, ifftshift2
 import torch
+from torch.fft import fft2, ifft2
+
+from ptyrad.utils import fftshift2
 
 # The forward model takes a batch of object patches and probes with their mixed states
 # By introducing and aligning the singleton dimensions carefully, 
@@ -13,19 +14,32 @@ import torch
 # Note that element-wise multiplication of tensor (*) is defaulted as out-of-place operation
 # So new tensor is being created and referenced to the old graph to keep the gradient flowing
 
-def multislice_forward_model_vec_all(object, omode_occu, probe, H, eps=1e-10):
-    """ multislice electron diffraction with multiple incoherent probe and object modes """
-    # Example usage:
-    # dp_fwd = multislice_forward_model_vec_all(object_patches, omode_occu, probes, H)
+def multislice_forward_model_vec_all(object_patches, omode_occu, probe, H, eps=1e-10):
+    """
+    Computes the multislice electron diffraction pattern with multiple incoherent probe 
+    and object modes using a vectorized forward model.
 
-    # object (N, omode, Nz, Ny, Nx, 2), pseudo-complex tensor with float32. N for samples in a batch
-    # probe (N, pmode, Ny, Nx), tensor with complex64. Default probe N is 1, as using the same probe for all samples when there's no sub-px probe shifts
-    # H (N, Ky, Kx), tensor with complex64. This is the Fresnel propagator that propagates the wave by a slice thickness
-    # omode_occu (omode), tensor with float32. This determines the occupancy/expectation for each object mode, sum(omode_occu) = 1
-    # dp_fwd (N, Ky, Kx), tensor with float32
+    Args:
+        object_patches (torch.Tensor): Tensor of shape (N, omode, Nz, Ny, Nx, 2), representing
+            pseudo-complex object patches with float32 real and imaginary components. 
+            N is the number of samples in a batch, omode is the number of object modes, 
+            Nz, Ny, Nx are the dimensions of the object patches.
+        omode_occu (torch.Tensor): Tensor of shape (omode,) with float32 values, representing 
+            the occupancy/expectation for each object mode. The sum of all elements should be 1.
+        probe (torch.Tensor): Tensor of shape (N, pmode, Ny, Nx) with complex64 values, 
+            representing the probe(s). N is the number of samples in the batch, pmode is the 
+            number of probe modes. By default, N is 1, assuming the same probe for all samples.
+        H (torch.Tensor): Tensor of shape (N, Ky, Kx) with complex64 values, representing the Fresnel 
+            propagator that propagates the wave by a slice thickness.
+        eps (float, optional): A small value added for numerical stability. Defaults to 1e-10.
+
+    Returns:
+        torch.Tensor: Tensor of shape (N, Ky, Kx) with float32 positive values, representing the 
+        forward diffraction pattern for each sample in the batch.
+    """
     
     # Cast the object back to actual complex tensor
-    object_cplx = torch.polar(object[...,0], object[...,1]) # (N, omode, Nz, Ny, Nx)
+    object_cplx = torch.polar(object_patches[...,0], object_patches[...,1]) # (N, omode, Nz, Ny, Nx)
     n_slices = object_cplx.shape[2]
     
     # Expand psi to include omode dimension
@@ -45,7 +59,7 @@ def multislice_forward_model_vec_all(object, omode_occu, probe, H, eps=1e-10):
     # The contribution from probe / object modes are incoherently summed together
 
     # Breaking down the steps for clarity, while combine all of these for lower peak memory consumption
-    # psi_k = fftshift(fft2(psi)
+    # psi_k = fftshift(fft2(psi))
     # |psi_k|^2 = psi_k.abs().square()
     # weighted_psi_k = |psi_k|^2 * omode_occu
     # dp_fwd = sum(weighted_psi_k)

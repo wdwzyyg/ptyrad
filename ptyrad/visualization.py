@@ -1,11 +1,9 @@
-## Defining visualization functions
-
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-
 import numpy as np
-from numpy.fft import fft2, fftshift, ifftshift
 import torch
+from numpy.fft import fft2, fftshift, ifftshift
+
 from ptyrad.utils import make_sigmoid_mask
 
 def plot_sigmoid_mask(Npix, relative_radius, relative_width, img=None, show_circles=False):
@@ -326,7 +324,7 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     if pass_fig:
         return fig
 
-def plot_summary(output_path, loss_iters, niter, indices, init_variables, model, fig_list, show_fig=True, save_fig=False, verbose=True):
+def plot_summary(output_path, model, loss_iters, niter, indices, init_variables, fig_list=['loss', 'forward', 'probe_r_amp', 'pos'], show_fig=True, save_fig=False, verbose=True):
     """ Wrapper function for most visualization function """
     # fig_list can take 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all'
     # Note: Set show_fig=False and save_fig=True if you just want to save the figure without showing

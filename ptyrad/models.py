@@ -1,10 +1,10 @@
 ## Defining PtychoAD class for the optimization object
 
-from .forward import  multislice_forward_model_vec_all
-from .utils import get_center_of_mass, imshift_single, imshift_batch, ifftshift2, add_tilts_to_propagator
-from torchvision.transforms.functional import gaussian_blur
 import torch
-from .visualization import plot_scan_positions
+from torchvision.transforms.functional import gaussian_blur
+
+from ptyrad.forward import multislice_forward_model_vec_all
+from ptyrad.utils import add_tilts_to_propagator, imshift_batch
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -20,20 +20,62 @@ from .visualization import plot_scan_positions
 # Lastly, the forward pass of this model would output the dp_fwd (N, Ky, Kx) and objp_patches (N, omode, Nz, Ny, Nx) in float32 for later loss calculation
 
 class PtychoAD(torch.nn.Module):
-    """ Main optimization class for the ptycho reconstruction using AD """
-    # Including initialization, set_optimizer, get_obj_ROI, get_probes, get_measurements, and forward methods
-    
-    # Example usage:
-    # model_params = {
-    # 'detector_blur_std': 1,
-    # 'lr_params':{
-    #     'obja': 0,
-    #     'objp': 1e-3,
-    #     'probe': 1e-3, 
-    #     'probe_pos_shifts': 1e-3}}
-    #                 
-    # model = PtychoAD(init_variables, model_params, device=DEVICE)
-    # optimizer = torch.optim.Adam(model.optimizer_params)
+    """
+    Main optimization class for ptychographic reconstruction using automatic differentiation (AD).
+
+    This class is responsible for initializing the model parameters, setting up the optimizer, and
+    performing forward passes to compute diffraction patterns based on the given input indices.
+
+    Attributes:
+        device (str): Device to run computations on ('cuda:0' by default).
+        verbose (bool): If True, prints model summary (True by default).
+        detector_blur_std (float): Standard deviation for detector blur, or None if no blur.
+        obj_preblur_std (float): Standard deviation for object pre-blur, or None if no pre-blur.
+        lr_params (dict): Learning rate parameters for optimizable tensors.
+        opt_obja (torch.Tensor): Amplitude of the object.
+        opt_objp (torch.Tensor): Phase of the object.
+        opt_obj_tilts (torch.Tensor): Tilts of the object.
+        opt_probe (torch.Tensor): Probe function.
+        opt_probe_pos_shifts (torch.Tensor): Shifts for the probe positions.
+        omode_occu (torch.Tensor): Occupation mode.
+        H (torch.Tensor): Propagator matrix.
+        measurements (torch.Tensor): Measurements for the ptychographic reconstruction.
+        N_scan_slow (torch.Tensor): Number of scans in the slow direction.
+        N_scan_fast (torch.Tensor): Number of scans in the fast direction.
+        crop_pos (torch.Tensor): Cropping positions.
+        z_distance (torch.Tensor): Z distance parameter.
+        dx (torch.Tensor): Pixel size in the x direction.
+        dk (torch.Tensor): K-space sampling interval.
+        scan_affine (affine.Affine): Affine transformation for scan.
+        tilt_obj (bool): Whether object tilts are being optimized.
+        shift_probes (bool): Whether probe shifts are being optimized.
+        probe_int_sum (torch.Tensor): Sum of squared probe intensities.
+        optimizable_tensors (dict): Dictionary of tensors that can be optimized.
+
+    Args:
+        init_variables (dict): Dictionary of initial variables required for the model.
+        model_params (dict): Dictionary of model parameters including learning rates and blur stds.
+        device (str): Device to run computations on. Default is 'cuda:0'.
+        verbose (bool): If True, prints model summary. Default is True.
+
+    Methods:
+        create_grids():
+            Creates the grids for object ROI and probe shifts.
+        set_optimizer(lr_params, verbose=True):
+            Sets up the optimizer with learning rate parameters.
+        print_model_summary():
+            Prints a summary of the model's optimizable variables and statistics.
+        get_obj_ROI(indices):
+            Retrieves object ROI based on integer coordinates.
+        get_probes(indices):
+            Retrieves probe functions for each position.
+        get_propagators(indices):
+            Retrieves propagator matrices for each position.
+        get_measurements(indices=None):
+            Retrieves measurements based on input indices.
+        forward(indices):
+            Performs the forward pass and computes diffraction patterns for given indices.
+    """
 
     def __init__(self, init_variables, model_params, device='cuda:0', verbose=True):
         super(PtychoAD, self).__init__()

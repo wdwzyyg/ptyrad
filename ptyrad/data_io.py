@@ -1,80 +1,10 @@
-
 import os
-import numpy as np
+
 import h5py
+import numpy as np
 import scipy.io as sio
 
-def load_empad_as_4D(file_path, dim_x, dim_y, N_scan_x, N_scan_y, order):
-    """
-    Load binary data from a specified file and return it as a 4D NumPy array.
-
-    Parameters:
-    file_path (str): The full path to the binary data file.
-    dim_x (int): Number of DP pixels in the Exp X (horizontal) dimension.
-    dim_y (int): Number of DP pixels in the Exp Y (vertical) dimension (Usually it's 130 rows with 2 extra rows).
-    N_scan_x (int): Number of real space scan positions in the Exp X (horizontal) direction.
-    N_scan_y (int): Number of real space scan positions in the Exp Y (vertical) direction.
-    order (str): The order for numpy.reshape to place the elements. 'C', 'F'
-    https://numpy.org/doc/stable/reference/generated/numpy.reshape.html
-     
-    Returns:
-    data4D (numpy.ndarray): A 4D NumPy array containing the loaded data with shape (dim_x, dim_y, N_scan_x, N_scan_y).
-
-    Raises:
-    FileNotFoundError: If the specified file does not exist.
-    ValueError: If the calculated file size does not match the actual file size.
-
-    Example:
-    file_path = '00_data/0314_step128_14.5Mx_cl115mm_25.2mrad_df0_20pA/scan_x128_y128.raw'
-    data = load_empad_as_4D(file_path, 128, 130, 128, 128)
-    """
-
-    
-    # Define a constant for file bit depth
-    FILE_BIT_DEPTH = 32 
-    
-    # Calculate the expected file size based on the provided dimensions and bit depth
-    file_size_calc = dim_x * dim_y * N_scan_x * N_scan_y * FILE_BIT_DEPTH // 8 # Bit to bytes conversion
-
-    try:
-        # Check if the file exists
-        if not os.path.exists(file_path):
-            raise FileNotFoundError("Error: The specified file does not exist.")
-
-        # Get the actual file size
-        file_size_get = os.path.getsize(file_path)
-
-        # Read binary data
-        if file_size_calc == file_size_get:
-            with open(file_path, 'rb') as f:
-                data = np.fromfile(f, dtype='<f4', count=-1)
-                if order == 'F':
-                    shape = (dim_x, dim_y, N_scan_x, N_scan_y)
-                    shape_str = ("(dim_x, dim_y, N_scan_x, N_scan_y)")
-                    data_reshape = data.reshape(shape, order=order)
-                    data4D = data_reshape[:,:-2,:,:]
-
-                else: # np.reshape default is 'C', and 'A'
-                    shape = (N_scan_y, N_scan_x, dim_y, dim_x)
-                    shape_str = ("(N_scan_y, N_scan_x, dim_y, dim_x)")
-                    data_reshape = data.reshape(shape, order=order)
-                    data4D = data_reshape[:,:,:-2,:]
-
-                print(f"Loaded .raw before cropping extra DP rows has flags \n{data_reshape.flags}")
-                print(f"Imported data dimension with {order} order {shape_str} = {data4D.shape} after cropping")
-                print("Success! .raw file path =", file_path)
-                
-                return data4D
-        else:
-            raise ValueError("Error: Calculated file size is different from the actual file size!")
-
-    except FileNotFoundError as e:
-        print(e)
-    except ValueError as e:
-        print(e)
-    return None
-
-def load_hdf5(file_path, dataset_key='ds'):
+def load_hdf5(file_path, dataset_key="ds"):
     """
     Load data from an HDF5 file.
 
@@ -97,14 +27,15 @@ def load_hdf5(file_path, dataset_key='ds'):
     if not os.path.exists(file_path):
         raise FileNotFoundError("Error: The specified file does not exist.")
 
-    with h5py.File(file_path, 'r') as hf:
-        data = np.array(hf[dataset_key], dtype='float32')
+    with h5py.File(file_path, "r") as hf:
+        data = np.array(hf[dataset_key], dtype="float32")
         print("Success! .hdf5 file path =", file_path)
         print("Imported .hdf5 data shape =", data.shape)
         return data
 
 def load_tif(file_path):
     from tifffile import imread
+
     data = imread(file_path)
     print("Success! .tif file path =", file_path)
     print("Imported .tif data shape =", data.shape)
@@ -112,6 +43,7 @@ def load_tif(file_path):
 
 def load_pt(file_path):
     import torch
+
     data = torch.load(file_path)
     print("Success! .pt file path =", file_path)
     return data
@@ -120,85 +52,43 @@ def load_params(file_path):
     print("### Loading params file ###")
 
     param_path, param_type = os.path.splitext(file_path)
-    if param_type == '.yml':
+    if param_type == ".yml":
         return load_yml_params(file_path)
-    elif param_type =='.py':
+    elif param_type == ".py":
         return load_py_params(param_path)
     else:
         raise ValueError("param_type needs to be either 'yml' or 'py'")
 
 def load_yml_params(file_path):
     import yaml
-    with open(file_path, 'r') as file:
+
+    with open(file_path, "r") as file:
         params_dict = yaml.safe_load(file)
     print("Success! .yml file path =", file_path)
     return params_dict
 
 def load_py_params(file_path):
     import importlib
+
     params_module = importlib.import_module(file_path)
     print("Success! .py file path =", file_path)
-    params_dict = {name: getattr(params_module, name) for name in dir(params_module)
-               if not name.startswith('__')}
+    params_dict = {
+        name: getattr(params_module, name)
+        for name in dir(params_module)
+        if not name.startswith("__")
+    }
     return params_dict
 
-def save_4D_as_hdf5(data4D, file_path, final_shape=None, options=None, overwrite=False, source_metadata=None):
-    """
-    Save a 4D NumPy array to an HDF5 file with optional settings and optional metadata.
 
-    Parameters:
-    data4D (ndarray): The 4D data array to be saved.
-    file_path (str): The file path where the HDF5 file will be saved.
-    final_shape (tuple, optional): The desired shape of the saved dataset. If not provided, it's determined from data4D.
-    options (dict, optional): A dictionary of HDF5 dataset options (e.g., compression settings, chunking).
-    overwrite (bool, optional): If True, overwrite the file if it already exists.
-    source_metadata (str, optional): Metadata string describing the source or path of the data.
-
-    Example:
-    kx = 2
-    ky = 3
-    rx = 4
-    ry = 5
-    data4D = np.arange(kx * ky * rx * ry).reshape(kx, ky, rx, ry)
-
-    # Define options (optional)
-    hdf5_options = {'compression': 'gzip', 'compression_opts': 9, 'chunks': (2, 3, 4, 5)}
-
-    # Save the 4D array to an HDF5 file, overwriting if it exists, and include source metadata
-    save_4D_as_hdf5(data4D, 'data.h5', final_shape=(kx, ky, rx, ry), options=hdf5_options, overwrite=True, source_metadata="Collected from experiment X.")
-    """
-    
-    if options is None:
-        options = {}
-
-    if final_shape is None:
-        final_shape = data4D.shape
-
-    file_directory = os.path.dirname(file_path)
-    
-    if not os.path.exists(file_directory):
-        os.makedirs(file_directory)
-        print(f"Creating folder '{file_directory}'")
-    mode = 'w' if overwrite else 'w-'
-    
-    with h5py.File(file_path, mode) as hf:
-        hf.create_dataset('ds', data=np.reshape(np.ravel(data4D, order='F'), final_shape, order='F'), **options)
-        
-        if source_metadata is not None:
-            hf['ds'].attrs['source_metadata'] = source_metadata
-        
-    print(f"File '{file_path}' saved successfully.")
-    return
-
-def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplify_cells=True):
+def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplify_cells=True):
     """
     Load and extract specified fields from a MATLAB .mat file.
 
     https://docs.scipy.org/doc/scipy/reference/generated/scipy.io.loadmat.html
-    
+
     Parameters:
         file_path (str): The path to the MATLAB .mat file to be loaded and processed.
-        target_field (str or list of str): The target field name(s) to extract from the .mat file. 
+        target_field (str or list of str): The target field name(s) to extract from the .mat file.
             Specify a single field name as a string or multiple field names as a list of strings.
             Use "All" to load the entire .mat file.
 
@@ -231,20 +121,22 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplif
             if result is not None:
                 print(f"Result {i + 1}: {result}")
     """
-    
+
     result_list = []
 
     # Load entire .mat
     if target_field == "All":
         try:
-            mat_contents = sio.loadmat(file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells)
+            mat_contents = sio.loadmat(
+                file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
+            )
             print("Success! .mat File path =", file_path)
             return mat_contents
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
-            print(f"Can't load .mat v7.3 with scipy. Switching to h5py.")
+            print("Can't load .mat v7.3 with scipy. Switching to h5py.")
             mat_contents = {}
-            with h5py.File(file_path, 'r') as hdf_file:
+            with h5py.File(file_path, "r") as hdf_file:
                 for key in hdf_file.keys():
                     mat_contents[key] = hdf_file[key][()]
             print("Success! .mat file path =", file_path)
@@ -261,8 +153,10 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplif
     # Load field by field in target_fields (list)
     for name in target_fields:
         try:
-            mat_contents = sio.loadmat(file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells)
-            fields = name.split('.')
+            mat_contents = sio.loadmat(
+                file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
+            )
+            fields = name.split(".")
             outputs = mat_contents
 
             if len(fields) > 3:
@@ -282,8 +176,8 @@ def load_fields_from_mat(file_path, target_field='All', squeeze_me=True, simplif
                 result_list.append(outputs)
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
-            print(f"Can't load .mat v7.3 with scipy. Switching to h5py.")
-            with h5py.File(file_path, 'r') as hdf_file:
+            print("Can't load .mat v7.3 with scipy. Switching to h5py.")
+            with h5py.File(file_path, "r") as hdf_file:
                 result_list.append(hdf_file[name][()])
     print("Success! .mat file path =", file_path)
     return result_list

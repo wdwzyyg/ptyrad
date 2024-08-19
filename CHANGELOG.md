@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [TODO]
 ### Code clarity
-- (Optional) Use `einops` and `einsum` for code readability
+- Run through Ruff formatter for PEP8 code style
+- Add type hints
+- Refine doc strings (Google style)
+- Use Spinx and Napolean for API documentation on Read the Docs
 - Unified meshgrid usage, naming, and unit would be nice
-- Add type hints, method decorators, and standardize doc strings. Might use ChatGPT to help me with that
-= Might want to remove `rbf` once and for all for better clarity, we should encourage users to calibrate their dk for each camera length
+- `initialization.py` can probably be refactored a bit
 ### New recon feature
-- Add BO routine as a preprocessing step for total thickness, global scan affine transform. Might be able to get some idea from py4dstem .preprocess methods.
 - Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
 - Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
 - Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
@@ -21,17 +22,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
 - Can we do other mode decomposition other than SVD for the ortho_pmode?
 ### Utils and plotting
-- Add a shadow-image based position correction routine `get_pos_correction_from_ronchi`, similar usage as the `get_obj_tilts`
 - Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
-## [Unreleased]
+## [v0.1.0-beta2.0] - 2024-08-18
+### Added
+- Add hyperparameter tuning (Bayesian optimization and others) capability for `z_distance`, `scan_affine`, and `obj_tilts` with Optuna
+- Add `reconstruction` module and `PtyRADSolver` wrapper class for a more compact workflow and streamlined interface
+- Add `load_params` into `data_io`
+- Add `.yml` as a new params file type. The original `.py` is still working but deprecated, might be removed before public release
+- Add `vprint` as verbose print to `utils` to better control the verbosity of printed information (especially for hyperparamter tuning)
+- Add a rough version of doc string for major classes and functions
 ### Change
-- Fix `make_out_folder` so that dz will only print 3 significant figures after rounded to 2 decimal points. So dz = 12.8 would be printed as 12.8 instead of 12.800000190734863.
-- Add the eps=1e-10 back to `forward` so that the dp.pow() is more numerically stable, especially for large collection angles with very weak intensities
+- Simplify the arguments for `save_results` and `make_save_dict`
+- Rearrange the argument order of `plot_summary` and add default value to `fig_list`
+- Refactor the `run_ptyrad` scripts and notebooks and move them into `scripts` 
+- Move previous params.py files to `ptyrad/inputs/archive` and stop updating them
+- Fix `make_output_folder` so that dz will only print 3 significant figures after rounded to 2 decimal points. So dz = 12.8 would be printed as 12.8 instead of 12.800000190734863.
+- Add the `eps=1e-10` back to `multislice_forward_model_vec_all` in `forward` so that the `dp.pow()` is more numerically stable, especially for large collection angles with intensities near 0
+### Removed
+- Remove `rbf` from `exp_params` and `make_stem_probe`. This is to encourage/enforce users to calibrated their dk for each camera length to get `dx_spec`.
+- Remove `make_recon_params_dict` from `utils`
+- Remove `load_empad_as_4d` and `save_4D_as_hdf5` and other archived from `data_io` because we're not using it at the moment
 
 ## [v0.1.0-beta1.3] - 2024-07-10
 ### Added

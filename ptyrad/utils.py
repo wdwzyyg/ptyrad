@@ -1,14 +1,14 @@
 import os
 import warnings
+from math import ceil, floor
 from time import time
-from math import floor, ceil
 
-from tifffile import imwrite
 import numpy as np
 import torch
-from torch.fft import fft2, ifft2, fftfreq
-from sklearn.cluster import MiniBatchKMeans
 from scipy.spatial.distance import cdist
+from sklearn.cluster import MiniBatchKMeans
+from tifffile import imwrite
+from torch.fft import fft2, fftfreq, ifft2
 
 def vprint(*args, verbose=True, **kwargs):
     """ Verbose print with individual control """ 
@@ -135,20 +135,24 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses):
+def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
-    
+
+    # While it might seem redundant to save bothe `params` and lots of `model_attributes`,    
+    # one should note that `params` only stores the initial value from params files,
+    # the actual values used for reconstuction such as N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from initial value due to the meas_crop, meas_resample
+    # the model behavior and learning rates could also be different from the initial params dict if the user
+    # run the reconstuction with manually modified `model_params` in the detailed walkthrough notebook
+        
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : model.optimizable_tensors,
-                'exp_params'            : exp_params, # This `exp_params` is the initial exp_params, N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from actual value due to the meas_crop, meas_resample
-                'source_params'         : source_params,
-                'loss_params'           : loss_params,
-                'constraint_params'     : constraint_params,
-                'model_params': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
+                'params'                : params, 
+                'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
+                     'obj_preblur_std'  : model.obj_preblur_std,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
@@ -158,28 +162,19 @@ def make_save_dict(output_path, model, exp_params, source_params, loss_params, c
                      'z_distance'       : model.z_distance,
                      'dx'               : model.dx,
                      'dk'               : model.dk,
+                     'scan_affine'      : model.scan_affine,
                      'tilt_obj'         : model.tilt_obj,
                      'shift_probes'     : model.shift_probes,
                      'probe_int_sum'    : model.probe_int_sum
                      },
-                'recon_params'          : recon_params,
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
                 'niter'                 : niter,
+                'batch_losses'          : batch_losses,
                 'avg_losses'            : avg_losses
                 }
     
     return save_dict
-
-def make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE, SAVE_ITERS):
-    recon_params = {
-        'NITER'         :        NITER,
-        'INDICES_MODE'  : INDICES_MODE,
-        'BATCH_SIZE'    :   BATCH_SIZE,
-        'GROUP_MODE'    :   GROUP_MODE,
-        'SAVE_ITERS'    :   SAVE_ITERS,
-    }
-    return recon_params
 
 def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=True, verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
@@ -426,8 +421,8 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             
             return sparse_batches
 
-def save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses):
-    save_dict = make_save_dict(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses)
+def save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
+    save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
 
     torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
 
@@ -632,11 +627,11 @@ def kv2wavelength(acceleration_voltage):
     return wavelength
 
 def get_default_probe_simu_params(exp_params):
-    probe_simu_params = { ## Basic params
+    probe_simu_params = {
+                    ## Basic params
                     "kv"             : exp_params['kv'],
                     "conv_angle"     : exp_params['conv_angle'],
                     "Npix"           : exp_params['Npix'],
-                    "rbf"            : exp_params['rbf'], # dk = conv_angle/1e3/rbf/wavelength
                     "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
                     "pmodes"         : exp_params['pmode_max'],
                     "pmode_init_pows": exp_params['pmode_init_pows'],
@@ -667,13 +662,12 @@ def make_stem_probe(params_dict, verbose=True):
     # Inputs: 
         #  params_dict: probe parameters and other settings
     
-    from numpy.fft import ifft2, fftshift, ifftshift, fftfreq
+    from numpy.fft import fftfreq, fftshift, ifft2, ifftshift
     
     ## Basic params
     voltage     = params_dict["kv"]         # Ang
     conv_angle  = params_dict["conv_angle"] # mrad
     Npix        = params_dict["Npix"]       # Number of pixel of thr detector/probe
-    rbf         = params_dict["rbf"]        # Pixels of radius of BF disk, used to calculate dk
     dx          = params_dict["dx"]         # px size in Angstrom
     ## Aberration coefficients
     df          = params_dict["df"] #first-order aberration (defocus) in angstrom
@@ -691,17 +685,9 @@ def make_stem_probe(params_dict, verbose=True):
     # Calculate some variables
     wavelength = 12.398/np.sqrt((2*511.0+voltage)*voltage) #angstrom
     k_cutoff = conv_angle/1e3/wavelength
-    
+    dk = 1/(dx*Npix)
+
     vprint("Start simulating STEM probe", verbose=verbose)
-    if rbf is not None and dx is None:
-        vprint("Using 'rbf' for dk sampling", verbose=verbose)
-        dk = conv_angle/1e3/wavelength/rbf
-        dx = 1/(dk*Npix) # Populate dx with the calculated value
-    elif dx is not None:
-        vprint("Using 'dx' for dk sampling", verbose=verbose)
-        dk = 1/(dx*Npix)
-    else:
-        raise ValueError("Either 'rbf' or 'dx' must be provided to calculate dk sampling.")
     
     # Make k space sampling and probe forming aperture
     kx = fftshift(fftfreq(Npix, 1/Npix))
@@ -1028,10 +1014,10 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     # pos: probe position at integer px sites, (N,2)
 
     import matplotlib.pyplot as plt
-    from skimage.feature import blob_log
-    from scipy.ndimage import center_of_mass
     from scipy.interpolate import griddata
+    from scipy.ndimage import center_of_mass
     from scipy.optimize import curve_fit
+    from skimage.feature import blob_log
 
     # Choose the 2 slices from objp and detect blobs from the top slice
     slice_t, slice_b = slice_indices
@@ -1296,7 +1282,7 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
     # plt.colorbar()
     # plt.show()
     
-    from numpy.fft import fft2, ifft2, fftshift, ifftshift
+    from numpy.fft import fft2, fftshift, ifft2, ifftshift
     
     prop_probes = np.zeros((len(z_distances), *probe.shape)).astype(probe.dtype)
     for i, z_distance in enumerate(z_distances):

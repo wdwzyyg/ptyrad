@@ -1,12 +1,13 @@
 ## Define the loss function class with loss and regularizations
 ## Define the constraint class for iter-wist constraints
 
-from .utils import make_sigmoid_mask, fftshift2, ifftshift2, gaussian_blur_1d, vprint
 import numpy as np
-from torchvision.transforms.functional import gaussian_blur
-from torch.nn.functional import interpolate
 import torch
-from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
+from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn
+from torch.nn.functional import interpolate
+from torchvision.transforms.functional import gaussian_blur
+
+from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
@@ -15,8 +16,36 @@ from torch.fft import fft2, ifft2, fftn, ifftn, fftfreq
 # In this way it'll only calculate values within the ROI, so the edges of the object would not be included
 
 class CombinedLoss(torch.nn.Module):
-    """ Calculate the loss with regularization on the object phase patches for each batch """
+    """
+    Computes the combined loss for ptychographic reconstruction, incorporating multiple loss components.
 
+    This class implements various loss functions that are combined to optimize the reconstruction 
+    in ptychography. The loss components include losses based on Gaussian and Poisson statistics, 
+    PACBED loss, sparsity regularization, and similarity between different object modes.
+
+    Args:
+        loss_params (dict): A dictionary containing the configuration and weights for each of the loss components.
+        device (str, optional): The device on which the computations will be performed, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+
+    Methods:
+        get_loss_single(model_DP, measured_DP):
+            Computes the loss based on Gaussian statistics of the diffraction patterns.
+            
+        get_loss_poissn(model_DP, measured_DP):
+            Computes the loss based on Poisson statistics of the diffraction patterns.
+            
+        get_loss_pacbed(model_DP, measured_DP):
+            Computes the PACBED loss by comparing averaged diffraction patterns.
+            
+        get_loss_sparse(objp_patches, omode_occu):
+            Computes the sparsity regularization loss on object phase patches.
+            
+        get_loss_simlar(object_patches, omode_occu):
+            Computes the similarity loss between different object modes.
+            
+        forward(model_DP, measured_DP, object_patches, omode_occu):
+            Combines all the loss components and returns the total loss and individual losses.
+    """
     def __init__(self, loss_params, device='cuda:0'):
         super(CombinedLoss, self).__init__()
         self.device = device
@@ -133,8 +162,53 @@ class CombinedLoss(torch.nn.Module):
         return total_loss, losses
     
 class CombinedConstraint(torch.nn.Module):
-    ''' Apply iteration-wise in-place constraints on the optimizable tensors '''
-    
+    """Applies iteration-wise in-place constraints on optimizable tensors.
+
+    This class is designed to apply various constraints to a model's parameters during the optimization process.
+    The constraints are applied at specific iteration frequencies, as determined by the `constraint_params` dictionary.
+    These constraints include orthogonality, probe amplitude constraints in Fourier space, intensity constraints, Gaussian
+    blurring, Fourier filtering, and more.
+
+    Args:
+        constraint_params (dict): A dictionary containing the configuration for each constraint. Each constraint should have a 
+            frequency and other parameters necessary for its application.
+        device (str, optional): The device on which the tensors are located (e.g., 'cuda:0' or 'cpu'). Defaults to 'cuda:0'.
+        verbose (bool, optional): If True, prints messages during the application of constraints. Defaults to True.
+
+    Methods:
+        apply_ortho_pmode(model, niter):
+            Applies an orthogonality constraint to the probe modes at a specified iteration frequency.
+
+        apply_probe_mask_k(model, niter):
+            Applies a probe amplitude constraint in Fourier space at a specified iteration frequency.
+
+        apply_fix_probe_int(model, niter):
+            Applies a probe intensity constraint at a specified iteration frequency.
+
+        apply_obj_rblur(model, niter):
+            Applies Gaussian blur to the object in the spatial dimensions at a specified iteration frequency.
+
+        apply_obj_zblur(model, niter):
+            Applies Gaussian blur to the object in the z-dimension at a specified iteration frequency.
+
+        apply_kr_filter(model, niter):
+            Applies a kr Fourier filter constraint on the object at a specified iteration frequency.
+
+        apply_kz_filter(model, niter):
+            Applies a kz Fourier filter constraint on the object at a specified iteration frequency.
+
+        apply_obja_thresh(model, niter):
+            Applies thresholding on the object amplitude at a voxel level at a specified iteration frequency.
+
+        apply_objp_postiv(model, niter):
+            Applies a positivity constraint on the object phase at a voxel level at a specified iteration frequency.
+
+        apply_tilt_smooth(model, niter):
+            Applies Gaussian blur to object tilts at a specified iteration frequency.
+
+        forward(model, niter):
+            Applies all the defined constraints at the appropriate iteration frequency.
+    """
     def __init__(self, constraint_params, device='cuda:0', verbose=True):
         super(CombinedConstraint, self).__init__()
         self.device = device

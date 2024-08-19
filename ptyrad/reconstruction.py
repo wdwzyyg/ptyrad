@@ -1,18 +1,60 @@
-## Define the ptycho reconstruction related functions
+## Define the ptycho reconstruction solver class and functions
 
 import copy
 from random import shuffle
+
 import numpy as np
 import torch
 
-from .utils import time_sync, vprint, save_results
-from .visualization import plot_summary, plot_pos_grouping
-from .utils import select_scan_indices, make_batches, make_output_folder, get_blob_size
-from .initialization import Initializer
-from .models import PtychoAD
-from .optimization import CombinedLoss, CombinedConstraint
+from ptyrad.initialization import Initializer
+from ptyrad.models import PtychoAD
+from ptyrad.optimization import CombinedConstraint, CombinedLoss
+from ptyrad.utils import (
+    get_blob_size,
+    make_batches,
+    make_output_folder,
+    save_results,
+    select_scan_indices,
+    time_sync,
+    vprint,
+)
+from ptyrad.visualization import plot_pos_grouping, plot_summary
 
 class PtyRADSolver:
+    """
+    A wrapper class to perform ptychographic reconstruction or hyperparameter tuning.
+
+    The PtyRADSolver class initializes the necessary components for ptychographic 
+    reconstruction and provides methods to execute the reconstruction or perform 
+    hyperparameter tuning using Optuna.
+
+    Attributes:
+        params (dict): Dictionary containing all the parameters required for 
+            initialization, loss functions, constraints, model, and optional 
+            hyperparameter tuning.
+        if_hypertune (bool): A flag to indicate whether hyperparameter tuning should 
+            be performed instead of regular reconstruction. Defaults to False.
+        verbose (bool): A flag to control the verbosity of the output. Defaults to True unless
+            if_quiet is set to True.
+        device (str): The device to run the computations on (e.g., 'cuda:0' for GPU, 'cpu' for CPU). 
+            Defaults to 'cuda:0'.
+
+    Methods:
+        init_initializer():
+            Initializes the variables and objects needed for the reconstruction process.
+        init_loss():
+            Initializes the loss function using the provided parameters.
+        init_constraint():
+            Initializes the constraint function using the provided parameters.
+        reconstruct():
+            Executes the ptychographic reconstruction process by creating the model, 
+            optimizer, and running the reconstruction loop.
+        hypertune():
+            Performs hyperparameter tuning using Optuna.
+        run():
+            A wrapper method to run the solver in either reconstruction or hyperparameter 
+            tuning mode based on the if_hypertune flag.
+    """
     def __init__(self, params, *, if_hypertune=False, if_quiet=False, device='cuda:0'):
         self.params       = params
         self.if_hypertune = if_hypertune
@@ -53,11 +95,13 @@ class PtyRADSolver:
         n_trials         = hypertune_params.get('n_trials')
         study_name       = hypertune_params.get('study_name')
         storage_path     = hypertune_params.get('storage_path')
-        pruner           = optuna.pruners.HyperbandPruner() if hypertune_params.get('use_pruning') else None
+        pruner           = optuna.pruners.HyperbandPruner(min_resource=5, reduction_factor=2) if hypertune_params.get('use_pruning') else None
 
         # Create a study object and optimize the objective function
+        sampler = optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True)
         study = optuna.create_study(
                     direction='minimize',
+                    sampler=sampler,
                     pruner=pruner,
                     storage=storage_path,  # Specify the storage URL here.
                     study_name=study_name,
@@ -69,7 +113,6 @@ class PtyRADSolver:
             print(f"\t{key}: {value}")
         
     def run(self):
-        ''' Wrapper method for either regular reconstruction or hyperparameter tuning '''
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
         print(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
@@ -81,7 +124,31 @@ class PtyRADSolver:
         print(f"\n### The PtyRADSolver is finished in {end_t - start_t:.3f} sec ###")
 
 def prepare_recon(model, init, params):
-    
+    """
+    Prepares the indices, batches, and output path for ptychographic reconstruction.
+
+    This function parses the necessary parameters and generates the indices for scanning, 
+    creates batches based on the probe positions, and sets up the output directory for 
+    saving results. It also plots and saves a figure illustrating the grouping of probe 
+    positions.
+
+    Args:
+        model (PtychoAD): The ptychographic model containing the object, probe, 
+            probe positions, and other relevant parameters.
+        init (Initializer): The initializer object containing the initialized variables 
+            needed for reconstruction.
+        params (dict): A dictionary containing various parameters needed for the 
+            reconstruction process, including experimental parameters, loss parameters, 
+            constraint parameters, and reconstruction settings.
+
+    Returns:
+        tuple: A tuple containing the following:
+            - indices (numpy.ndarray): Array of indices for scanning positions.
+            - batches (list of numpy.ndarray): List of batches where each batch contains 
+              indices grouped according to the selected grouping mode.
+            - output_path (str): The path to the directory where reconstruction results 
+              and figures will be saved.
+    """
     vprint("\n### Generating indices, batches, and output_path ###", verbose=model.verbose)
     # Parse the variables
     init_variables = init.init_variables
@@ -104,18 +171,44 @@ def prepare_recon(model, init, params):
     output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, verbose=model.verbose)
 
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
-    fig_grouping.savefig(output_path + f"/summary_pos_grouping.png")
+    fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
     return indices, batches, output_path
 
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path):
-    ''' Wrapper function for the optimization loop '''
+    """
+    Executes the iterative optimization loop for ptychographic reconstruction.
+
+    This function performs the iterative reconstruction process by optimizing the model 
+    parameters over a specified number of iterations. During each iteration, it applies 
+    the loss and constraint functions, updates the model, and logs the loss values. 
+    Intermediate results are saved at specified intervals, and a summary is plotted.
+
+    Args:
+        model (PtychoAD): The ptychographic model containing the parameters and variables 
+            to be optimized.
+        init (Initializer): The initializer object containing the initialized variables 
+            needed for reconstruction.
+        params (dict): A dictionary containing various parameters for the reconstruction 
+            process, including experimental parameters, source parameters, loss parameters, 
+            constraint parameters, and reconstruction settings.
+        optimizer (torch.optim.Optimizer): The optimizer used to update the model parameters.
+        loss_fn (CombinedLoss): The loss function object used to compute the loss during 
+            each iteration.
+        constraint_fn (CombinedConstraint): The constraint function object applied during 
+            each iteration to enforce specific constraints on the model.
+        indices (numpy.ndarray): Array of indices for scanning positions.
+        batches (list of numpy.ndarray): List of batches where each batch contains indices 
+            grouped according to the selected grouping mode.
+        output_path (str): The path to the directory where reconstruction results and 
+            figures will be saved.
+
+    Returns:
+        list: A list of tuples, where each tuple contains the iteration number, the loss 
+            value for that iteration, and the time taken for that iteration.
+    """
     
     # Parse the variables
     init_variables    = init.init_variables
-    exp_params        = params.get('exp_params')
-    source_params     = params.get('source_params')
-    loss_params       = params.get('loss_params')
-    constraint_params = params.get('constraint_params')
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
@@ -134,14 +227,41 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses)
+            save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
             
             ## Saving summary
-            plot_summary(output_path, loss_iters, niter, indices, init_variables, model, fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
+            plot_summary(output_path, model, loss_iters, niter, indices, init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
     return loss_iters
 
 def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
-    ''' Perform 1 iteration/step of the ptycho reconstruciton in the optimization loop '''
+    """
+    Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
+
+    This function executes a single iteration of the reconstruction process, including:
+    - Computing the forward model to generate diffraction patterns.
+    - Calculating the loss by comparing the modeled and measured diffraction patterns.
+    - Performing a backward pass to compute gradients and update the model parameters using the optimizer.
+    - Applying iteration-wise constraints after all batches are processed.
+
+    Args:
+        batches (list of numpy.ndarray): List of batches where each batch contains indices 
+            grouped according to the selected grouping mode.
+        model (PtychoAD): The ptychographic model containing the parameters and variables 
+            to be optimized.
+        optimizer (torch.optim.Optimizer): The optimizer used to update the model parameters.
+        loss_fn (CombinedLoss): The loss function object used to compute the loss for each batch.
+        constraint_fn (CombinedConstraint): The constraint function object applied after each iteration 
+            to enforce specific constraints on the model.
+        niter (int): The current iteration number in the optimization loop.
+        verbose (bool, optional): If True, prints progress information during the batch processing. 
+            Defaults to True.
+
+    Returns:
+        tuple: A tuple containing:
+            - batch_losses (dict): A dictionary where each key corresponds to a loss component name, 
+              and the value is a list of loss values computed for each batch in the iteration.
+            - iter_t (float): The total time taken to complete the iteration.
+    """
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
     
@@ -169,6 +289,24 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
     return batch_losses, iter_t
 
 def loss_logger(batch_losses, niter, iter_t, verbose=True):
+    """
+    Logs and summarizes the loss values for an iteration during the ptychographic reconstruction.
+
+    This function computes the average loss for each loss component across all batches in the 
+    current iteration. It then logs the total loss, the individual loss components, and the 
+    time taken for the iteration. The function also returns the total loss for the iteration.
+
+    Args:
+        batch_losses (dict): A dictionary where each key corresponds to a loss component name, 
+            and the value is a list of loss values computed for each batch in the iteration.
+        niter (int): The current iteration number in the optimization loop.
+        iter_t (float): The total time taken to complete the iteration, in seconds.
+        verbose (bool, optional): If True, prints the loss summary to the console. Defaults to True.
+
+    Returns:
+        float: The total loss for the current iteration, computed as the sum of the average 
+        loss values for each component.
+    """
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
     vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, "
@@ -177,17 +315,41 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     return loss_iter
 
 def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0', verbose=False):
-    # Make this an independent function for the detailed walkthrough
+    """
+    Objective function for Optuna hyperparameter tuning in ptychographic reconstruction.
+
+    This function is used by Optuna to optimize the hyperparameters of the ptychographic reconstruction
+    process. The function updates the reconstruction parameters based on the trial's suggestions and 
+    runs the reconstruction loop to evaluate the performance. The function also implements Optuna's 
+    pruning mechanism to stop unpromising trials early.
+
+    Args:
+        trial (optuna.trial.Trial): A trial object that suggests hyperparameter values and handles 
+            pruning.
+        params (dict): A dictionary containing all the parameters for the reconstruction, including 
+            experimental parameters, model parameters, and hyperparameter tuning configurations.
+        init (Initializer): An instance of the Initializer class that holds initialized variables 
+            and methods for updating them based on the trial's suggestions.
+        loss_fn (CombinedLoss): The loss function object that calculates the reconstruction loss.
+        constraint_fn (CombinedConstraint): The constraint function object that applies constraints 
+            during optimization.
+        device (str, optional): The device to run the reconstruction on, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+        verbose (bool, optional): If True, enables verbose output. Defaults to False.
+
+    Returns:
+        float: The total loss for the final iteration of the reconstruction process, used by Optuna 
+        to evaluate the trial's performance.
+
+    Raises:
+        optuna.exceptions.TrialPruned: Raised when the trial should be pruned based on the 
+        intermediate results.
+    """
     import optuna
     
     init.verbose = False
     params = copy.deepcopy(params)
         
     # Parse the variables
-    exp_params        = params.get('exp_params')
-    source_params     = params.get('source_params')
-    loss_params       = params.get('loss_params')
-    constraint_params = params.get('constraint_params')
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
@@ -252,10 +414,10 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, exp_params, source_params, loss_params, constraint_params, recon_params, loss_iters, iter_t, niter, batch_losses)
+            save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
             
             ## Saving summary
-            plot_summary(output_path, loss_iters, niter, indices, init.init_variables, model, fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
+            plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
         
         ## Pruning logic for optuna
         if hypertune_params['use_pruning']:

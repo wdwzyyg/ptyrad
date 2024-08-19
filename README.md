@@ -24,12 +24,12 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ### Create Conda envoronment - local
 ```bash
-conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 optuna -c pytorch -c nvidia -c conda-forge
 ```
 
 ### Create Conda envoronment - ALTAS
 ```bash
-conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
+conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 optuna -c pytorch -c nvidia -c conda-forge
 ```
 
 *** Note ***
@@ -46,8 +46,9 @@ git clone https://github.com/chiahao3/ptyrad.git
 
 Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory
 
-### Trying the demo
-- `run_ptyrad.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
+### Trying the demo in /scripts
+- `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
+- `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 
 ## Support
 If you run into problems, have questions or suggested features / modifications, please create an issue [here](https://github.com/chiahao3/ptyrad/issues/new/choose).

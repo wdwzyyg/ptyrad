@@ -4,12 +4,11 @@ exp_params : {
     'kv'                : 80,  # kV
     'conv_angle'        : 24.9, # mrad, semi-convergence angle
     'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
-    'rbf'               : null, # Pixels of radius of BF disk, used to calculate dk
     'dx_spec'           : 0.1494, # Ang
     'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 6, # Ang
-    'Nlayer'            : 2,
+    'z_distance'        : 12, # Ang
+    'Nlayer'            : 1,
     'N_scans'           : 16384,
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
@@ -48,18 +47,18 @@ source_params : {
 }
 
 hypertune_params : {
-    'n_trials'      : 10,
+    'n_trials'      : 1000,
     'use_pruning'   : True,
     'storage_path'  : 'sqlite:///hypertune_database.sqlite3',
-    'study_name'    : 'ptyrad_tBL_WSe2',
+    'study_name'    : 'ptyrad_tBL_WSe2_2',
     'tune_params'   : {
-        'z_distance': {'state': true, 'min': 4, 'max': 8, 'step': 0.5},
+        'z_distance': {'state': false, 'min': 1.5, 'max': 2.5, 'step': 0.5},
         'scale'     : {'state': true, 'min': 0.9, 'max': 1.1, 'step': 0.05},
         'asymmetry' : {'state': true, 'min': -0.2, 'max': 0.2, 'step': 0.05},
         'rotation'  : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
         'shear'     : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
-        'tilt_y'    : {'state': true, 'min': -5, 'max': 5, 'step': 0.5},
-        'tilt_x'    : {'state': true, 'min': -5, 'max': 5, 'step': 0.5}
+        'tilt_y'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5},
+        'tilt_x'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
     }
 }
 
@@ -87,7 +86,7 @@ constraint_params : {
     'fix_probe_int' : {'freq': 1},
     'obj_rblur'     : {'freq': null, 'obj_type': 'both', 'kernel_size': 5, 'std': 0.2}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
     'obj_zblur'     : {'freq': null, 'obj_type': 'both', 'kernel_size': 5, 'std': 1},
-    'kr_filter'     : {'freq': null, 'obj_type': 'both', 'radius':0.15, 'width': 0.05},
+    'kr_filter'     : {'freq': null, 'obj_type': 'both', 'radius': 0.15, 'width': 0.05},
     'kz_filter'     : {'freq': null, 'obj_type': 'both', 'beta': 0.1, 'alpha': 1},
     'obja_thresh'   : {'freq': null, 'relax': 0, 'thresh': [0.98, 1.02]},
     'objp_postiv'   : {'freq': 1,    'relax': 0},
@@ -95,11 +94,11 @@ constraint_params : {
 }
 
 recon_params: {
-  'NITER': 10,
+  'NITER': 50,
   'INDICES_MODE': 'center',  # 'full', 'center', 'sub'
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-  'SAVE_ITERS': 10,  # scalar or None
+  'SAVE_ITERS': 50,  # scalar or None
   'output_dir': 'output/tBL-WSe2',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
   'prefix_date': true,
   'prefix': '',
