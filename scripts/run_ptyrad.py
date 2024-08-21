@@ -6,13 +6,14 @@ import sys
 
 import torch
 
-GPUID = 0
-DEVICE = torch.device("cuda:" + str(GPUID))
-print("Execution device: ", DEVICE)
-print("PyTorch version: ", torch.__version__)
-print("CUDA available: ", torch.cuda.is_available())
-print("CUDA version: ", torch.version.cuda)
-print("CUDA device: ", torch.cuda.get_device_name(GPUID))
+# GPUID = 0
+# DEVICE = torch.device("cuda:" + str(GPUID))
+# print("Execution device: ", DEVICE)
+print('PyTorch version: ', torch.__version__)
+print('CUDA available: ', torch.cuda.is_available())
+print('CUDA version: ', torch.version.cuda)
+print('CUDA device count: ', torch.cuda.device_count())
+print('CUDA device: ', [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
 
 PATH_TO_PTYRAD = "/home/fs01/cl2696/workspace/ptyrad"  # Change this for the ptyrad package path
 sys.path.append(PATH_TO_PTYRAD)
@@ -36,6 +37,6 @@ if __name__ == "__main__":
 
     params = load_params(args.params_path)
     ptycho_solver = PtyRADSolver(
-        params, if_hypertune=args.hypertune, if_quiet=args.quiet, device=DEVICE
+        params, if_hypertune=args.hypertune, if_quiet=args.quiet
     )
     ptycho_solver.run()

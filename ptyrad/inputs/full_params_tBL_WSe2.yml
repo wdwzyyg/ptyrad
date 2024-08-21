@@ -98,10 +98,10 @@ recon_params: {
   'INDICES_MODE': 'center',  # 'full', 'center', 'sub'
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-  'SAVE_ITERS': 50,  # scalar or None
+  'SAVE_ITERS': 10,  # scalar or None
   'output_dir': 'output/tBL-WSe2',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
   'prefix_date': true,
   'prefix': '',
-  'postfix': '',
+  'postfix': 'acc',
   'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
 }

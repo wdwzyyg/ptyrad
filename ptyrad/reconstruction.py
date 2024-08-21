@@ -6,6 +6,7 @@ from random import shuffle
 import numpy as np
 import torch
 
+from accelerate import Accelerator # Multi GPU training and fp16 from HuggingFace
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
 from ptyrad.optimization import CombinedConstraint, CombinedLoss
@@ -55,17 +56,21 @@ class PtyRADSolver:
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, *, if_hypertune=False, if_quiet=False, device='cuda:0'):
+    def __init__(self, params, *, if_hypertune=False, if_quiet=False):
         self.params       = params
         self.if_hypertune = if_hypertune
         self.verbose      = not if_quiet
-        self.device       = device
-        
+        self.accelerator  = Accelerator()
+                
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
         self.init_loss()
         self.init_constraint()
         print("\n### Done initializing PtyRADSolver ###")
+    
+    @property
+    def device(self):
+        return self.accelerator.device
     
     def init_initializer(self):
         print("\n### Initializing Initializer ###")
@@ -86,6 +91,7 @@ class PtyRADSolver:
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = torch.optim.Adam(model.optimizer_params)
+        model, optimizer = self.accelerator.prepare(model, optimizer)
         indices, batches, output_path = prepare_recon(model, self.init, params)
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path)
     
