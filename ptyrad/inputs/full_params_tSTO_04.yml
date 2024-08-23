@@ -5,7 +5,7 @@ exp_params : {
     'conv_angle'        : 30.0, # mrad, semi-convergence angle
     'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'rbf'               : null, # Pixels of radius of BF disk, used to calculate dk
-    'dx_spec'           : 0.1513, # Ang
+    'dx_spec'           : 0.142, # Ang
     'defocus'           : -65, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
     'z_distance'        : 10, # Ang
@@ -15,7 +15,7 @@ exp_params : {
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.415, # Ang
     'scan_flipT'        : [0,0,1], # (0,0,1) for 'simu' pos, null for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'scan_affine'       : null, #[0.96,0.14,0,6), #(1,0,2,0), # (scale, asymmetry, rotation, shear)
+    'scan_affine'       : [0.930, 0.083, -0.426, 4.846], #[0.96,0.14,0,6), # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # null or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type': 'uniform', 'init_occu': null},
@@ -64,14 +64,14 @@ source_params : {
 hypertune_params : {
     'n_trials'      : 100,
     'use_pruning'   : True,
-    'storage_path'  : 'sqlite:///hypertune_database.sqlite3',
+    'storage_path'  : 'sqlite:///hypertune_database_20240823.sqlite3',
     'study_name'    : 'ptyrad_tSTO_04',
     'tune_params'   : {
-        'z_distance': {'state': true, 'min': 5, 'max': 20, 'step': 0.1},
-        'scale'     : {'state': true, 'min': 0.90, 'max': 1.10, 'step': 0.01},
+        'z_distance': {'state': false, 'min': 5, 'max': 20, 'step': 0.1},
+        'scale'     : {'state': true, 'min': 0.90, 'max': 0.96, 'step': 0.005},
         'asymmetry' : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
-        'rotation'  : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
-        'shear'     : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'rotation'  : {'state': true, 'min': -4, 'max': 4, 'step': 0.2},
+        'shear'     : {'state': false, 'min': -6, 'max': 6, 'step': 0.5},
         'tilt_y'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5},
         'tilt_x'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
     }
@@ -114,9 +114,9 @@ recon_params : {
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
   'SAVE_ITERS': 25,  # scalar or null
-  'output_dir': 'output/tSTO_04',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
-  'prefix_date': true,
+  'output_dir': 'output/tSTO_04/20240823_hypertune/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+  'prefix_date': false,
   'prefix': '',
-  'postfix': '',
+  'postfix': 'dx0.142',
   'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
 }

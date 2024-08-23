@@ -19,6 +19,6 @@ source activate ptyrad_optuna
 PARAMS_PATH="ptyrad/inputs/full_params_tSTO_04.yml"
 echo params_path = ${PARAMS_PATH}
 
-python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --hypertune --quiet 2>&1 # 
+python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --hypertune --quiet 2>&1 #  
 
 date

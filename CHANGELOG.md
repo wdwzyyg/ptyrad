@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
+## [Unreleased]
+### Added
+- Add `get_scan_affine.ipynb` to quickly estimate the scan affine transformation for known crystal structure
+- Add `decompose_affine_matrix` to `utils` to decompose an affine matrix into the 4 components 
+### Change
+- Fix `optuna_objective` so that the 4 components of `scan_affine` can be optimized independently
+
 ## [v0.1.0-beta2.0] - 2024-08-18
 ### Added
 - Add hyperparameter tuning (Bayesian optimization and others) capability for `z_distance`, `scan_affine`, and `obj_tilts` with Optuna

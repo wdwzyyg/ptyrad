@@ -3,6 +3,7 @@
 import copy
 from random import shuffle
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -172,6 +173,7 @@ def prepare_recon(model, init, params):
 
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
     fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
+    plt.close(fig_grouping)
     return indices, batches, output_path
 
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path):
@@ -371,7 +373,11 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     
     # scan_affine
     scan_affine = []
-    default_affine = {'scale':1, 'asymmetry':0, 'rotation':0, 'shear':0}
+    scan_affine_init = params['exp_params']['scan_affine']
+    if scan_affine_init is not None:
+        default_affine = {'scale':scan_affine_init[0], 'asymmetry':scan_affine_init[1], 'rotation':scan_affine_init[2], 'shear':scan_affine_init[3]}
+    else:
+        default_affine = {'scale':1, 'asymmetry':0, 'rotation':0, 'shear':0}
     for vname in ['scale', 'asymmetry', 'rotation', 'shear']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
