@@ -5,6 +5,7 @@ from random import shuffle
 
 import numpy as np
 import torch
+from torch.utils.data import Dataset
 
 from accelerate import Accelerator # Multi GPU training and fp16 from HuggingFace
 from ptyrad.initialization import Initializer
@@ -91,9 +92,11 @@ class PtyRADSolver:
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = torch.optim.Adam(model.optimizer_params)
-        model, optimizer = self.accelerator.prepare(model, optimizer)
         indices, batches, output_path = prepare_recon(model, self.init, params)
-        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path)
+        batches_dl    = BatchesDataset(batches)
+        
+        model, optimizer, batches_dl = self.accelerator.prepare(model, optimizer, batches_dl)
+        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches_dl, output_path, acc=self.accelerator)
     
     def hypertune(self):
         import optuna
@@ -128,6 +131,17 @@ class PtyRADSolver:
             self.reconstruct()
         end_t = time_sync()
         print(f"\n### The PtyRADSolver is finished in {end_t - start_t:.3f} sec ###")
+
+class BatchesDataset(Dataset):
+    def __init__(self, batches):
+        self.batches = batches
+
+    def __len__(self):
+        return len(self.batches)
+
+    def __getitem__(self, idx):
+        batch = self.batches[idx]
+        return batch
 
 def prepare_recon(model, init, params):
     """
@@ -180,7 +194,7 @@ def prepare_recon(model, init, params):
     fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
     return indices, batches, output_path
 
-def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path):
+def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
     """
     Executes the iterative optimization loop for ptychographic reconstruction.
 
@@ -226,8 +240,8 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     loss_iters = []
     for niter in range(1,NITER+1):
         
-        shuffle(batches)
-        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose)
+        # shuffle(batches)
+        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose, acc=acc)
         loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
         
         ## Saving intermediate results
@@ -239,7 +253,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
             plot_summary(output_path, model, loss_iters, niter, indices, init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
     return loss_iters
 
-def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
+def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
     """
     Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
 
@@ -278,7 +292,10 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
         model_DP, object_patches = model(batch)
         measured_DP = model.get_measurements(batch)
         loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
-        loss_batch.backward()
+        if acc is not None:
+            acc.backward(loss_batch)
+        else:
+            loss_batch.backward()
         optimizer.step() # batch update
         batch_t = time_sync() - start_batch_t
 
