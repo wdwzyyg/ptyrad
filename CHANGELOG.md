@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run through Ruff formatter for PEP8 code style
 - Add type hints
 - Refine doc strings (Google style)
-- Use Spinx and Napolean for API documentation on Read the Docs
+- Use Sphinx and Napolean for API documentation on Read the Docs
 - Unified meshgrid usage, naming, and unit would be nice
 - `initialization.py` can probably be refactored a bit
 ### New recon feature
@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
-- Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization
+- Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
 ## [Unreleased]
@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `decompose_affine_matrix` to `utils` to decompose an affine matrix into the 4 components 
 ### Change
 - Fix `optuna_objective` so that the 4 components of `scan_affine` can be optimized independently
+- Move `inputs` out of `ptyrad` core package and rename it as `params` for simplicity
+- Rename the `full_params_xxx.yml` into `xxx.yml` for simplicity 
 
 ## [v0.1.0-beta2.0] - 2024-08-18
 ### Added

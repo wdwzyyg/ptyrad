@@ -8,14 +8,14 @@ exp_params : {
     'dx_spec'           : 0.142, # Ang
     'defocus'           : -65, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 10, # Ang
-    'Nlayer'            : 15,
+    'z_distance'        : 5, # Ang
+    'Nlayer'            : 30,
     'N_scans'           : 65536,
     'N_scan_slow'       : 256,
     'N_scan_fast'       : 256,
     'scan_step_size'    : 0.415, # Ang
     'scan_flipT'        : [0,0,1], # (0,0,1) for 'simu' pos, null for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'scan_affine'       : [0.930, 0.083, -0.426, 4.846], #[0.96,0.14,0,6), # (scale, asymmetry, rotation, shear)
+    'scan_affine'       : [0.905, 0.083, -0.6, 4.846], #[0.96,0.14,0,6), # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # null or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type': 'uniform', 'init_occu': null},
@@ -99,7 +99,7 @@ constraint_params : {
     'ortho_pmode'   : {'freq': 1},
     'probe_mask_k'  : {'freq': null, 'radius': 0.22, 'width': 0.05}, # k-radius should be larger than 2*rbf/Npix to avoid cutting out the BF disk
     'fix_probe_int' : {'freq': 1},
-    'obj_rblur'     : {'freq': 1, 'obj_type': 'both', 'kernel_size': 5, 'std': 0.4}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
+    'obj_rblur'     : {'freq': null, 'obj_type': 'both', 'kernel_size': 5, 'std': 0.4}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
     'obj_zblur'     : {'freq': 1, 'obj_type': 'both', 'kernel_size': 5, 'std': 1},
     'kr_filter'     : {'freq': null,    'obj_type': 'both', 'radius': 0.15, 'width': 0.05},
     'kz_filter'     : {'freq': null,    'obj_type': 'both', 'beta': 0.2, 'alpha': 1},
@@ -109,13 +109,13 @@ constraint_params : {
 }
 
 recon_params : {
-  'NITER': 50,
-  'INDICES_MODE': 'center',  # 'full', 'center', 'sub'
+  'NITER': 500,
+  'INDICES_MODE': 'full',  # 'full', 'center', 'sub'
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-  'SAVE_ITERS': 25,  # scalar or null
-  'output_dir': 'output/tSTO_04/20240823_hypertune/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
-  'prefix_date': false,
+  'SAVE_ITERS': 50,  # scalar or null
+  'output_dir': 'output/tSTO_04/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+  'prefix_date': true,
   'prefix': '',
   'postfix': 'dx0.142',
   'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
