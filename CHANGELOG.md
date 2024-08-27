@@ -28,14 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
-## [Unreleased]
+## [v0.1.0-beta2.1] - 2024-08-26
 ### Added
 - Add `get_scan_affine.ipynb` to quickly estimate the scan affine transformation for known crystal structure
 - Add `decompose_affine_matrix` to `utils` to decompose an affine matrix into the 4 components 
 ### Change
 - Fix `optuna_objective` so that the 4 components of `scan_affine` can be optimized independently
 - Move `inputs` out of `ptyrad` core package and rename it as `params` for simplicity
-- Rename the `full_params_xxx.yml` into `xxx.yml` for simplicity 
+- Rename the `full_params_xxx.yml` into `xxx.yml` for simplicity
+- Modify `LoopSubmit.sh` so the 1st loop would wait 10 sec before the 2nd one to finish the database creation, which prevents the sqlite3 "table already exists error"
 
 ## [v0.1.0-beta2.0] - 2024-08-18
 ### Added
