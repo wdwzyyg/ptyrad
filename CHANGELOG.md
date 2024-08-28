@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified meshgrid usage, naming, and unit would be nice
 - `initialization.py` can probably be refactored a bit
 ### New recon feature
+- Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
 - Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
 - Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
 - Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
@@ -28,15 +29,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
-## [v0.1.0-beta2.1] - 2024-08-26
+## [v0.1.0-beta2.1] - 2024-08-28
 ### Added
 - Add `get_scan_affine.ipynb` to quickly estimate the scan affine transformation for known crystal structure
-- Add `decompose_affine_matrix` to `utils` to decompose an affine matrix into the 4 components 
+- Add `decompose_affine_matrix` to `utils` to decompose an affine matrix into the 4 components
+- Add `subscan_slow` and `subscan_fast` into `recon_params` for finer control of `INDICES_MODE` like `center` and `sub`
+- Add `dir_affixes` to `recon_params` to enable flexible control of the output folder name with `make_output_folder`
+- Add `defocus` and `conv_angle` to Optuna optimizable params in `hypertune_params` 
 ### Change
 - Fix `optuna_objective` so that the 4 components of `scan_affine` can be optimized independently
 - Move `inputs` out of `ptyrad` core package and rename it as `params` for simplicity
 - Rename the `full_params_xxx.yml` into `xxx.yml` for simplicity
 - Modify `LoopSubmit.sh` so the 1st loop would wait 10 sec before the 2nd one to finish the database creation, which prevents the sqlite3 "table already exists error"
+- Fix `make_mixed_probe` arguments with optional verbose
 
 ## [v0.1.0-beta2.0] - 2024-08-18
 ### Added

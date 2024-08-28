@@ -190,7 +190,7 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
     
     return save_dict
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=True, verbose=True):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
     
     # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
@@ -228,6 +228,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
+    init_conv_angle = exp_params['conv_angle']
+    init_defocus = exp_params['defocus']
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
@@ -253,11 +255,11 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         output_path += f"_dz{z_distance:.3g}"
     
     # Attach learning rate (optional)
-    if show_lr:
+    if 'lr' in dir_affixes:
         output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
     
     # Attach model params (optional)
-    if show_model:    
+    if 'model' in dir_affixes:    
         if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
             output_path += f"_opreb{model.obj_preblur_std}"
             
@@ -265,7 +267,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_dpblur{model.detector_blur_std}"
     
     # Attach constraint params (optional)
-    if show_constraint:
+    if 'constraint' in dir_affixes:
         if constraint_params['kr_filter']['freq'] is not None:
             obj_type = constraint_params['kr_filter']['obj_type']
             kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
@@ -301,7 +303,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
 
     # Attach loss params (optional)
-    if show_loss:    
+    if 'loss' in dir_affixes:    
         if loss_params['loss_single']['state']:
             output_path += f"_sng{round(loss_params['loss_single']['weight'],2)}"
 
@@ -318,7 +320,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
 
     # # Attach init params (optional)
-    if show_init:
+    if 'init' in dir_affixes:
+        output_path += f"_ca{init_conv_angle:.3g}"
+        output_path += f"_df{init_defocus:.3g}"
+        
         if scan_affine is not None:
             affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
             output_path += f"_aff{affine_str}"

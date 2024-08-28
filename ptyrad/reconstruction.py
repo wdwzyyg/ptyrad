@@ -153,23 +153,26 @@ def prepare_recon(model, init, params):
     vprint("\n### Generating indices, batches, and output_path ###", verbose=model.verbose)
     # Parse the variables
     init_variables = init.init_variables
-    exp_params = params.get('exp_params')
+    exp_params = init.init_params.get('exp_params') # These could be modified by Optuna, hence can be different from params['exp_params]
     loss_params = params.get('loss_params')
     constraint_params = params.get('constraint_params')
     recon_params = params.get('recon_params')
     INDICES_MODE = recon_params['INDICES_MODE']
+    subscan_slow = recon_params.get("subscan_slow")
+    subscan_fast = recon_params.get("subscan_fast")
     GROUP_MODE = recon_params['GROUP_MODE']
     BATCH_SIZE = recon_params['BATCH_SIZE']
     output_dir = recon_params['output_dir']
+    dir_affixes = recon_params['dir_affixes']
     
     # Generate the indices, batches, output_path
     pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
     probe_int    = model.opt_probe.abs().pow(2).sum(0).detach().cpu().numpy()
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=model.verbose) # d_out unit is in Ang
-    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE, verbose=model.verbose)
+    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=model.verbose)
     batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE, verbose=model.verbose)
-    output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, verbose=model.verbose)
+    output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, dir_affixes, verbose=model.verbose)
 
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
     fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
@@ -363,6 +366,21 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     trial_id = 't' + str(trial.number).zfill(4)
     params['recon_params']['prefix'] += trial_id
     
+    ## Currently only re-initialize the required parts for performance, but once there're too many correlated params need to be re-initialized,
+    ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
+    ## For example, re-initialize `dx_spec` would require re-initializing everything including the 4D-STEM data.
+    
+    # probe_params (conv_angle, defocus)
+    remake_probe = False
+    for vname in ['conv_angle', 'defocus']:
+        if tune_params[vname]['state']:
+            vparams = tune_params[vname]
+            vmin, vmax, step = vparams['min'], vparams['max'], vparams['step']
+            init.init_params['exp_params'][vname] = trial.suggest_float(vname, vmin, vmax, step=step)
+            remake_probe = True
+        if remake_probe:
+            init.init_probe()
+            
     # z_distance
     if tune_params['z_distance']['state']:
         z_distance_params = tune_params['z_distance']

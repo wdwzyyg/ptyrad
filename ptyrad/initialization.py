@@ -286,7 +286,7 @@ class Initializer:
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
-                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows']) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
+                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'], verbose=self.verbose) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
                                 
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
