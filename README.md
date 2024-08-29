@@ -21,24 +21,37 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 * CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
 
+Choose one of the following that matches your need.
 
-### Create Conda envoronment - local
+### Create Conda envoronment - local (Requires installed Anaconda)
 ```bash
 conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 optuna -c pytorch -c nvidia -c conda-forge
 ```
 
-### Create Conda envoronment - ALTAS
+or
+```bash
+conda create -n ptyrad_optuna --file ./docs/spec-file_ptyrad_optuna_windows.txt
+```
+
+for Windows specifically. Note that the `pytorch-cuda` version would depend on your local machine (GPU and CUDA).
+
+### Create Conda envoronment - ALTAS (Requires installed Anaconda)
 ```bash
 conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 optuna -c pytorch -c nvidia -c conda-forge
 ```
 
+or simply
+```bash
+conda create -n ptyrad_optuna --file ./docs/spec-file_ptyrad_optuna_linux.txt
+```
+
 *** Note ***
 -  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
-- `conda` could be taking ~ 10 min to solve the environment, you may try `mamba` that could be faster.
+- Installing with spec file.txt on Altas is suggested. `conda` could be taking ~ 10-30 min to solve the environment, you may try `mamba` that could be faster. 
 
 ### Installing
 
-Option 1: Clone from this github repo
+Option 1: Clone from this github repo (It's currently a private repo so may not work)
 
 ```bash
 git clone https://github.com/chiahao3/ptyrad.git

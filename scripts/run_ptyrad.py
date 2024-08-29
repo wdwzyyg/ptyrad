@@ -21,10 +21,10 @@ from ptyrad.reconstruction import PtyRADSolver  # noqa: E402
 
 if __name__ == "__main__":
     # Example usage for typical ptycho reconstruction
-    # python ./scripts/run_ptyrad.py --params_path "ptyrad/inputs/full_params_tBL_WSe2.yml"
+    # python ./scripts/run_ptyrad.py --params_path "params/tBL_WSe2.yml"
 
     # Example usage for hyperparameter tuning
-    # python ./scripts/run_ptyrad.py --params_path "ptyrad/inputs/full_params_tBL_WSe2.yml" --hypertune
+    # python ./scripts/run_ptyrad.py --params_path "params/tBL_WSe2.yml" --hypertune
        
     parser = argparse.ArgumentParser(
         description="Run PtyRAD", formatter_class=argparse.ArgumentDefaultsHelpFormatter

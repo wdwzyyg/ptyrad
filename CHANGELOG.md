@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
+## [Unreleased]
+### Added
+- Add `demo` under `params`
+- Add `run_PtyShv.m` and `slurm_run_PtyShv.sub` for direct comparison with PtychoShelves
+
 ## [v0.1.0-beta2.1] - 2024-08-28
 ### Added
 - Add `get_scan_affine.ipynb` to quickly estimate the scan affine transformation for known crystal structure
