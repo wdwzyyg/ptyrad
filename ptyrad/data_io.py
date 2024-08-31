@@ -65,6 +65,7 @@ def load_yml_params(file_path):
     with open(file_path, "r") as file:
         params_dict = yaml.safe_load(file)
     print("Success! .yml file path =", file_path)
+    params_dict['params_path'] = file_path
     return params_dict
 
 def load_py_params(file_path):
@@ -77,6 +78,7 @@ def load_py_params(file_path):
         for name in dir(params_module)
         if not name.startswith("__")
     }
+    params_dict['params_path'] = file_path
     return params_dict
 
 

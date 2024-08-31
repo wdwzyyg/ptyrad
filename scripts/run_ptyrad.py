@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.08.18
+# Updated by Chia-Hao Lee on 2024.08.31
 
 import argparse
 import sys
@@ -20,22 +20,15 @@ from ptyrad.data_io import load_params  # noqa: E402
 from ptyrad.reconstruction import PtyRADSolver  # noqa: E402
 
 if __name__ == "__main__":
-    # Example usage for typical ptycho reconstruction
+    # Example usage
     # python ./scripts/run_ptyrad.py --params_path "params/tBL_WSe2.yml"
-
-    # Example usage for hyperparameter tuning
-    # python ./scripts/run_ptyrad.py --params_path "params/tBL_WSe2.yml" --hypertune
        
     parser = argparse.ArgumentParser(
         description="Run PtyRAD", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("--params_path", type=str, required=True)
-    parser.add_argument("--hypertune", action="store_true")  # Default would be false
-    parser.add_argument("--quiet", action="store_true")
     args = parser.parse_args()
 
     params = load_params(args.params_path)
-    ptycho_solver = PtyRADSolver(
-        params, if_hypertune=args.hypertune, if_quiet=args.quiet, device=DEVICE
-    )
+    ptycho_solver = PtyRADSolver(params, device=DEVICE)
     ptycho_solver.run()

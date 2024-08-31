@@ -19,6 +19,6 @@ source activate ptyrad_optuna
 PARAMS_PATH="params/demo/tBL_WSe2_1probe_1obj_1slice.yml"
 echo params_path = ${PARAMS_PATH}
 
-python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 #  --hypertune --quiet 
+python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
 
 date

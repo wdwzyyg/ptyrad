@@ -11,18 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add type hints
 - Refine doc strings (Google style)
 - Use Sphinx and Napolean for API documentation on Read the Docs
+- Unified the usage of explicit key or .get for dict
 - Unified meshgrid usage, naming, and unit would be nice
 - `initialization.py` can probably be refactored a bit
 ### New recon feature
 - Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
 - Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
-- Add object preprocess methods (duplicate/interpolate/pad) into `Initializator` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
-- Add on-th-fly CBED padding/upsampling inside `PtychoAD` model to reduce GPU comsumption
+- Add object preprocess methods (duplicate/interpolate/pad) into `Initializer` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
 ### Recon improvements
 - Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
 - Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
 - Can we do other mode decomposition other than SVD for the ortho_pmode?
 ### Utils and plotting
+- Add finer folder name control and maybe allowing swapping order
 - Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
@@ -31,8 +32,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Add `demo` under `params`
+- Add a default `/data` folder with txt instruction
+- Add `demo` under `params` with a couple tBL_WSe2 examples
 - Add `run_PtyShv.m` and `slurm_run_PtyShv.sub` for direct comparison with PtychoShelves
+- Add `copy_params_to_dir` to copy the params files to the output directories for better record keeping
+- Add `save_results` list to `recon_params` to specify which result to save
+- (Working) Add `result_modes` list to `recon_params` to specify whether to postprocess the result before saving
+- (Working) Add `collate_results` to `hypertune_params` to specify whether to collect hypertune results to `output_dir`
+- (Working) Add `collate_figs` to `hypertune_params` to specify whether to collect hypertune summary figs to `output_dir`
+### Changed
+- Move `subscan_slow` and `subscan_fast` under `INDICES_MODE` for (hopefully) clarity
+- Let `load_params` add additional entry of `params_path` to the params dict before return
+- Absorb `--hypertune` and `--quiet` into the params file, simplifying the scripts and letting the entire recontstruction behavior controlled by params file
+- Drop the `_optuna` suffix in `README.md` and `spec-file.txt` for simplicity
+- Simplify the installation guide in `README.md`
 
 ## [v0.1.0-beta2.1] - 2024-08-28
 ### Added
@@ -41,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `subscan_slow` and `subscan_fast` into `recon_params` for finer control of `INDICES_MODE` like `center` and `sub`
 - Add `dir_affixes` to `recon_params` to enable flexible control of the output folder name with `make_output_folder`
 - Add `defocus` and `conv_angle` to Optuna optimizable params in `hypertune_params` 
-### Change
+### Changed
 - Fix `optuna_objective` so that the 4 components of `scan_affine` can be optimized independently
 - Move `inputs` out of `ptyrad` core package and rename it as `params` for simplicity
 - Rename the `full_params_xxx.yml` into `xxx.yml` for simplicity
@@ -56,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `.yml` as a new params file type. The original `.py` is still working but deprecated, might be removed before public release
 - Add `vprint` as verbose print to `utils` to better control the verbosity of printed information (especially for hyperparamter tuning)
 - Add a rough version of doc string for major classes and functions
-### Change
+### Changed
 - Simplify the arguments for `save_results` and `make_save_dict`
 - Rearrange the argument order of `plot_summary` and add default value to `fig_list`
 - Refactor the `run_ptyrad` scripts and notebooks and move them into `scripts` 
@@ -72,11 +85,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add 4D-STEM preprocessing methods including `meas_crop`, `meas_resample`, `meas_add_source_size`, `meas_add_detector_blur`, `meas_add_poisson_noise` to `initialization` for better handling of input simulated 4D-STEM data. With these new methods, users can easily reconstruct with different 4D-STEM data conditions without manually generating and saving each 4D-STEM variants. We may create 4D-STEM datasets with different collection angles, k-space sampling, partial spatial coherence, detector blur, and noise level from a single dataset right before the reconstruction.
 - Add `obj_preblur_std` to `model` for an effective real space deconvolution with a 2D Gaussian kernel. By pre-convolving the obj with a 2D Gaussian before simulating the diffraction pattern, the reconstructed obj is essentially the deconvolution version of the transmission function.
-### Change
+### Changed
 - Rename `cbeds` variables/keys into `meas` or `DP` for generalizability. Changes are primarily made inside `initialization`, `optimization`, and `visualization` but you will need to modify the params files.
 - Modify `make_output_folder` to include `obj_preblur_std` values
 - Modify the gaussian_blur implementation in `loss_simlar` from a stack/list comp version to a reshape version and gets a 25% speed up (45 sec vs. 1min /iter)!
-### Remove
+### Removed
 - Remove `recenter_cbeds` in `model_params` because sub-px shifting noisy CBEDs is really not a good idea and leaves quite some artifact as well. We should directly handle the obj linear phase ramp from the off-centered CBEDs.
 - Remove `run_ptyrad_local.py` for simplicity as I don't expect a lot of users would need it anymore. One can modify the atlas script by changing the path of `ptyrad` package.
 

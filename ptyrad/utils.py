@@ -212,7 +212,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     
     output_path  = output_dir
     meas_flipT   = exp_params['meas_flipT']
-    indices_mode = recon_params['INDICES_MODE']
+    indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
     batch_size   = recon_params['BATCH_SIZE']
     prefix_date  = recon_params['prefix_date']
@@ -236,7 +236,6 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     postfix = '_'+ postfix if postfix != '' else ''
     if prefix_date:
         prefix = get_date() + '_' + prefix 
-    
     
     # Setup basic params   
     output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -334,12 +333,20 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     
     output_path += postfix
     
-    if recon_params['SAVE_ITERS'] is not None:
-        os.makedirs(output_path, exist_ok=True)
-        vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
-    else:
-        vprint(f"output_path = '{output_path}' but is NOT generated!", verbose=verbose)
+    os.makedirs(output_path, exist_ok=True)
+    vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
     return output_path
+
+def copy_params_to_dir(params_path, output_dir, verbose=True):
+    import shutil
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    file_name = os.path.basename(params_path)
+    output_path = os.path.join(output_dir, file_name)
+    shutil.copy2(params_path, output_path)
+    vprint(f"Successfully copy '{file_name}' to '{output_dir}'", verbose=verbose)
 
 def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     ''' Make batches from input indices '''
@@ -441,31 +448,37 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             return sparse_batches
 
 def save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
-    save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+    
+    save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
+    result_modes = params['recon_params'].get('result_modes', ['full_32bit'])
+    
+    if 'model' in save_result_list:
+        save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+        torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
 
-    torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
-
-    imwrite(os.path.join(output_path, f"probe_amp_iter{str(niter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
+    if 'probe' in save_result_list:
+        imwrite(os.path.join(output_path, f"probe_amp_iter{str(niter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
     
-    omode_occu = model.omode_occu
-    omode      = model.opt_objp.size(0)
-    zslice     = model.opt_objp.size(1)
-    
-    # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
-    
-    if omode == 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_iter{str(niter).zfill(4)}.tif"), model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
-    elif omode == 1 and zslice > 1:
-        imwrite(os.path.join(output_path, f"objp_zstack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_zsum_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
-    elif omode > 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_ostack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_iter{str(niter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostd_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
-    else:
-        imwrite(os.path.join(output_path, f"objp_4D_iter{str(niter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
+    if 'obj' in save_result_list:
+        omode_occu = model.omode_occu
+        omode      = model.opt_objp.size(0)
+        zslice     = model.opt_objp.size(1)
+        
+        # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+        
+        if omode == 1 and zslice == 1:
+            imwrite(os.path.join(output_path, f"objp_iter{str(niter).zfill(4)}.tif"),              model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
+        elif omode == 1 and zslice > 1:
+            imwrite(os.path.join(output_path, f"objp_zstack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
+            imwrite(os.path.join(output_path, f"objp_zsum_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
+        elif omode > 1 and zslice == 1:
+            imwrite(os.path.join(output_path, f"objp_ostack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
+            imwrite(os.path.join(output_path, f"objp_omean_iter{str(niter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
+            imwrite(os.path.join(output_path, f"objp_ostd_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
+        else:
+            imwrite(os.path.join(output_path, f"objp_4D_iter{str(niter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
+            imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
+            imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
 
 def imshift_single(img, shift, grid):
     """

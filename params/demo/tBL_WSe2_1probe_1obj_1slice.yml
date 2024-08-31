@@ -13,9 +13,9 @@ exp_params : {
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
     'scan_step_size'    : 0.4290, # Ang
-    'scan_flipT'        : null, # None for both 'simu' and loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'scan_flipT'        : null, # null for both 'simu' and loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
     'scan_affine'       : null, # (scale, asymmetry, rotation, shear)
-    'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
+    'scan_rand_std'     : 0.15, # null or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1,
     'omode_init_occu'   : {'occu_type': 'uniform', 'init_occu': null},
     'pmode_max'         : 1,
@@ -24,11 +24,11 @@ exp_params : {
     'meas_permute'           : null,
     'meas_reshape'           : null,
     'meas_flipT'             : [1,0,0], # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
-    'meas_crop'              : null, # None or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
-    'meas_resample'          : null, # None or (2,1) array-like for [ky_zoom, kx_zoom]
-    'meas_add_source_size'   : null, # None or a scalar of std (Ang)
-    'meas_add_detector_blur' : null, # None or a scalar of std (px)
-    'meas_add_poisson_noise' : null, # None or a scalar of electrons/Ang^2
+    'meas_crop'              : null, # null or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
+    'meas_resample'          : null, # null or (2,1) array-like for [ky_zoom, kx_zoom]
+    'meas_add_source_size'   : null, # null or a scalar of std (Ang)
+    'meas_add_detector_blur' : null, # null or a scalar of std (px)
+    'meas_add_poisson_noise' : null, # null or a scalar of electrons/Ang^2
     'probe_simu_params'      : null
 }
 
@@ -47,26 +47,29 @@ source_params : {
 }
 
 hypertune_params : {
-    'n_trials'      : 1000,
-    'use_pruning'   : True,
-    'storage_path'  : 'sqlite:///20240829_hypertune.sqlite3',
-    'study_name'    : 'tBL_WSe2',
-    'tune_params'   : {
-        'conv_angle': {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
-        'defocus'   : {'state': false, 'min': -50, 'max': 50, 'step': 10},
-        'z_distance': {'state': true, 'min': 1.5, 'max': 2.5, 'step': 0.5},
-        'scale'     : {'state': false, 'min': 0.9, 'max': 1.1, 'step': 0.05},
-        'asymmetry' : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
-        'rotation'  : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
-        'shear'     : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
-        'tilt_y'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5},
-        'tilt_x'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
+    'if_hypertune'   : false,
+    'collate_results': true, # null or a list of stings
+    'collate_figs'   : true, # null or a list of stings
+    'n_trials'       : 1000,
+    'use_pruning'    : true,
+    'storage_path'   : 'sqlite:///20240829_hypertune.sqlite3',
+    'study_name'     : 'tBL_WSe2',
+    'tune_params'    : { # Hypertune optimizable parameters, these will override the corresponding values in `exp_params``
+        'conv_angle' : {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
+        'defocus'    : {'state': false, 'min': -50, 'max': 50, 'step': 10},
+        'z_distance' : {'state': true, 'min': 1.5, 'max': 2.5, 'step': 0.5},
+        'scale'      : {'state': false, 'min': 0.9, 'max': 1.1, 'step': 0.05},
+        'asymmetry'  : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
+        'rotation'   : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'shear'      : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'tilt_y'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}, # This refers to the `init_tilts` under `source_params['tilt_params']['init_tilts']`
+        'tilt_x'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}  # This refers to the `init_tilts` under `source_params['tilt_params']['init_tilts']`
     }
 }
 
 model_params : {
-    'obj_preblur_std'     : null, # scalar(px), None
-    'detector_blur_std'   : null, # scalar(px), None
+    'obj_preblur_std'     : null, # scalar(px), null
+    'detector_blur_std'   : null, # scalar(px), null
     'lr_params':{
         'obja'            : 5.0e-4,
         'objp'            : 5.0e-4,
@@ -96,17 +99,19 @@ constraint_params : {
 }
 
 recon_params: {
-  'NITER': 50,
-  'INDICES_MODE': 'full',  # 'full', 'center', 'sub'
-  'subscan_slow': null,
-  'subscan_fast': null,
+  'NITER': 10,
+  'INDICES_MODE': {'mode': 'full', 'subscan_slow': null, 'subscan_fast': null},  # 'full', 'center', 'sub'
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-  'SAVE_ITERS': 10,  # scalar or None
+  'SAVE_ITERS': 10,  # scalar or null
   'output_dir': 'output/tBL-WSe2_demo/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
   'dir_affixes': ['lr', 'constraint', 'model', 'loss'], # 'lr', 'constraint', 'model', 'loss', 'init'
   'prefix_date': true,
   'prefix': '',
   'postfix': '',
-  'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
+  'save_result': ['model', 'obj', 'probe'],
+  'result_modes': {'FOV': ['full'], 'bit': {32, 16, 8}},
+  'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'],  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
+  'copy_params': true,
+  'if_quiet': false
 }

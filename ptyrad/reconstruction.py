@@ -11,6 +11,7 @@ from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
 from ptyrad.optimization import CombinedConstraint, CombinedLoss
 from ptyrad.utils import (
+    copy_params_to_dir,
     get_blob_size,
     make_batches,
     make_output_folder,
@@ -56,10 +57,10 @@ class PtyRADSolver:
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, *, if_hypertune=False, if_quiet=False, device='cuda:0'):
+    def __init__(self, params, device='cuda:0'):
         self.params       = params
-        self.if_hypertune = if_hypertune
-        self.verbose      = not if_quiet
+        self.if_hypertune = self.params['hypertune_params']['if_hypertune']
+        self.verbose      = not self.params['recon_params']['if_quiet']
         self.device       = device
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
@@ -154,28 +155,41 @@ def prepare_recon(model, init, params):
     # Parse the variables
     init_variables = init.init_variables
     exp_params = init.init_params.get('exp_params') # These could be modified by Optuna, hence can be different from params['exp_params]
+    params_path = params.get('params_path')
     loss_params = params.get('loss_params')
     constraint_params = params.get('constraint_params')
     recon_params = params.get('recon_params')
-    INDICES_MODE = recon_params['INDICES_MODE']
-    subscan_slow = recon_params.get("subscan_slow")
-    subscan_fast = recon_params.get("subscan_fast")
+    INDICES_MODE = recon_params['INDICES_MODE'].get("mode")
+    subscan_slow = recon_params['INDICES_MODE'].get("subscan_slow")
+    subscan_fast = recon_params['INDICES_MODE'].get("subscan_fast")
     GROUP_MODE = recon_params['GROUP_MODE']
+    SAVE_ITERS = recon_params['SAVE_ITERS']
     BATCH_SIZE = recon_params['BATCH_SIZE']
     output_dir = recon_params['output_dir']
     dir_affixes = recon_params['dir_affixes']
+    copy_params = recon_params['copy_params']
+    if_hypertune = params['hypertune_params']['if_hypertune']
     
-    # Generate the indices, batches, output_path
+    # Generate the indices, batches, and fig_grouping
     pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
     probe_int    = model.opt_probe.abs().pow(2).sum(0).detach().cpu().numpy()
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=model.verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=model.verbose)
     batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE, verbose=model.verbose)
-    output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, dir_affixes, verbose=model.verbose)
-
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
-    fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
+
+    # Create the output path, save fig_grouping, and copy params file
+    if SAVE_ITERS is not None:
+        output_path  = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, dir_affixes, verbose=model.verbose)
+        fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
+        if copy_params:
+            # Save params.yml to separate reconstruction folder for normal mode, and to the main output_dir for hypertune mode
+            copy_params_to_dir(params_path, output_dir if if_hypertune else output_path)
+    else:
+        if copy_params and if_hypertune:
+            copy_params_to_dir(params_path, output_dir)
+    
     plt.close(fig_grouping)
     return indices, batches, output_path
 
@@ -358,10 +372,12 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
+    output_dir        = recon_params['output_dir']
     fig_list          = recon_params['fig_list']
     
     # Parse the hypertune_params
     hypertune_params  = params['hypertune_params']
+    collate_results   = hypertune_params['collate_results']
     tune_params       = hypertune_params['tune_params']
     trial_id = 't' + str(trial.number).zfill(4)
     params['recon_params']['prefix'] += trial_id
@@ -369,6 +385,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     ## Currently only re-initialize the required parts for performance, but once there're too many correlated params need to be re-initialized,
     ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
     ## For example, re-initialize `dx_spec` would require re-initializing everything including the 4D-STEM data.
+    
+    # Initialize hypertune params filename
     
     # probe_params (conv_angle, defocus)
     remake_probe = False
@@ -442,13 +460,21 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
             
             ## Saving summary
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
-        
+               
         ## Pruning logic for optuna
         if hypertune_params['use_pruning']:
             trial.report(loss_iter, niter)
 
             # Handle pruning based on the intermediate value.
             if trial.should_prune():
+                
+                # Save the current results of the pruned trials
+                if collate_results is not None:
+                    pass # collate_hypertune_results
                 raise optuna.exceptions.TrialPruned()
+    
+    ## Saving collate results of the finished trials
+    if collate_results is not None:
+        pass # collate_hypertune_results
     
     return loss_iter

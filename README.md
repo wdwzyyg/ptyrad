@@ -15,41 +15,40 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ## Getting Started
 
-### Dependencies
+### PtyRAD Major dependencies:
 
 * Python 3.11 or above
 * CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
 
-Choose one of the following that matches your need.
+> **Choose one of the following that matches your need. Installation via spec-file.txt is recommended.**
 
-### Create Conda envoronment - local (Requires installed Anaconda)
+### 1. Install [miniconda](https://docs.anaconda.com/miniconda/) or [Anaconda](https://docs.anaconda.com/anaconda/install/) so we can create environments with `conda`
+
+### 2a. Create Conda environment on Windows via spec-file.txt 
 ```bash
-conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 optuna -c pytorch -c nvidia -c conda-forge
+conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_windows.txt
 ```
 
-or
+### 2b. Create Conda environment on Linux via spec-file.txt
 ```bash
-conda create -n ptyrad_optuna --file ./docs/spec-file_ptyrad_optuna_windows.txt
+conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_linux.txt
 ```
 
-for Windows specifically. Note that the `pytorch-cuda` version would depend on your local machine (GPU and CUDA).
+Note: `ptyrad` can be changed to your preferred conda environment name, and `./docs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
 
-### Create Conda envoronment - ALTAS (Requires installed Anaconda)
+### 2c. Create Conda environment via specified package
 ```bash
-conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 optuna -c pytorch -c nvidia -c conda-forge
-```
-
-or simply
-```bash
-conda create -n ptyrad_optuna --file ./docs/spec-file_ptyrad_optuna_linux.txt
+conda create -n ptyrad python=3.11 matplotlib scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision optuna=3.6.1 pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
 ```
 
 *** Note ***
+- PyTorch on Windows only supports Python 3.8-3.11 as of Sept. 2024.
+- Creating environment with `spec-file.txt` (2a, 2b) is suggested. `conda` could be taking ~ 10-30 min to solve the environment for package versions if you go with option 2c, and could still run into package version issues 
 -  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
-- Installing with spec file.txt on Altas is suggested. `conda` could be taking ~ 10-30 min to solve the environment, you may try `mamba` that could be faster. 
 
-### Installing
+
+### 3. Installing PtyRAD
 
 Option 1: Clone from this github repo (It's currently a private repo so may not work)
 
@@ -59,12 +58,15 @@ git clone https://github.com/chiahao3/ptyrad.git
 
 Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory
 
-### Trying the demo in /scripts
+### 4. Trying the demo in /scripts
 - `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
 - `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 
 ## Support
 If you run into problems, have questions or suggested features / modifications, please create an issue [here](https://github.com/chiahao3/ptyrad/issues/new/choose).
+
+## Learning resource
+You can find previous tutorial recordings and slides from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo)
 
 ## Authors
 
