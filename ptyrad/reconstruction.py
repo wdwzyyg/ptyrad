@@ -187,6 +187,7 @@ def prepare_recon(model, init, params):
             # Save params.yml to separate reconstruction folder for normal mode, and to the main output_dir for hypertune mode
             copy_params_to_dir(params_path, output_dir if if_hypertune else output_path)
     else:
+        output_path = None
         if copy_params and if_hypertune:
             copy_params_to_dir(params_path, output_dir)
     
@@ -246,7 +247,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
             
             ## Saving summary
             plot_summary(output_path, model, loss_iters, niter, indices, init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)
@@ -456,7 +457,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
             
             ## Saving summary
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, fig_list=fig_list, show_fig=False, save_fig=True, verbose=model.verbose)

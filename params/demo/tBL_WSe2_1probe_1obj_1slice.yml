@@ -48,8 +48,8 @@ source_params : {
 
 hypertune_params : {
     'if_hypertune'   : false,
-    'collate_results': true, # null or a list of stings
-    'collate_figs'   : true, # null or a list of stings
+    'collate_results': ['object', 'probe'], # null or a list of stings
+    'collate_figs'   : ['forward'], # null or a list of stings
     'n_trials'       : 1000,
     'use_pruning'    : true,
     'storage_path'   : 'sqlite:///20240829_hypertune.sqlite3',
@@ -100,17 +100,17 @@ constraint_params : {
 
 recon_params: {
   'NITER': 10,
-  'INDICES_MODE': {'mode': 'full', 'subscan_slow': null, 'subscan_fast': null},  # 'full', 'center', 'sub'
+  'INDICES_MODE': {'mode': 'center', 'subscan_slow': null, 'subscan_fast': null},  # 'full', 'center', 'sub'
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
-  'SAVE_ITERS': 10,  # scalar or null
-  'output_dir': 'output/tBL-WSe2_demo/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+  'SAVE_ITERS': 10,  # scalar or null. If SAVE_ITERS > NITER, it'll create the output folder but no results / figs would be saved
+  'output_dir': 'output/tBL-WSe2_test/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
   'dir_affixes': ['lr', 'constraint', 'model', 'loss'], # 'lr', 'constraint', 'model', 'loss', 'init'
   'prefix_date': true,
   'prefix': '',
   'postfix': '',
-  'save_result': ['model', 'obj', 'probe'],
-  'result_modes': {'FOV': ['full'], 'bit': {32, 16, 8}},
+  'save_result': ['model', 'object', 'probe'],
+  'result_modes': {'FOV': ['crop'], 'bit': ['raw', '8']}, # {'FOV': ['full', 'crop'], 'bit': ['raw', '32', '16', '8']},
   'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'],  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
   'copy_params': true,
   'if_quiet': false

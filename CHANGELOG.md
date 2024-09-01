@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `run_PtyShv.m` and `slurm_run_PtyShv.sub` for direct comparison with PtychoShelves
 - Add `copy_params_to_dir` to copy the params files to the output directories for better record keeping
 - Add `save_results` list to `recon_params` to specify which result to save
-- (Working) Add `result_modes` list to `recon_params` to specify whether to postprocess the result before saving
+- Add `result_modes` list to `recon_params` to specify whether to postprocess the result before saving
 - (Working) Add `collate_results` to `hypertune_params` to specify whether to collect hypertune results to `output_dir`
 - (Working) Add `collate_figs` to `hypertune_params` to specify whether to collect hypertune summary figs to `output_dir`
 ### Changed

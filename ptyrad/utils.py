@@ -447,38 +447,87 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             
             return sparse_batches
 
-def save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
+def normalize_from_zero_to_one(arr):
+    norm_arr = (arr - arr.min())/(arr.max()-arr.min())
+    return norm_arr
+
+def normalize_by_bit_depth(arr, bit_depth):
+
+    norm_arr = normalize_from_zero_to_one(arr)
+    
+    if bit_depth == '8':
+        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(norm_arr))
+    elif bit_depth == '16':
+        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(norm_arr))
+    elif bit_depth == '32':
+        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(norm_arr))
+    elif bit_depth == 'raw':
+        norm_arr_in_bit_depth = np.float32(norm_arr)
+    else:
+        norm_arr_in_bit_depth = np.float32(norm_arr)
+    
+    return norm_arr_in_bit_depth
+
+def save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
-    result_modes = params['recon_params'].get('result_modes', ['full_32bit'])
+    result_modes = params['recon_params'].get('result_modes')
+    iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
-        torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
+        torch.save(save_dict, os.path.join(output_path, f"model{iter_str}.pt"))
 
-    if 'probe' in save_result_list:
-        imwrite(os.path.join(output_path, f"probe_amp_iter{str(niter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
+    probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
+    objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
+    omode_occu = model.omode_occu
+    omode      = model.opt_objp.size(0)
+    zslice     = model.opt_objp.size(1)
+    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
+    y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
+    x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     
-    if 'obj' in save_result_list:
-        omode_occu = model.omode_occu
-        omode      = model.opt_objp.size(0)
-        zslice     = model.opt_objp.size(1)
-        
-        # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
-        
-        if omode == 1 and zslice == 1:
-            imwrite(os.path.join(output_path, f"objp_iter{str(niter).zfill(4)}.tif"),              model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
-        elif omode == 1 and zslice > 1:
-            imwrite(os.path.join(output_path, f"objp_zstack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
-            imwrite(os.path.join(output_path, f"objp_zsum_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
-        elif omode > 1 and zslice == 1:
-            imwrite(os.path.join(output_path, f"objp_ostack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
-            imwrite(os.path.join(output_path, f"objp_omean_iter{str(niter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
-            imwrite(os.path.join(output_path, f"objp_ostd_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
+    for bit in result_modes['bit']:
+        if bit == '8':
+            bit_str = '_08bit'
+        elif bit == '16':
+            bit_str = '_16bit'
+        elif bit == '32':
+            bit_str = '_32bit'
+        elif bit == 'raw':
+            bit_str = ''
         else:
-            imwrite(os.path.join(output_path, f"objp_4D_iter{str(niter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
-            imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
-            imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
+            bit_str = ''
+        if 'probe' in save_result_list:
+            imwrite(os.path.join(output_path, f"probe_amp{iter_str}{bit_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
+        
+        for fov in result_modes['FOV']:
+            if fov == 'crop':
+                fov_str = '_crop'
+                objp_crop = objp[:, :, y_min:y_max+1, x_min:x_max+1]
+            elif fov == 'full':
+                fov_str = ''
+                objp_crop = objp
+            else:
+                fov_str = ''
+                objp_crop = objp
+            postfix_str = iter_str + fov_str + bit_str
+            
+            if any(keyword in save_result_list for keyword in ['obj', 'objp', 'object']):
+                # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+                if omode == 1 and zslice == 1:
+                    imwrite(os.path.join(output_path, f"objp{postfix_str}.tif"),              normalize_by_bit_depth(objp_crop[0,0], bit))
+                elif omode == 1 and zslice > 1:
+                    imwrite(os.path.join(output_path, f"objp_zstack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[0,:], bit))
+                    imwrite(os.path.join(output_path, f"objp_zsum{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
+                elif omode > 1 and zslice == 1:
+                    imwrite(os.path.join(output_path, f"objp_ostack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[:,0], bit))
+                    imwrite(os.path.join(output_path, f"objp_omean{postfix_str}.tif"),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
+                    imwrite(os.path.join(output_path, f"objp_ostd{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
+                else:
+                    imwrite(os.path.join(output_path, f"objp_4D{postfix_str}.tif"),           normalize_by_bit_depth(objp_crop[:,:], bit))
+                    imwrite(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif"),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
+                    imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
 
 def imshift_single(img, shift, grid):
     """

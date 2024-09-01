@@ -34,17 +34,23 @@ conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_windows.txt
 ```bash
 conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_linux.txt
 ```
-
 Note: `ptyrad` can be changed to your preferred conda environment name, and `./docs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
 
-### 2c. Create Conda environment via specified package
+### 2c. Create Conda environment on Windows via specified package
 ```bash
-conda create -n ptyrad python=3.11 matplotlib scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision optuna=3.6.1 pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
+conda create -n ptyrad python=3.11 matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
 ```
 
-*** Note ***
+### 2d. Create Conda environment on Linux via specified package
+```bash
+conda create -n ptyrad python matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=11.8 -c pytorch -c nvidia -c conda-forge
+```
+Note: `pytorch-cuda` is limited to 11.8 because our private cluster at Cornell only supports up to this version.
+
+*** Other Note ***
 - PyTorch on Windows only supports Python 3.8-3.11 as of Sept. 2024.
-- Creating environment with `spec-file.txt` (2a, 2b) is suggested. `conda` could be taking ~ 10-30 min to solve the environment for package versions if you go with option 2c, and could still run into package version issues 
+- Creating environment with `spec-file.txt` (2a, 2b) is suggested. The spec-file.txt uses Python 3.11 and PyTorch 2.1.
+- If you go with option 2c or 2d, `conda` could be taking ~ 10-30 min to solve the environment for package versions. You might get a Python 3.11.9 (Windows) or 3.12.5 (Linux) environment with pytorch 2.4.0 and numpy 2.1.0 as of Sept. 2024.
 -  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
 
 
