@@ -57,6 +57,21 @@ def time_sync():
     t = time()
     return t
 
+def parse_sec_to_time_str(seconds):
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    if days > 0:
+        return f"{int(days)} day {int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif hours > 0:
+        return f"{int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif minutes > 0:
+        return f"{int(minutes)} min {secs:.3f} sec"
+    else:
+        return f"{secs:.3f} sec"
+
 def compose_affine_matrix(scale, asymmetry, rotation, shear):
     # Adapted from PtychoShelves +math/compose_affine_matrix.m
     # The input rotation and shear is in unit of degree
@@ -190,10 +205,8 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
     
     return save_dict
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
-    
-    # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
     
     # # Example
     # NITER        = 50
@@ -254,11 +267,11 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         output_path += f"_dz{z_distance:.3g}"
     
     # Attach learning rate (optional)
-    if 'lr' in dir_affixes:
+    if 'lr' in recon_dir_affixes:
         output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
     
     # Attach model params (optional)
-    if 'model' in dir_affixes:    
+    if 'model' in recon_dir_affixes:    
         if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
             output_path += f"_opreb{model.obj_preblur_std}"
             
@@ -266,7 +279,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_dpblur{model.detector_blur_std}"
     
     # Attach constraint params (optional)
-    if 'constraint' in dir_affixes:
+    if 'constraint' in recon_dir_affixes:
         if constraint_params['kr_filter']['freq'] is not None:
             obj_type = constraint_params['kr_filter']['obj_type']
             kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
@@ -302,7 +315,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
 
     # Attach loss params (optional)
-    if 'loss' in dir_affixes:    
+    if 'loss' in recon_dir_affixes:    
         if loss_params['loss_single']['state']:
             output_path += f"_sng{round(loss_params['loss_single']['weight'],2)}"
 
@@ -319,7 +332,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
 
     # # Attach init params (optional)
-    if 'init' in dir_affixes:
+    if 'init' in recon_dir_affixes:
         output_path += f"_ca{init_conv_angle:.3g}"
         output_path += f"_df{init_defocus:.3g}"
         
@@ -447,6 +460,14 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             
             return sparse_batches
 
+def parse_hypertune_params_to_str(hypertune_params):
+    
+    hypertune_str = ''
+    for key, value in hypertune_params.items():
+        hypertune_str += f"_{str(key)}_{value:.3g}"
+    
+    return hypertune_str
+
 def normalize_from_zero_to_one(arr):
     norm_arr = (arr - arr.min())/(arr.max()-arr.min())
     return norm_arr
@@ -468,7 +489,7 @@ def normalize_by_bit_depth(arr, bit_depth):
     
     return norm_arr_in_bit_depth
 
-def save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses):
+def save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
     result_modes = params['recon_params'].get('result_modes')
@@ -476,7 +497,7 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
     
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
-        torch.save(save_dict, os.path.join(output_path, f"model{iter_str}.pt"))
+        torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
 
     probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
     objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
@@ -499,35 +520,47 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
         else:
             bit_str = ''
         if 'probe' in save_result_list:
-            imwrite(os.path.join(output_path, f"probe_amp{iter_str}{bit_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
-        
+            imwrite(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
         for fov in result_modes['FOV']:
             if fov == 'crop':
                 fov_str = '_crop'
-                objp_crop = objp[:, :, y_min:y_max+1, x_min:x_max+1]
+                objp_crop = objp[:, :, y_min-1:y_max, x_min-1:x_max]
             elif fov == 'full':
                 fov_str = ''
                 objp_crop = objp
             else:
                 fov_str = ''
                 objp_crop = objp
-            postfix_str = iter_str + fov_str + bit_str
-            
+                
+            postfix_str = fov_str + bit_str + collate_str + iter_str
+                
             if any(keyword in save_result_list for keyword in ['obj', 'objp', 'object']):
                 # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
-                if omode == 1 and zslice == 1:
-                    imwrite(os.path.join(output_path, f"objp{postfix_str}.tif"),              normalize_by_bit_depth(objp_crop[0,0], bit))
-                elif omode == 1 and zslice > 1:
-                    imwrite(os.path.join(output_path, f"objp_zstack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[0,:], bit))
-                    imwrite(os.path.join(output_path, f"objp_zsum{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
-                elif omode > 1 and zslice == 1:
-                    imwrite(os.path.join(output_path, f"objp_ostack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[:,0], bit))
-                    imwrite(os.path.join(output_path, f"objp_omean{postfix_str}.tif"),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
-                    imwrite(os.path.join(output_path, f"objp_ostd{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
-                else:
-                    imwrite(os.path.join(output_path, f"objp_4D{postfix_str}.tif"),           normalize_by_bit_depth(objp_crop[:,:], bit))
-                    imwrite(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif"),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
-                    imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
+                
+                for dim in result_modes['obj_dim']:
+                    
+                    if omode == 1 and zslice == 1:
+                        if dim == 2: 
+                            imwrite(os.path.join(output_path, f"objp{postfix_str}.tif"),              normalize_by_bit_depth(objp_crop[0,0], bit))
+                    elif omode == 1 and zslice > 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_zstack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[0,:], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_zsum{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
+                    elif omode > 1 and zslice == 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_ostack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[:,0], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_omean{postfix_str}.tif"),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"objp_ostd{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
+                    else:
+                        if dim == 4:
+                            imwrite(os.path.join(output_path, f"objp_4D{postfix_str}.tif"),           normalize_by_bit_depth(objp_crop[:,:], bit))
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif"),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
+                            imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif"),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
 
 def imshift_single(img, shift, grid):
     """

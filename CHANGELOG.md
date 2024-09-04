@@ -30,22 +30,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
-## [Unreleased]
+## [v0.1.0-beta2.2] - 2024-09-03
 ### Added
 - Add a default `/data` folder with txt instruction
 - Add `demo` under `params` with a couple tBL_WSe2 examples
 - Add `run_PtyShv.m` and `slurm_run_PtyShv.sub` for direct comparison with PtychoShelves
-- Add `copy_params_to_dir` to copy the params files to the output directories for better record keeping
-- Add `save_results` list to `recon_params` to specify which result to save
-- Add `result_modes` list to `recon_params` to specify whether to postprocess the result before saving
-- (Working) Add `collate_results` to `hypertune_params` to specify whether to collect hypertune results to `output_dir`
-- (Working) Add `collate_figs` to `hypertune_params` to specify whether to collect hypertune summary figs to `output_dir`
+- Add `copy_params` boolean to `recon_params` to copy the params files to the output directories for better record keeping
+- Add `save_results` list to `recon_params` to specify which result (obj, probe) to save
+- Add `result_modes` dict to `recon_params` to specify the dimension of output object and whether to postprocess (crop, bit depth) the result before saving
+- Add `collate_results` boolean to `hypertune_params` to specify whether to collect hypertune results under `output_dir`
+- Add `parse_sec_to_time_str` to `utils` to display the solver time and iteration time in flexible time string from days, hours, mins, to secs
+- Add full description to every entry in the params file
 ### Changed
 - Move `subscan_slow` and `subscan_fast` under `INDICES_MODE` for (hopefully) clarity
-- Let `load_params` add additional entry of `params_path` to the params dict before return
+- Let `load_params` add additional entry of `params_path` to the params dict before return for easier usage of `copy_params`
 - Absorb `--hypertune` and `--quiet` into the params file, simplifying the scripts and letting the entire recontstruction behavior controlled by params file
 - Drop the `_optuna` suffix in `README.md` and `spec-file.txt` for simplicity
 - Simplify the installation guide in `README.md`
+- Rename `fig_list` to `selected_figs` for clarity
+- Rename `dir_affixes` to `recon_dir_affixes` for clarity
+### Removed
+- Remove `probe_simu_params` from `exp_params` because it's duplicated with `probe_params` in `source_params`
 
 ## [v0.1.0-beta2.1] - 2024-08-28
 ### Added
