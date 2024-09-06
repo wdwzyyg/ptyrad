@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
 - Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
 
+## [UNRELEASE]
+### Added
+- Add a simple notebook `check_sqlite.ipynb` to check duplicated params in sqlite database for hypertune mode, though the duplicatation is a expected behavior for BO algorithm
+### Changed
+- Specify the file_path in all loading functions in `data_io` when there's a `FileNotFoundError`
+- Add `indices` into the argument of `make_save_dict` so that the selected probe position indices are saved into `model.pt` as well. This enables more convenient custom object cropping.
+
 ## [v0.1.0-beta2.2] - 2024-09-03
 ### Added
 - Add a default `/data` folder with txt instruction

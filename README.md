@@ -65,6 +65,9 @@ git clone https://github.com/chiahao3/ptyrad.git
 Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory
 
 ### 4. Trying the demo in /scripts
+
+> **Download the demo experimental data from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo) before running the demo notebooks/scripts**
+
 - `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
 - `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 

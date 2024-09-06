@@ -25,7 +25,7 @@ def load_hdf5(file_path, dataset_key="ds"):
 
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError("Error: The specified file does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
 
     with h5py.File(file_path, "r") as hf:
         data = np.array(hf[dataset_key], dtype="float32")
@@ -36,6 +36,10 @@ def load_hdf5(file_path, dataset_key="ds"):
 def load_tif(file_path):
     from tifffile import imread
 
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
     data = imread(file_path)
     print("Success! .tif file path =", file_path)
     print("Imported .tif data shape =", data.shape)
@@ -44,11 +48,20 @@ def load_tif(file_path):
 def load_pt(file_path):
     import torch
 
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+
     data = torch.load(file_path)
     print("Success! .pt file path =", file_path)
     return data
 
 def load_params(file_path):
+    
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
     print("### Loading params file ###")
 
     param_path, param_type = os.path.splitext(file_path)
@@ -123,7 +136,10 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             if result is not None:
                 print(f"Result {i + 1}: {result}")
     """
-
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
     result_list = []
 
     # Load entire .mat

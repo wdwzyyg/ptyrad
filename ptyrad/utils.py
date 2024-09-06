@@ -164,7 +164,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
+def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
@@ -199,6 +199,7 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
                 'niter'                 : niter,
+                'indices'               : indices,
                 'batch_losses'          : batch_losses,
                 'avg_losses'            : avg_losses
                 }
@@ -496,7 +497,7 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
     iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
-        save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+        save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
 
     probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
