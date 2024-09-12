@@ -182,6 +182,7 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indice
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
                      'obj_preblur_std'  : model.obj_preblur_std,
+                     'start_iter'       : model.start_iter,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,

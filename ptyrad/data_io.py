@@ -4,6 +4,29 @@ import h5py
 import numpy as np
 import scipy.io as sio
 
+def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
+    # shape = (N, height, width)
+    # np.fromfile with custom dtype is faster than the np.read and np.frombuffer
+    # This implementaiton is also roughly 2x faster (10sec vs 20sec) than load_hdf5 with a 128x128x128x128 (1GB) EMPAD dataset
+    # Note that for custom processed empad2 raw there might be no gap between the images
+    N, height, width = shape
+    
+    # Define the custom dtype to include both data and gap
+    custom_dtype = np.dtype([
+        ('data', dtype, (height, width)),
+        ('gap', np.uint8, gap) # unit8 is equal to 1 byte, so the gap is determined by the length
+    ])
+
+    # Read the entire file using the custom dtype
+    with open(path, 'rb') as f:
+        f.seek(offset)
+        raw_data = np.fromfile(f, dtype=custom_dtype, count=N)
+
+    # Extract just the 'data' part (ignoring the gaps)
+    data = raw_data['data']
+    
+    return data
+
 def load_hdf5(file_path, dataset_key="ds"):
     """
     Load data from an HDF5 file.
@@ -93,7 +116,6 @@ def load_py_params(file_path):
     }
     params_dict['params_path'] = file_path
     return params_dict
-
 
 def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplify_cells=True):
     """

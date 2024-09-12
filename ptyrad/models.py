@@ -84,7 +84,14 @@ class PtychoAD(torch.nn.Module):
             self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
-            self.lr_params              = model_params['lr_params']
+            # Parse the learning rate and start iter for optimizable tensors
+            start_iter_dict = {}
+            lr_dict = {}
+            for key, params in model_params['update_params'].items():
+                start_iter_dict[key] = params['start_iter']
+                lr_dict[key] = params['lr']
+            self.start_iter             = start_iter_dict
+            self.lr_params              = lr_dict
             
             self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
             self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))

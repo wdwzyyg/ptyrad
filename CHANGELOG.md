@@ -33,9 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [UNRELEASE]
 ### Added
 - Add a simple notebook `check_sqlite.ipynb` to check duplicated params in sqlite database for hypertune mode, though the duplicatation is a expected behavior for BO algorithm
+- Add `raw` as new measurement data source to handle EMPAD and pre-processed EMPAD2 4D-STEM datasets
+- (working) Add `custom_fn` as new constraint to `constraint_params`
 ### Changed
 - Specify the file_path in all loading functions in `data_io` when there's a `FileNotFoundError`
 - Add `indices` into the argument of `make_save_dict` so that the selected probe position indices are saved into `model.pt` as well. This enables more convenient custom object cropping.
+- `lr_params` is renamed and merged with `start_iter` into `update_params` under `model_params` to add extra control over when to start optimizing the optimizable tensors
 
 ## [v0.1.0-beta2.2] - 2024-09-03
 ### Added

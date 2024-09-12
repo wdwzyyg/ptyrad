@@ -310,6 +310,15 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
     
+    # Toggle the grad calculation to disable AD update on tensors before certain iteration
+    start_iter_dict = model.start_iter
+    for param_name, start_iter in start_iter_dict.items():
+        if start_iter is None or niter < start_iter:
+            model.optimizable_tensors[param_name].requires_grad = False
+        else:
+            model.optimizable_tensors[param_name].requires_grad = True
+        print(f"{param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad} at iter {niter}")
+    
     # Start mini-batch optimization
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
