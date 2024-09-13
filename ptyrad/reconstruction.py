@@ -317,7 +317,7 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
             model.optimizable_tensors[param_name].requires_grad = False
         else:
             model.optimizable_tensors[param_name].requires_grad = True
-        print(f"{param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad} at iter {niter}")
+        vprint(f"Iter: {niter}, {param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad}", verbose=verbose)
     
     # Start mini-batch optimization
     for batch_idx, batch in enumerate(batches):

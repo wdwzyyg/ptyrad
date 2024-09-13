@@ -245,6 +245,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     init_conv_angle = exp_params['conv_angle']
     init_defocus = exp_params['defocus']
+    start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
@@ -268,10 +269,32 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
     
+    # Attach start_iter (optional)
+    if 'start_iter' in recon_dir_affixes:
+        if start_iter_dict['probe'] is not None and start_iter_dict['probe'] > 1:
+            output_path += f"_ps{start_iter_dict['probe']}"
+        if start_iter_dict['obja'] is not None and start_iter_dict['obja'] > 1:
+            output_path += f"_oas{start_iter_dict['obja']}"
+        if start_iter_dict['objp'] is not None and start_iter_dict['objp'] > 1:
+            output_path += f"_ops{start_iter_dict['objp']}"
+        if start_iter_dict['probe_pos_shifts'] is not None and start_iter_dict['probe_pos_shifts'] > 1:
+            output_path += f"_ss{start_iter_dict['probe_pos_shifts']}"
+        if start_iter_dict['obj_tilts'] is not None and start_iter_dict['obj_tilts'] > 1:
+            output_path += f"_ts{start_iter_dict['obj_tilts']}"
+    
     # Attach learning rate (optional)
     if 'lr' in recon_dir_affixes:
-        output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
-    
+        if probe_lr != 0:
+            output_path += f"_plr{probe_lr}"
+        if obja_lr != 0:
+            output_path += f"_oalr{obja_lr}"
+        if objp_lr != 0:
+            output_path += f"_oplr{objp_lr}"
+        if pos_lr != 0:
+            output_path += f"_slr{pos_lr}" 
+        if tilt_lr != 0:
+            output_path += f"_tlr{tilt_lr}"
+            
     # Attach model params (optional)
     if 'model' in recon_dir_affixes:    
         if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
@@ -308,7 +331,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
         
         if constraint_params['objp_postiv']['freq'] is not None:
-            output_path += f"_opos"
+            output_path += "_opos"
         
         if constraint_params['tilt_smooth']['freq'] is not None:
             output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
