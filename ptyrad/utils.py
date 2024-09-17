@@ -499,18 +499,17 @@ def normalize_from_zero_to_one(arr):
 
 def normalize_by_bit_depth(arr, bit_depth):
 
-    norm_arr = normalize_from_zero_to_one(arr)
-    
     if bit_depth == '8':
-        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(arr))
     elif bit_depth == '16':
-        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(arr))
     elif bit_depth == '32':
-        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(arr))
     elif bit_depth == 'raw':
-        norm_arr_in_bit_depth = np.float32(norm_arr)
+        norm_arr_in_bit_depth = np.float32(arr)
     else:
-        norm_arr_in_bit_depth = np.float32(norm_arr)
+        print(f'Unsuported bit_depth :{bit_depth} was passed into `result_modes`, `raw` is used instead')
+        norm_arr_in_bit_depth = np.float32(arr)
     
     return norm_arr_in_bit_depth
 
@@ -526,6 +525,7 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
 
     probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
     objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
+    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
     omode_occu = model.omode_occu
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
@@ -550,12 +550,15 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
             if fov == 'crop':
                 fov_str = '_crop'
                 objp_crop = objp[:, :, y_min-1:y_max, x_min-1:x_max]
+                obja_crop = obja[:, :, y_min-1:y_max, x_min-1:x_max]
             elif fov == 'full':
                 fov_str = ''
                 objp_crop = objp
+                obja_crop = obja
             else:
                 fov_str = ''
                 objp_crop = objp
+                obja_crop = obja
                 
             postfix_str = fov_str + bit_str + collate_str + iter_str
                 
@@ -586,6 +589,37 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
                             imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
                         if dim == 2:
                             imwrite(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif"),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
+                            
+            if any(keyword in save_result_list for keyword in ['obja']):
+                # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+                
+                for dim in result_modes['obj_dim']:
+                    
+                    if omode == 1 and zslice == 1:
+                        if dim == 2: 
+                            imwrite(os.path.join(output_path, f"obja{postfix_str}.tif"),              normalize_by_bit_depth(obja_crop[0,0], bit))
+                    elif omode == 1 and zslice > 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_zstack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[0,:], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_zmean{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_zprod{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].prod(0), bit))
+                    elif omode > 1 and zslice == 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[:,0], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean{postfix_str}.tif"),        normalize_by_bit_depth(obja_crop[:,0].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostd{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[:,0].std(0), bit))
+                    else:
+                        if dim == 4:
+                            imwrite(os.path.join(output_path, f"obja_4D{postfix_str}.tif"),           normalize_by_bit_depth(obja_crop[:,:], bit))
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack_zmean{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].mean(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostack_zprod{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].prod(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(obja_crop[:,:].mean(0), bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean_zmean{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zprod{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).prod(0), bit))
 
 def imshift_single(img, shift, grid):
     """

@@ -348,7 +348,10 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     
     # Forward pass
     if 'forward' in selected_figs or 'all' in selected_figs:
-        fig_forward = plot_forward_pass(model, np.random.choice(indices,2, replace=False), 0.5, show_fig=False, pass_fig=True)
+        n = int(len(indices)**0.5)
+        n2 = int(len(indices))
+        plot_indices = np.int32([n2/2+n/4, n2/2+3*n/4]) # The idea is to get 2 regions of (N/2)x(N/2) that are +-N/4 from the center of the FOV.
+        fig_forward = plot_forward_pass(model, plot_indices, 0.5, show_fig=False, pass_fig=True)
         fig_forward.suptitle(f"Forward pass at iter {niter}", fontsize=24)
         if show_fig:
             fig_forward.show()

@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified the usage of explicit key or .get for dict
 - Unified meshgrid usage, naming, and unit would be nice
 
+## [v0.1.0-beta2.4] - 2024-09-17
+### Added
+- Add an 'obja' option to the `save_results` to allow saving the object amplitude. 
+### Changed
+- Change the `plot_forward_pass` default behavior in `plot_summary` from random indices to fixed indices so the reconstruction progress can be better observed by visualizing the same region throughout the run.
+- Fix normalization error of `'bit: ['raw']` in `'result_modes'` since beta2.2 (2024-09-03). It was incorrectly normalizing the tif outputs from 0 to 1 when it should be outputting the original range. The output figure like `forward` and saved optimized tensors in `model.pt` were not affected by this error.
+
 ## [v0.1.0-beta2.3] - 2024-09-13
 ### Added
 - Add a simple notebook `check_sqlite.ipynb` to check duplicated params in sqlite database for hypertune mode, though the duplicatation is an expected behavior for BO algorithm
