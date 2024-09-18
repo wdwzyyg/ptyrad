@@ -90,6 +90,7 @@ class PtychoAD(torch.nn.Module):
             for key, params in model_params['update_params'].items():
                 start_iter_dict[key] = params['start_iter']
                 lr_dict[key] = params['lr']
+            self.optimizer_params       = model_params['optimizer_params']
             self.start_iter             = start_iter_dict
             self.lr_params              = lr_dict
             
@@ -122,7 +123,7 @@ class PtychoAD(torch.nn.Module):
                 'obj_tilts'       : self.opt_obj_tilts,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
-            self.set_optimizer(self.lr_params, self.verbose)
+            self.create_optimizable_params_dict(self.lr_params, self.verbose)
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -146,7 +147,7 @@ class PtychoAD(torch.nn.Module):
         self.roy_grid = roy # real space grid with y-indices spans across object extent
         self.rox_grid = rox
     
-    def set_optimizer(self, lr_params, verbose=True):
+    def create_optimizable_params_dict(self, lr_params, verbose=True):
         """ Sets the optimizer with lr_params """
         # # Use this to edit learning rate if needed some refinement
 
@@ -158,14 +159,14 @@ class PtychoAD(torch.nn.Module):
         # optimizer=torch.optim.Adam(model.optimizer_params)
         
         self.lr_params = lr_params
-        self.optimizer_params = []
+        self.optimizable_params = []
         for param_name, lr in lr_params.items():
             if param_name not in self.optimizable_tensors:
                 raise KeyError(f"Warning: '{param_name}' is not a valid parameter name, check your lr_params.")
             else:
                 self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
                 if lr != 0:
-                    self.optimizer_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
+                    self.optimizable_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
         if verbose:
             self.print_model_summary()
         

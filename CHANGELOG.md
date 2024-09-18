@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Try [iCGD] (https://github.com/ningustc/iCGD) into the position constrain
 ## Mixed object
 - NMF and PCA for object modes? Given frozen phonon configurations, what is a good decomposition method?
+- Finish the weighted sum of `omode_occu` in `save_results`
 ## BO
 - Decouple the BO error from reconstruction loss so we can test different setup
 - Use grid search BO without pruning as a cheat step if we need a range of reconstruction params, similar to abTEM's distribution.
@@ -27,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
 - Sequential reconstruction (asize_presolve) is also desired
 ### Utils and plotting
+- Apparently plotting and saving matplotlib figure is incredibly slow, it's taking like 1sec/fig and we'll need some improvements
 - Visualize radially accumulated intensity for k-space probe
 - Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
 - Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
@@ -40,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use Sphinx and Napolean for API documentation on Read the Docs
 - Unified the usage of explicit key or .get for dict
 - Unified meshgrid usage, naming, and unit would be nice
+
+## [Unreleased]
+### Added
+- Add `optimizer_params` dict under `model_params` in the .yml params file to support more PyTorch available optimizers with configurations and allow loading the optimizer state
+- Add `create_optimizer` function under `optimization.py` for arbitrary PyTorch optimizer creation with configurations
+### Changed
+- Refine the `plot_forward_pass` default indices generation method so it works better for different INDICES_MODE
+- Update `make_output_folder` so the optimizer name can be optionally affixed
+- Change `make_save_dict` and `save_results` so that it saves the optimizer state into `model.pt` as well
+- Rename `model.set_optimizer_params` into `model.create_optimizable_params_dict` for clarity
 
 ## [v0.1.0-beta2.4] - 2024-09-17
 ### Added

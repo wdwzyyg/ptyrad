@@ -52,7 +52,7 @@ def load_hdf5(file_path, dataset_key="ds"):
 
     with h5py.File(file_path, "r") as hf:
         data = np.array(hf[dataset_key], dtype="float32")
-        print("Success! .hdf5 file path =", file_path)
+        print("Success! Loaded .hdf5 file path =", file_path)
         print("Imported .hdf5 data shape =", data.shape)
         return data
 
@@ -64,7 +64,7 @@ def load_tif(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
     data = imread(file_path)
-    print("Success! .tif file path =", file_path)
+    print("Success! Loaded .tif file path =", file_path)
     print("Imported .tif data shape =", data.shape)
     return data
 
@@ -76,7 +76,7 @@ def load_pt(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
 
     data = torch.load(file_path)
-    print("Success! .pt file path =", file_path)
+    print("Success! Loaded .pt file path =", file_path)
     return data
 
 def load_params(file_path):
@@ -100,7 +100,7 @@ def load_yml_params(file_path):
 
     with open(file_path, "r") as file:
         params_dict = yaml.safe_load(file)
-    print("Success! .yml file path =", file_path)
+    print("Success! Loaded .yml file path =", file_path)
     params_dict['params_path'] = file_path
     return params_dict
 
@@ -108,7 +108,7 @@ def load_py_params(file_path):
     import importlib
 
     params_module = importlib.import_module(file_path)
-    print("Success! .py file path =", file_path)
+    print("Success! Loaded .py file path =", file_path)
     params_dict = {
         name: getattr(params_module, name)
         for name in dir(params_module)
@@ -170,7 +170,7 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             mat_contents = sio.loadmat(
                 file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
             )
-            print("Success! .mat File path =", file_path)
+            print("Success! Loaded .mat File path =", file_path)
             return mat_contents
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
@@ -179,7 +179,7 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             with h5py.File(file_path, "r") as hdf_file:
                 for key in hdf_file.keys():
                     mat_contents[key] = hdf_file[key][()]
-            print("Success! .mat file path =", file_path)
+            print("Success! Loaded .mat file path =", file_path)
             return mat_contents
 
     # Check target_field type
@@ -219,5 +219,5 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             print("Can't load .mat v7.3 with scipy. Switching to h5py.")
             with h5py.File(file_path, "r") as hdf_file:
                 result_list.append(hdf_file[name][()])
-    print("Success! .mat file path =", file_path)
+    print("Success! Loaded .mat file path =", file_path)
     return result_list

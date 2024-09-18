@@ -7,6 +7,7 @@ from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
+from ptyrad.data_io import load_pt
 from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
@@ -378,6 +379,26 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_objp_postiv  (model, niter)
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
+
+def create_optimizer(optimizer_params, optimizable_params, verbose=True):
+    # Extract the optimizer name and configs
+    optimizer_name = optimizer_params['name']
+    optimizer_configs = optimizer_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
+    pt_path = optimizer_params.get('load_state')
+    
+    vprint(f"\n### Creating PyTorch '{optimizer_name}' optimizer with configs = {optimizer_configs} ###", verbose=verbose)
+    
+    # Get the optimizer class from torch.optim
+    optimizer_class = getattr(torch.optim, optimizer_name, None)
+    
+    if optimizer_class is None:
+        raise ValueError(f"Optimizer '{optimizer_name}' is not supported.")
+    optimizer = optimizer_class(optimizable_params, **optimizer_configs)
+
+    if pt_path is not None:
+        optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
+        vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
+    return optimizer
 
 def kr_filter(obj, radius, width):
     ''' Apply kr_filter using the 2D sigmoid filter '''

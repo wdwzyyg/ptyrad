@@ -137,7 +137,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
 
     # Set default values for subscan params
     if subscan_slow is None and subscan_fast is None:
-        vprint(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
+        vprint("Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
         subscan_slow = N_scan_slow//2
         subscan_fast = N_scan_fast//2
         
@@ -164,7 +164,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses):
+def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
@@ -178,6 +178,7 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indice
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : model.optimizable_tensors,
+                'optim_state_dict'      : optimizer.state_dict(),
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
@@ -245,6 +246,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     init_conv_angle = exp_params['conv_angle']
     init_defocus = exp_params['defocus']
+    optimizer_str = model.optimizer_params['name']
     start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
@@ -268,6 +270,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if obj_shape[1] != 1:
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
+    
+    # Attach optimizer name (optional)
+    if 'optimizer' in recon_dir_affixes:
+        output_path += f"_{optimizer_str}"
     
     # Attach start_iter (optional)
     if 'start_iter' in recon_dir_affixes:
@@ -513,20 +519,20 @@ def normalize_by_bit_depth(arr, bit_depth):
     
     return norm_arr_in_bit_depth
 
-def save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
+def save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
     result_modes = params['recon_params'].get('result_modes')
     iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
-        save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
+        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
 
     probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
     objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
     obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
-    omode_occu = model.omode_occu
+    # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
     crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
@@ -1261,8 +1267,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(tilt_y_interp)
     im1=axs[1].imshow(tilt_x_interp)
-    axs[0].set_title(f"tilt_y_interp")
-    axs[1].set_title(f"tilt_x_interp")
+    axs[0].set_title("tilt_y_interp")
+    axs[1].set_title("tilt_x_interp")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1292,8 +1298,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(surface_tilt_y)
     im1=axs[1].imshow(surface_tilt_x)
-    axs[0].set_title(f"surface_tilt_y")
-    axs[1].set_title(f"surface_tilt_x")
+    axs[0].set_title("surface_tilt_y")
+    axs[1].set_title("surface_tilt_x")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1311,8 +1317,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     axs[0].invert_yaxis()
     axs[1].invert_yaxis()
 
-    axs[0].set_title(f"tilt_ys")
-    axs[1].set_title(f"tilt_xs")
+    axs[0].set_title("tilt_ys")
+    axs[1].set_title("tilt_xs")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)

@@ -5,11 +5,10 @@ from random import shuffle
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
-from ptyrad.optimization import CombinedConstraint, CombinedLoss
+from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
 from ptyrad.utils import (
     copy_params_to_dir,
     get_blob_size,
@@ -90,7 +89,7 @@ class PtyRADSolver:
 
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
-        optimizer     = torch.optim.Adam(model.optimizer_params)
+        optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
         indices, batches, output_path = prepare_recon(model, self.init, params)
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path)
     
@@ -272,7 +271,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
+            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
             
             ## Saving summary
             plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
@@ -322,7 +321,7 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
     # Start mini-batch optimization
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
-        optimizer.zero_grad()
+        optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
         model_DP, object_patches = model(batch)
         measured_DP = model.get_measurements(batch)
         loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
@@ -474,7 +473,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
    
     # Create the model and optimizer, prepare indices, batches, and output_path
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)
-    optimizer     = torch.optim.Adam(model.optimizer_params)
+    optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
     indices, batches, output_path = prepare_recon(model, init, params)
       
     # Optimization loop
@@ -488,7 +487,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
         
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
+            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
@@ -501,14 +500,14 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
                 # Save the current results of the pruned trials
                 collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
                 if collate_results is not None:
-                    save_results(output_dir, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+                    save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
     ## Saving collate results and figs of the finished trials
     collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
     if collate_results:
-        save_results(output_dir, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+        save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
 
     return loss_iter
