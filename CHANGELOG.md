@@ -42,20 +42,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use Sphinx and Napolean for API documentation on Read the Docs
 - Unified the usage of explicit key or .get for dict
 - Unified meshgrid usage, naming, and unit would be nice
+## PyTorch performance tuning
+- Use DataLoader for measurements. This could be a bit slower than directly loading entire measurements into memory, but it allows dataset larger than memory, and also makes parallel on multiple GPUs possible
+- Delete used variables for lower memory footprint
+- Precision selection, maybe float16?
+- Use in-place operations on tensors don't require grad
 
-## [Unreleased]
+## [v0.1.0-beta2.5] - 2024-09-
 ### Added
 - Add `optimizer_params` dict under `model_params` in the .yml params file to support more PyTorch available optimizers with configurations and allow loading the optimizer state
 - Add `create_optimizer` function under `optimization.py` for arbitrary PyTorch optimizer creation with configurations
+- Add `grad_accumulation` into `BATCH_SIZE` so we can approximate large batch size that doesn't fit into memory by accumulating gradients from many sub-batches. This is essentially a "memory-save" mode for PtyRAD
 ### Changed
 - Refine the `plot_forward_pass` default indices generation method so it works better for different INDICES_MODE
 - Update `make_output_folder` so the optimizer name can be optionally affixed
 - Change `make_save_dict` and `save_results` so that it saves the optimizer state into `model.pt` as well
 - Rename `model.set_optimizer_params` into `model.create_optimizable_params_dict` for clarity
+- Move some jupyter notebooks into `scripts/analysis/` for clarity
+- Move `spec-file_ptyrad.txt` to new folder `envs/` for clarity
 
 ## [v0.1.0-beta2.4] - 2024-09-17
 ### Added
-- Add an 'obja' option to the `save_results` to allow saving the object amplitude. 
+- Add an `'obja'` option to the `save_results` to allow saving the object amplitude. 
 ### Changed
 - Change the `plot_forward_pass` default behavior in `plot_summary` from random indices to fixed indices so the reconstruction progress can be better observed by visualizing the same region throughout the run.
 - Fix normalization error of `'bit: ['raw']` in `'result_modes'` since beta2.2 (2024-09-03). It was incorrectly normalizing the tif outputs from 0 to 1 when it should be outputting the original range. The output figure like `forward` and saved optimized tensors in `model.pt` were not affected by this error.

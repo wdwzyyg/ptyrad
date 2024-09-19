@@ -230,7 +230,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     meas_flipT   = exp_params['meas_flipT']
     indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
-    batch_size   = recon_params['BATCH_SIZE']
+    batch_size   = recon_params['BATCH_SIZE'].get('size') * recon_params['BATCH_SIZE'].get('grad_accumulation') # Affix the effective batch size
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']

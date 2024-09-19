@@ -190,7 +190,8 @@ def prepare_recon(model, init, params):
     subscan_fast = recon_params['INDICES_MODE'].get("subscan_fast")
     GROUP_MODE = recon_params['GROUP_MODE']
     SAVE_ITERS = recon_params['SAVE_ITERS']
-    BATCH_SIZE = recon_params['BATCH_SIZE']
+    batch_size = recon_params['BATCH_SIZE'].get("size")
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation")
     output_dir = recon_params['output_dir']
     recon_dir_affixes = recon_params['recon_dir_affixes']
     copy_params = recon_params['copy_params']
@@ -202,8 +203,9 @@ def prepare_recon(model, init, params):
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=model.verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=model.verbose)
-    batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE, verbose=model.verbose)
+    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=model.verbose)
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
+    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=model.verbose)
 
     # Create the output path, save fig_grouping, and copy params file
     if SAVE_ITERS is not None:
@@ -256,6 +258,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     selected_figs     = recon_params['selected_figs']
     
     vprint("\n### Start the PtyRAD iterative ptycho reconstruction ###", verbose=model.verbose)
@@ -265,7 +268,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     for niter in range(1,NITER+1):
         
         shuffle(batches)
-        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose)
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose)
         loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
         
         ## Saving intermediate results
@@ -277,7 +280,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
             plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
     return loss_iters
 
-def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
+def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
     """
     Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
 
@@ -319,14 +322,18 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
         vprint(f"Iter: {niter}, {param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad}", verbose=verbose)
     
     # Start mini-batch optimization
+    optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
-        optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
         model_DP, object_patches = model(batch)
         measured_DP = model.get_measurements(batch)
         loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
         loss_batch.backward()
-        optimizer.step() # batch update
+        
+        # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
+        if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+            optimizer.step() # batch update
+            optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
 
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
@@ -405,6 +412,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     output_dir        = recon_params['output_dir']
     selected_figs     = recon_params['selected_figs']
     
@@ -481,7 +489,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     for niter in range(1, NITER+1):
         
         shuffle(batches)
-        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
         loss_iter = loss_logger(batch_losses, niter, iter_t, verbose=verbose)
         loss_iters.append((niter, loss_iter))
         
