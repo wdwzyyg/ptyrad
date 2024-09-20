@@ -9,7 +9,7 @@ However, apparently MIGs can't be used for such distributed type based on the fo
 
 The apparent error message when running `accelerate env` with >1 MIG slices would be:
 
-### Error message
+### Error message for MIG
 Traceback (most recent call last):
   File "/home/fs01/cl2696/anaconda3/envs/ptyrad_acc2/lib/python3.11/site-packages/torch/cuda/__init__.py", line 327, in _lazy_init
     queued_call()
@@ -56,3 +56,37 @@ Apply ortho pmode constraint at iter 14, relative pmode power = [0.879 0.048 0.0
 Apply fix probe int constraint at iter 14, probe int sum = 450.4549
 Apply hard positivity constraint on objp at iter 14
 Iter: 14, Total Loss: 0.2518, loss_single: 0.2510, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0008, loss_simlar: 0.0000, in 0.0 min 8.842690 sec
+
+# Revisiting multi-GPU on Windows
+2024.09.20 Chia-Hao Lee
+
+Since I solve most of the out-of-memory problem by accumulating gradients, now I want to revisit the multi-GPU possibilities.
+As previously found that PtyRAD would need some refactoring to get it running with accelerate. Unfortunaly we don't have that many full GPUs on Altas.
+I tried a bit harder for accelerate on Windows, although we can install it, running accelerate with multiple GPUs would need NCCL, and apparently NCCL doesn't support Windows or Mac. https://discuss.pytorch.org/t/nccl-for-windows/203543. As for now, having a Linux is probably a necessary thing.
+Another workaround is to use gloo instead of NCCL as the backend. https://discuss.pytorch.org/t/how-to-set-backend-to-gloo-on-windows/161448/3
+`set PL_TORCH_DISTRIBUTED_BACKEND=gloo && accelerate launch --multi_gpu --num_processes=2 ./scripts/run_ptyrad.py --params_path "ptyrad/inputs/full_params_tBL_WSe2.yml"` seems to run a little bit deeper but accelerate still wants nccl. By adding the `import torch.distributed as dist` and `dist.init_process_group(backend='gloo')` into the script, it ran all the way into reconstruction and throw an error about the amp (automatic mixed precision) so I tried reconfigure without mixed-precision. After reconfiguration it throw an error of permission denied while saving figures, it's probably my antivirus Norton or the filename being too long. Overall speaking it can run but I need to figure out how to avoid actually creating 2 instances and optimizing on 2 instances.
+
+### Error message of mixed precision
+Traceback (most recent call last):
+  File "H:\workspace\ptyrad\scripts\run_ptyrad.py", line 44, in <module>
+    ptycho_solver.run()
+  File "H:\/workspace/ptyrad\ptyrad\reconstruction.py", line 131, in run
+    self.reconstruct()
+  File "H:\/workspace/ptyrad\ptyrad\reconstruction.py", line 99, in reconstruct
+    recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches_dl, output_path, acc=self.accelerator)
+  File "H:\/workspace/ptyrad\ptyrad\reconstruction.py", line 244, in recon_loop
+    batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose, acc=acc)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "H:\/workspace/ptyrad\ptyrad\reconstruction.py", line 299, in recon_step
+    optimizer.step() # batch update
+    ^^^^^^^^^^^^^^^^
+  File "C:\Users\chiahao3\anaconda3\envs\debluro\Lib\site-packages\accelerate\optimizer.py", line 159, in step
+    self.scaler.step(self.optimizer, closure)
+  File "C:\Users\chiahao3\anaconda3\envs\debluro\Lib\site-packages\torch\cuda\amp\grad_scaler.py", line 410, in step
+    self.unscale_(optimizer)
+  File "C:\Users\chiahao3\anaconda3\envs\debluro\Lib\site-packages\torch\cuda\amp\grad_scaler.py", line 307, in unscale_
+    optimizer_state["found_inf_per_device"] = self._unscale_grads_(
+                                              ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\chiahao3\anaconda3\envs\debluro\Lib\site-packages\torch\cuda\amp\grad_scaler.py", line 248, in _unscale_grads_
+    torch._amp_foreach_non_finite_check_and_unscale_(
+RuntimeError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'ComplexFloat'
