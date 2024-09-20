@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Precision selection, maybe float16?
 - Use in-place operations on tensors don't require grad
 
-## [v0.1.0-beta2.5] - 2024-09-
+## [v0.1.0-beta2.5] - 2024-09-19
 ### Added
 - Add `optimizer_params` dict under `model_params` in the .yml params file to support more PyTorch available optimizers with configurations and allow loading the optimizer state
 - Add `create_optimizer` function under `optimization.py` for arbitrary PyTorch optimizer creation with configurations
@@ -288,7 +288,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the incorrect scan position plotting when it's called in `plot_summary`
 - Fix the checkerboard phase artifact in k-space for `plot_probe_modes` by adding the necessary fftshift
 - Add an amplitude scaling to the displayed phase for better visualization
-- Refactor `imshift_batch` so that it can handle tensors with arvitrary leading dimensions (..., Ny, Nx), which is in preparation for possible need of shifting the object (omode, Nz, Ny, Nx) for global scan affine transformation
+- Refactor `imshift_batch` so that it can handle tensors with arbitrary leading dimensions (..., Ny, Nx), which is in preparation for possible need of shifting the object (omode, Nz, Ny, Nx) for global scan affine transformation
 - Rename and clarify the variables associated with `create_grids` in `models`
 
 ## [v0.1.0-alpha2.6] - 2024-04-23
