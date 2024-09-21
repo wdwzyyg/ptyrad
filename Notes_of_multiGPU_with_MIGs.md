@@ -90,3 +90,10 @@ Traceback (most recent call last):
   File "C:\Users\chiahao3\anaconda3\envs\debluro\Lib\site-packages\torch\cuda\amp\grad_scaler.py", line 248, in _unscale_grads_
     torch._amp_foreach_non_finite_check_and_unscale_(
 RuntimeError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented for 'ComplexFloat'
+
+# Try Multi-GPU again with accelerate
+2024.09.21 Chia-Hao Lee
+
+Merge `main` into `accelerate` to get the beta2.5.
+accelerate launch ./scripts/run_ptyrad.py --params_path "params/demo/tBL_WSe2_reconstruct.yml"
+With some rearranging and make sure the device placement, it seems that it's indeed working.

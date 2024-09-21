@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from accelerate import Accelerator # Multi GPU training and fp16 from HuggingFace
+from accelerate import Accelerator # Multi GPU training from HuggingFace
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
 from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
@@ -66,28 +66,28 @@ class PtyRADSolver:
         self.params       = params
         self.if_hypertune = self.params['hypertune_params']['if_hypertune']
         self.verbose      = not self.params['recon_params']['if_quiet']
-        self.accelerator  = Accelerator()
+        self.accelerator  = Accelerator(split_batches=True)
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
         self.init_loss()
         self.init_constraint()
-        print("\n### Done initializing PtyRADSolver ###")
+        self.accelerator.print("\n### Done initializing PtyRADSolver ###")
     
     @property
     def device(self):
         return self.accelerator.device
     
     def init_initializer(self):
-        print("\n### Initializing Initializer ###")
+        self.accelerator.print("\n### Initializing Initializer ###")
         self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
 
     def init_loss(self):
-        print("\n### Initializing loss function ###")
+        self.accelerator.print("\n### Initializing loss function ###")
         self.loss_fn       = CombinedLoss(self.params['loss_params'], device=self.device)
 
     def init_constraint(self):
-        print("\n### Initializing constraint function ###")
+        self.accelerator.print("\n### Initializing constraint function ###")
         self.constraint_fn = CombinedConstraint(self.params['constraint_params'], device=self.device, verbose=self.verbose)
     
     def reconstruct(self):
@@ -151,7 +151,7 @@ class PtyRADSolver:
     def run(self):
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
-        print(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
+        self.accelerator.print(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
         if self.if_hypertune:
             self.hypertune()
         else:
@@ -159,7 +159,7 @@ class PtyRADSolver:
         end_t = time_sync()
         solver_t = end_t - start_t
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
-        print(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
+        self.accelerator.print(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
 
 class BatchesDataset(Dataset):
     def __init__(self, batches):
@@ -288,17 +288,19 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     loss_iters = []
     for niter in range(1,NITER+1):
         
-        shuffle(batches)
         batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose, acc=acc)
-        loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
         
-        ## Saving intermediate results
-        if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-            # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+        # Only log the main process
+        if acc is None or acc.is_main_process:
+            loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
             
-            ## Saving summary
-            plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
+            ## Saving intermediate results
+            if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
+                # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
+                save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+                
+                ## Saving summary
+                plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
     return loss_iters
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -364,8 +366,8 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
 
-        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int) and verbose:
-            print(f"Done batch {batch_idx+1} in {batch_t:.3f} sec")
+        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
+            vprint(f"Done batch {batch_idx+1} in {batch_t:.3f} sec", verbose=verbose)
     
     # Apply iter-wise constraint
     constraint_fn(model, niter)

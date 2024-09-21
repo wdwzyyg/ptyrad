@@ -4,7 +4,7 @@ import torch
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
-from ptyrad.utils import add_tilts_to_propagator, imshift_batch
+from ptyrad.utils import add_tilts_to_propagator, imshift_batch, vprint
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -171,22 +171,23 @@ class PtychoAD(torch.nn.Module):
             self.print_model_summary()
         
     def print_model_summary(self):
-        print('\n### PtychoAD optimizable variables ###')
+        # Set all the print as vprint so that it'll only print once in DDP, the actual `if verbose` is set outside of the function
+        vprint('\n### PtychoAD optimizable variables ###')
         for name, tensor in self.optimizable_tensors.items():
-            print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
+            vprint(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
         total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)
         # When you create a new model, make sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"
         
-        print('\n### Optimizable variables statitsics ###')
-        print(  f'Total measurement values:    {self.measurements.numel():,d}\
+        vprint('\n### Optimizable variables statitsics ###')
+        vprint(  f'Total measurement values:    {self.measurements.numel():,d}\
                 \nTotal optimizing variables:  {total_var:,d}\
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         
-        print('\n### Model behavior ###')
-        print(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
-        print(f"Tilt propagator   : {self.tilt_obj}") 
-        print(f"Sub-px probe shift: {self.shift_probes}") 
-        print(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
+        vprint('\n### Model behavior ###')
+        vprint(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
+        vprint(f"Tilt propagator   : {self.tilt_obj}") 
+        vprint(f"Sub-px probe shift: {self.shift_probes}") 
+        vprint(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """

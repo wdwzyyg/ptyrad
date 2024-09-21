@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.08.31
+# Updated by Chia-Hao Lee on 2024.09.21
 
 import argparse
 import sys
@@ -11,11 +11,12 @@ dist.init_process_group(backend='gloo')
 # GPUID = 0
 # DEVICE = torch.device("cuda:" + str(GPUID))
 # print("Execution device: ", DEVICE)
-print('PyTorch version: ', torch.__version__)
-print('CUDA available: ', torch.cuda.is_available())
-print('CUDA version: ', torch.version.cuda)
-print('CUDA device count: ', torch.cuda.device_count())
-print('CUDA device: ', [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
+if (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
+    print('PyTorch version: ', torch.__version__)
+    print('CUDA available: ', torch.cuda.is_available())
+    print('CUDA version: ', torch.version.cuda)
+    print('CUDA device count: ', torch.cuda.device_count())
+    print('CUDA device: ', [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
 
 PATH_TO_PTYRAD = "H://workspace/ptyrad"  # Change this for the ptyrad package path
 sys.path.append(PATH_TO_PTYRAD)
@@ -33,5 +34,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     params = load_params(args.params_path)
-    ptycho_solver = PtyRADSolver(params, device=DEVICE)
+    ptycho_solver = PtyRADSolver(params)
     ptycho_solver.run()
