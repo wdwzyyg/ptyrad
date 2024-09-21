@@ -137,7 +137,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
 
     # Set default values for subscan params
     if subscan_slow is None and subscan_fast is None:
-        vprint(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
+        vprint("Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
         subscan_slow = N_scan_slow//2
         subscan_fast = N_scan_fast//2
         
@@ -164,7 +164,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
+def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
@@ -178,10 +178,12 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : model.optimizable_tensors,
+                'optim_state_dict'      : optimizer.state_dict(),
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
                      'obj_preblur_std'  : model.obj_preblur_std,
+                     'start_iter'       : model.start_iter,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
@@ -199,6 +201,7 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
                 'niter'                 : niter,
+                'indices'               : indices,
                 'batch_losses'          : batch_losses,
                 'avg_losses'            : avg_losses
                 }
@@ -227,7 +230,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     meas_flipT   = exp_params['meas_flipT']
     indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
-    batch_size   = recon_params['BATCH_SIZE']
+    batch_size   = recon_params['BATCH_SIZE'].get('size') * recon_params['BATCH_SIZE'].get('grad_accumulation') # Affix the effective batch size
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']
@@ -243,6 +246,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     init_conv_angle = exp_params['conv_angle']
     init_defocus = exp_params['defocus']
+    optimizer_str = model.optimizer_params['name']
+    start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
@@ -266,10 +271,36 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
     
+    # Attach optimizer name (optional)
+    if 'optimizer' in recon_dir_affixes:
+        output_path += f"_{optimizer_str}"
+    
+    # Attach start_iter (optional)
+    if 'start_iter' in recon_dir_affixes:
+        if start_iter_dict['probe'] is not None and start_iter_dict['probe'] > 1:
+            output_path += f"_ps{start_iter_dict['probe']}"
+        if start_iter_dict['obja'] is not None and start_iter_dict['obja'] > 1:
+            output_path += f"_oas{start_iter_dict['obja']}"
+        if start_iter_dict['objp'] is not None and start_iter_dict['objp'] > 1:
+            output_path += f"_ops{start_iter_dict['objp']}"
+        if start_iter_dict['probe_pos_shifts'] is not None and start_iter_dict['probe_pos_shifts'] > 1:
+            output_path += f"_ss{start_iter_dict['probe_pos_shifts']}"
+        if start_iter_dict['obj_tilts'] is not None and start_iter_dict['obj_tilts'] > 1:
+            output_path += f"_ts{start_iter_dict['obj_tilts']}"
+    
     # Attach learning rate (optional)
     if 'lr' in recon_dir_affixes:
-        output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
-    
+        if probe_lr != 0:
+            output_path += f"_plr{probe_lr}"
+        if obja_lr != 0:
+            output_path += f"_oalr{obja_lr}"
+        if objp_lr != 0:
+            output_path += f"_oplr{objp_lr}"
+        if pos_lr != 0:
+            output_path += f"_slr{pos_lr}" 
+        if tilt_lr != 0:
+            output_path += f"_tlr{tilt_lr}"
+            
     # Attach model params (optional)
     if 'model' in recon_dir_affixes:    
         if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
@@ -306,7 +337,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
         
         if constraint_params['objp_postiv']['freq'] is not None:
-            output_path += f"_opos"
+            output_path += "_opos"
         
         if constraint_params['tilt_smooth']['freq'] is not None:
             output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
@@ -474,34 +505,34 @@ def normalize_from_zero_to_one(arr):
 
 def normalize_by_bit_depth(arr, bit_depth):
 
-    norm_arr = normalize_from_zero_to_one(arr)
-    
     if bit_depth == '8':
-        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(arr))
     elif bit_depth == '16':
-        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(arr))
     elif bit_depth == '32':
-        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(norm_arr))
+        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(arr))
     elif bit_depth == 'raw':
-        norm_arr_in_bit_depth = np.float32(norm_arr)
+        norm_arr_in_bit_depth = np.float32(arr)
     else:
-        norm_arr_in_bit_depth = np.float32(norm_arr)
+        print(f'Unsuported bit_depth :{bit_depth} was passed into `result_modes`, `raw` is used instead')
+        norm_arr_in_bit_depth = np.float32(arr)
     
     return norm_arr_in_bit_depth
 
-def save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
+def save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
     result_modes = params['recon_params'].get('result_modes')
     iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
-        save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
+        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
 
     probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
     objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
-    omode_occu = model.omode_occu
+    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
+    # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
     crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
@@ -525,12 +556,15 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
             if fov == 'crop':
                 fov_str = '_crop'
                 objp_crop = objp[:, :, y_min-1:y_max, x_min-1:x_max]
+                obja_crop = obja[:, :, y_min-1:y_max, x_min-1:x_max]
             elif fov == 'full':
                 fov_str = ''
                 objp_crop = objp
+                obja_crop = obja
             else:
                 fov_str = ''
                 objp_crop = objp
+                obja_crop = obja
                 
             postfix_str = fov_str + bit_str + collate_str + iter_str
                 
@@ -561,6 +595,37 @@ def save_results(output_path, model, params, loss_iters, iter_t, niter, indices,
                             imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
                         if dim == 2:
                             imwrite(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif"),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
+                            
+            if any(keyword in save_result_list for keyword in ['obja']):
+                # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+                
+                for dim in result_modes['obj_dim']:
+                    
+                    if omode == 1 and zslice == 1:
+                        if dim == 2: 
+                            imwrite(os.path.join(output_path, f"obja{postfix_str}.tif"),              normalize_by_bit_depth(obja_crop[0,0], bit))
+                    elif omode == 1 and zslice > 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_zstack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[0,:], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_zmean{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_zprod{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].prod(0), bit))
+                    elif omode > 1 and zslice == 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[:,0], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean{postfix_str}.tif"),        normalize_by_bit_depth(obja_crop[:,0].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostd{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[:,0].std(0), bit))
+                    else:
+                        if dim == 4:
+                            imwrite(os.path.join(output_path, f"obja_4D{postfix_str}.tif"),           normalize_by_bit_depth(obja_crop[:,:], bit))
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack_zmean{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].mean(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostack_zprod{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].prod(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(obja_crop[:,:].mean(0), bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean_zmean{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zprod{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).prod(0), bit))
 
 def imshift_single(img, shift, grid):
     """
@@ -1202,8 +1267,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(tilt_y_interp)
     im1=axs[1].imshow(tilt_x_interp)
-    axs[0].set_title(f"tilt_y_interp")
-    axs[1].set_title(f"tilt_x_interp")
+    axs[0].set_title("tilt_y_interp")
+    axs[1].set_title("tilt_x_interp")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1233,8 +1298,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(surface_tilt_y)
     im1=axs[1].imshow(surface_tilt_x)
-    axs[0].set_title(f"surface_tilt_y")
-    axs[1].set_title(f"surface_tilt_x")
+    axs[0].set_title("surface_tilt_y")
+    axs[1].set_title("surface_tilt_x")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1252,8 +1317,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     axs[0].invert_yaxis()
     axs[1].invert_yaxis()
 
-    axs[0].set_title(f"tilt_ys")
-    axs[1].set_title(f"tilt_xs")
+    axs[0].set_title("tilt_ys")
+    axs[1].set_title("tilt_xs")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)

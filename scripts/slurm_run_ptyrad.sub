@@ -2,7 +2,6 @@
 #SBATCH --job-name=ptyrad
 #SBATCH --mail-user=cl2696@cornell.edu       # Where to send mail
 #SBATCH --nodes=1                            # number of nodes requested
-##SBATCH --exclude=c0002                      # For some reason it takes way too long (~2500sec for 50k dp) for a specific c0002 GPU slice to calculate MiniBatchKMeans for compact group
 #SBATCH --ntasks=1                           # number of tasks to run in parallel
 #SBATCH --cpus-per-task=8                    # number of CPUs required for each task
 #SBATCH --gres=gpu:2g.20gb:1                 # request a GPU #gpu:a100:1, gpu:2g.20gb:1
@@ -13,7 +12,7 @@ pwd; hostname; date
 
 module load cuda/11.8
 
-source activate ptyrad_optuna
+source activate ptyrad
 
 # Set the params_path variable
 PARAMS_PATH="params/demo/tBL_WSe2_reconstruct.yml"

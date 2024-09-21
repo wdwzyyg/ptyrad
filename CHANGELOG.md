@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [TODO]
+## Initialization
+- `initialization.py` can probably be refactored a bit, it's too clunky now
+- prepare the object for multislice (interpolate, pad vacuum) and multiobj (duplicate)
+- Forward model at different sampling for better accuracy?
+## Probe
+- fit aberration to k-space probe. py4DSTEM does it with fit each mode with aberration, although I'm not sure whether that's better or not
+- Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
+- Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
+## Scan position
+- Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
+- Try [4DSTEM-calibration] (https://github.com/ningustc/4DSTEM-Calibration) for position correction
+- Try [iCGD] (https://github.com/ningustc/iCGD) into the position constrain
+## Mixed object
+- NMF and PCA for object modes? Given frozen phonon configurations, what is a good decomposition method?
+- Finish the weighted sum of `omode_occu` in `save_results`
+## BO
+- Decouple the BO error from reconstruction loss so we can test different setup
+- Use grid search BO without pruning as a cheat step if we need a range of reconstruction params, similar to abTEM's distribution.
+## Recon workflow
+- Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
+- Sequential reconstruction (asize_presolve) is also desired
+### Utils and plotting
+- Apparently plotting and saving matplotlib figure is incredibly slow, it's taking like 1sec/fig and we'll need some improvements
+- Visualize radially accumulated intensity for k-space probe
+- Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
+- Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
+- Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
+- Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
+- Maybe encapsulate PtyRAD into an executable? How to do that with GPU and PyTorch?
 ### Code clarity
 - Run through Ruff formatter for PEP8 code style
 - Add type hints
@@ -13,22 +42,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use Sphinx and Napolean for API documentation on Read the Docs
 - Unified the usage of explicit key or .get for dict
 - Unified meshgrid usage, naming, and unit would be nice
-- `initialization.py` can probably be refactored a bit
-### New recon feature
-- Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
-- Add a perceptual loss (image quality) particularly constraining the obj to be blob-like
-- Add object preprocess methods (duplicate/interpolate/pad) into `Initializer` class for finer control over omode and zslice. Might be able to add corresponding params into `exp_params`, or add an additional dict
-### Recon improvements
-- Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
-- Add an active decoupling between probe and object to avoid probe absorbing too much object structure. Could be a deconvolution in either space. Should look into how PtyShv update the probe closer, and maybe implement an illumination-normalized constraint, or just a full option of conventional analytical grad update for probe 
-- Can we do other mode decomposition other than SVD for the ortho_pmode?
-### Utils and plotting
-- Add finer folder name control and maybe allowing swapping order
-- Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4dstem's `solve_for_center_of_mass_relative_rotation` could be very handy 
-- Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
-- Add `plot_obj_fft` to `visualization` and maybe to `plot_summary` and `save_reuslts` as well. Some windowed log(S) diffractogram or P+S decomposition could be helpful. (http://www.roberthovden.com/tutorial/2015_fftartifacts.html)
-- Add a `plot_obj_tilts_interp` for interpolated version of tilt_x, tilt_y for cleaner visualization could be nice
-- Add a routine to check for CBED scaling (rbf/convergence angle) and off centering
+## PyTorch performance tuning
+- Use DataLoader for measurements. This could be a bit slower than directly loading entire measurements into memory, but it allows dataset larger than memory, and also makes parallel on multiple GPUs possible
+- Delete used variables for lower memory footprint
+- Precision selection, maybe float16?
+- Use in-place operations on tensors don't require grad
+
+## [v0.1.0-beta2.5] - 2024-09-19
+### Added
+- Add `optimizer_params` dict under `model_params` in the .yml params file to support more PyTorch available optimizers with configurations and allow loading the optimizer state
+- Add `create_optimizer` function under `optimization.py` for arbitrary PyTorch optimizer creation with configurations
+- Add `grad_accumulation` into `BATCH_SIZE` so we can approximate large batch size that doesn't fit into memory by accumulating gradients from many sub-batches. This is essentially a "memory-save" mode for PtyRAD
+### Changed
+- Refine the `plot_forward_pass` default indices generation method so it works better for different INDICES_MODE
+- Update `make_output_folder` so the optimizer name can be optionally affixed
+- Change `make_save_dict` and `save_results` so that it saves the optimizer state into `model.pt` as well
+- Rename `model.set_optimizer_params` into `model.create_optimizable_params_dict` for clarity
+- Move some jupyter notebooks into `scripts/analysis/` for clarity
+- Move `spec-file_ptyrad.txt` to new folder `envs/` for clarity
+
+## [v0.1.0-beta2.4] - 2024-09-17
+### Added
+- Add an `'obja'` option to the `save_results` to allow saving the object amplitude. 
+### Changed
+- Change the `plot_forward_pass` default behavior in `plot_summary` from random indices to fixed indices so the reconstruction progress can be better observed by visualizing the same region throughout the run.
+- Fix normalization error of `'bit: ['raw']` in `'result_modes'` since beta2.2 (2024-09-03). It was incorrectly normalizing the tif outputs from 0 to 1 when it should be outputting the original range. The output figure like `forward` and saved optimized tensors in `model.pt` were not affected by this error.
+
+## [v0.1.0-beta2.3] - 2024-09-13
+### Added
+- Add a simple notebook `check_sqlite.ipynb` to check duplicated params in sqlite database for hypertune mode, though the duplicatation is an expected behavior for BO algorithm
+- Add `raw` as new measurement data source to handle EMPAD and pre-processed EMPAD2 4D-STEM datasets
+- Add `power_thresh` to `probe_mask_k` constraint so we can select how much probe modes should be masked in k-space
+### Changed
+- Specify the file_path in all loading functions in `data_io` when there's a `FileNotFoundError`
+- Add `indices` into the argument of `make_save_dict` so that the selected probe position indices are saved into `model.pt` as well. This enables more convenient custom object cropping.
+- `lr_params` is merged with `start_iter` and renamed to `update_params` under `model_params` to add extra control over when to start optimizing the optimizable tensors
+- modify `make_output_dir` to affix non-zero `start_iter`, also change the `lr` affix to non-zero learning rates only
 
 ## [v0.1.0-beta2.2] - 2024-09-03
 ### Added
@@ -239,7 +288,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the incorrect scan position plotting when it's called in `plot_summary`
 - Fix the checkerboard phase artifact in k-space for `plot_probe_modes` by adding the necessary fftshift
 - Add an amplitude scaling to the displayed phase for better visualization
-- Refactor `imshift_batch` so that it can handle tensors with arvitrary leading dimensions (..., Ny, Nx), which is in preparation for possible need of shifting the object (omode, Nz, Ny, Nx) for global scan affine transformation
+- Refactor `imshift_batch` so that it can handle tensors with arbitrary leading dimensions (..., Ny, Nx), which is in preparation for possible need of shifting the object (omode, Nz, Ny, Nx) for global scan affine transformation
 - Rename and clarify the variables associated with `create_grids` in `models`
 
 ## [v0.1.0-alpha2.6] - 2024-04-23

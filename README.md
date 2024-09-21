@@ -27,14 +27,14 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ### 2a. Create Conda environment on Windows via spec-file.txt 
 ```bash
-conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_windows.txt
+conda create -n ptyrad --file ./envs/spec-file_ptyrad_windows.txt
 ```
 
 ### 2b. Create Conda environment on Linux via spec-file.txt
 ```bash
-conda create -n ptyrad --file ./docs/spec-file_ptyrad_optuna_linux.txt
+conda create -n ptyrad --file ./envs/spec-file_ptyrad_linux.txt
 ```
-Note: `ptyrad` can be changed to your preferred conda environment name, and `./docs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
+Note: `ptyrad` can be changed to your preferred conda environment name, and `./envs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
 
 ### 2c. Create Conda environment on Windows via specified package
 ```bash
@@ -49,22 +49,25 @@ Note: `pytorch-cuda` is limited to 11.8 because our private cluster at Cornell o
 
 *** Other Note ***
 - PyTorch on Windows only supports Python 3.8-3.11 as of Sept. 2024.
-- Creating environment with `spec-file.txt` (2a, 2b) is suggested. The spec-file.txt uses Python 3.11 and PyTorch 2.1.
+- Creating environment with `spec-file_ptyrad.txt` (2a, 2b) is suggested. The spec-file.txt uses Python 3.11 and PyTorch 2.1.
 - If you go with option 2c or 2d, `conda` could be taking ~ 10-30 min to solve the environment for package versions. You might get a Python 3.11.9 (Windows) or 3.12.5 (Linux) environment with pytorch 2.4.0 and numpy 2.1.0 as of Sept. 2024.
 -  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
 
 
 ### 3. Installing PtyRAD
 
-Option 1: Clone from this github repo (It's currently a private repo so may not work)
+Option 1: Clone from this github repo (It's currently a private repo so you need to [generate a personal access token instead of password](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens))
 
 ```bash
 git clone https://github.com/chiahao3/ptyrad.git
 ```
 
-Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory
+Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory (easier)
 
 ### 4. Trying the demo in /scripts
+
+> **Download the demo experimental data from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo) before running the demo notebooks/scripts**
+
 - `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
 - `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 

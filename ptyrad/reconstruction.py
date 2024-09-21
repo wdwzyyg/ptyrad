@@ -5,11 +5,10 @@ from random import shuffle
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
-from ptyrad.optimization import CombinedConstraint, CombinedLoss
+from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
 from ptyrad.utils import (
     copy_params_to_dir,
     get_blob_size,
@@ -90,7 +89,7 @@ class PtyRADSolver:
 
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
-        optimizer     = torch.optim.Adam(model.optimizer_params)
+        optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
         indices, batches, output_path = prepare_recon(model, self.init, params)
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path)
     
@@ -192,7 +191,8 @@ def prepare_recon(model, init, params):
     subscan_fast = recon_params['INDICES_MODE'].get("subscan_fast")
     GROUP_MODE = recon_params['GROUP_MODE']
     SAVE_ITERS = recon_params['SAVE_ITERS']
-    BATCH_SIZE = recon_params['BATCH_SIZE']
+    batch_size = recon_params['BATCH_SIZE'].get("size")
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation")
     output_dir = recon_params['output_dir']
     recon_dir_affixes = recon_params['recon_dir_affixes']
     copy_params = recon_params['copy_params']
@@ -204,8 +204,9 @@ def prepare_recon(model, init, params):
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=model.verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=model.verbose)
-    batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE, verbose=model.verbose)
+    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=model.verbose)
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
+    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=model.verbose)
 
     # Create the output path, save fig_grouping, and copy params file
     if SAVE_ITERS is not None:
@@ -258,6 +259,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     selected_figs     = recon_params['selected_figs']
     
     vprint("\n### Start the PtyRAD iterative ptycho reconstruction ###", verbose=model.verbose)
@@ -267,19 +269,19 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     for niter in range(1,NITER+1):
         
         shuffle(batches)
-        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose)
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose)
         loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
         
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses)
+            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
             
             ## Saving summary
             plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
     return loss_iters
 
-def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
+def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
     """
     Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
 
@@ -311,15 +313,28 @@ def recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
     
+    # Toggle the grad calculation to disable AD update on tensors before certain iteration
+    start_iter_dict = model.start_iter
+    for param_name, start_iter in start_iter_dict.items():
+        if start_iter is None or niter < start_iter:
+            model.optimizable_tensors[param_name].requires_grad = False
+        else:
+            model.optimizable_tensors[param_name].requires_grad = True
+        vprint(f"Iter: {niter}, {param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad}", verbose=verbose)
+    
     # Start mini-batch optimization
+    optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
-        optimizer.zero_grad()
         model_DP, object_patches = model(batch)
         measured_DP = model.get_measurements(batch)
         loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
         loss_batch.backward()
-        optimizer.step() # batch update
+        
+        # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
+        if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+            optimizer.step() # batch update
+            optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
 
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
@@ -398,6 +413,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     recon_params      = params.get('recon_params')
     NITER             = recon_params['NITER']
     SAVE_ITERS        = recon_params['SAVE_ITERS']
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     output_dir        = recon_params['output_dir']
     selected_figs     = recon_params['selected_figs']
     
@@ -466,7 +482,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
    
     # Create the model and optimizer, prepare indices, batches, and output_path
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)
-    optimizer     = torch.optim.Adam(model.optimizer_params)
+    optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
     indices, batches, output_path = prepare_recon(model, init, params)
       
     # Optimization loop
@@ -474,13 +490,13 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     for niter in range(1, NITER+1):
         
         shuffle(batches)
-        batch_losses, iter_t = recon_step(batches, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
         loss_iter = loss_logger(batch_losses, niter, iter_t, verbose=verbose)
         loss_iters.append((niter, loss_iter))
         
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-            save_results(output_path, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
+            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
@@ -493,14 +509,14 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
                 # Save the current results of the pruned trials
                 collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
                 if collate_results is not None:
-                    save_results(output_dir, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+                    save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
     ## Saving collate results and figs of the finished trials
     collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
     if collate_results:
-        save_results(output_dir, model, params, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+        save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
 
     return loss_iter
