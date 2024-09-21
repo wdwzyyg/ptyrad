@@ -110,6 +110,7 @@ class PtyRADSolver:
 
         # Create a study object and optimize the objective function
         sampler = optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True)
+        # sampler = optuna.samplers.GPSampler()
         study = optuna.create_study(
                     direction='minimize',
                     sampler=sampler,
@@ -413,10 +414,10 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     
     # probe_params (conv_angle, defocus)
     remake_probe = False
-    for vname in ['conv_angle', 'defocus']:
+    for vname in ['conv_angle', 'defocus', 'c3', 'c5']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
-            vmin, vmax, step = vparams['min'], vparams['max'], vparams['step']
+            vmin, vmax, step = float(vparams['min']), float(vparams['max']), float(vparams['step']) if vparams['step'] else None
             init.init_params['exp_params'][vname] = trial.suggest_float(vname, vmin, vmax, step=step)
             remake_probe = True
         if remake_probe:
