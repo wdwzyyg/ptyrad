@@ -1,6 +1,7 @@
 # Directories that don't need to backup
-data/
-output/
+data/*
+!data/demo_data_instruction.txt
 logs/
-__pycache__/
+output/
+__pycache__
 *.sqlite3

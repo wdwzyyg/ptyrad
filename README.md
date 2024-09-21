@@ -15,43 +15,67 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ## Getting Started
 
-### Dependencies
+### PtyRAD Major dependencies:
 
 * Python 3.11 or above
 * CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
 
+> **Choose one of the following that matches your need. Installation via spec-file.txt is recommended.**
 
-### Create Conda envoronment - local
+### 1. Install [miniconda](https://docs.anaconda.com/miniconda/) or [Anaconda](https://docs.anaconda.com/anaconda/install/) so we can create environments with `conda`
+
+### 2a. Create Conda environment on Windows via spec-file.txt 
 ```bash
-conda create -n ptyrad python=3.11 ipykernel matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=12.1 optuna -c pytorch -c nvidia -c conda-forge
+conda create -n ptyrad --file ./envs/spec-file_ptyrad_windows.txt
 ```
 
-### Create Conda envoronment - ALTAS
+### 2b. Create Conda environment on Linux via spec-file.txt
 ```bash
-conda create -n ptyrad python=3.11 matplotlib scikit-image scikit-learn scipy h5py tifffile pytorch=2.1.0 torchvision pytorch-cuda=11.8 optuna -c pytorch -c nvidia -c conda-forge
+conda create -n ptyrad --file ./envs/spec-file_ptyrad_linux.txt
+```
+Note: `ptyrad` can be changed to your preferred conda environment name, and `./envs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
+
+### 2c. Create Conda environment on Windows via specified package
+```bash
+conda create -n ptyrad python=3.11 matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
 ```
 
-*** Note ***
+### 2d. Create Conda environment on Linux via specified package
+```bash
+conda create -n ptyrad python matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=11.8 -c pytorch -c nvidia -c conda-forge
+```
+Note: `pytorch-cuda` is limited to 11.8 because our private cluster at Cornell only supports up to this version.
+
+*** Other Note ***
+- PyTorch on Windows only supports Python 3.8-3.11 as of Sept. 2024.
+- Creating environment with `spec-file_ptyrad.txt` (2a, 2b) is suggested. The spec-file.txt uses Python 3.11 and PyTorch 2.1.
+- If you go with option 2c or 2d, `conda` could be taking ~ 10-30 min to solve the environment for package versions. You might get a Python 3.11.9 (Windows) or 3.12.5 (Linux) environment with pytorch 2.4.0 and numpy 2.1.0 as of Sept. 2024.
 -  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
-- `conda` could be taking ~ 10 min to solve the environment, you may try `mamba` that could be faster.
 
-### Installing
 
-Option 1: Clone from this github repo
+### 3. Installing PtyRAD
+
+Option 1: Clone from this github repo (It's currently a private repo so you need to [generate a personal access token instead of password](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens))
 
 ```bash
 git clone https://github.com/chiahao3/ptyrad.git
 ```
 
-Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory
+Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory (easier)
 
-### Trying the demo in /scripts
+### 4. Trying the demo in /scripts
+
+> **Download the demo experimental data from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo) before running the demo notebooks/scripts**
+
 - `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
 - `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
 
 ## Support
 If you run into problems, have questions or suggested features / modifications, please create an issue [here](https://github.com/chiahao3/ptyrad/issues/new/choose).
+
+## Learning resource
+You can find previous tutorial recordings and slides from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo)
 
 ## Authors
 

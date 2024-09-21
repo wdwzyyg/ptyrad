@@ -19,7 +19,11 @@ done
 for i in $(seq 1 $N); do
     echo "Submitting $SUBDIR/$script"
     sbatch "$SUBDIR/$script"
-    sleep 1
+    if [ "$i" -eq 1 ]; then
+        sleep 10
+    else
+        sleep 1
+    fi
 done
 
 echo "Jobs are all submitted!"

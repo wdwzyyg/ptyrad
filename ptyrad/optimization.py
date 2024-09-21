@@ -7,6 +7,7 @@ from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
+from ptyrad.data_io import load_pt
 from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
@@ -232,15 +233,23 @@ class CombinedConstraint(torch.nn.Module):
         # fft2 is for real->fourier, while fftshift2 is for corner->center
         
         probe_mask_k_freq = self.constraint_params['probe_mask_k']['freq']
-        relative_radius  = self.constraint_params['probe_mask_k']['radius']
-        relative_width   = self.constraint_params['probe_mask_k']['width']
+        relative_radius   = self.constraint_params['probe_mask_k']['radius']
+        relative_width    = self.constraint_params['probe_mask_k']['width']
+        power_thresh      = self.constraint_params['probe_mask_k']['power_thresh']
         if probe_mask_k_freq is not None and niter % probe_mask_k_freq == 0:
             Npix = model.opt_probe.size(-1)
-            mask = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
+            powers = model.opt_probe.abs().pow(2).sum((-2,-1)) / model.opt_probe.abs().pow(2).sum()
+            powers_cumsum = powers.cumsum(0)
+            pmode_index = (powers_cumsum > power_thresh).nonzero()[0].item() # This gives the pmode index that the cumulative power along mode dimension is greater than the power_thresh and should have mask extend to this index
+            mask = torch.ones_like(model.opt_probe, dtype=torch.float32, device=model.device)
+            mask_value = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
+            mask[:pmode_index+1] = mask_value
             probe_k = fftshift2 (fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k at center for later masking
-            probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip 
-            model.opt_probe.data = probe_r
-            vprint(f"Apply Fourier-space probe amplitude constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
+            probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip
+            
+            # Re-sort the probe modes, note that the masked strong modes might be swapping order with unmasked weak modes
+            model.opt_probe.data = sort_by_mode_int(probe_r)
+            vprint(f"Apply Fourier-space probe amplitude constraint at iter {niter}, pmode_index = {pmode_index} when power_thresh = {power_thresh}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
     
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
@@ -371,6 +380,26 @@ class CombinedConstraint(torch.nn.Module):
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
 
+def create_optimizer(optimizer_params, optimizable_params, verbose=True):
+    # Extract the optimizer name and configs
+    optimizer_name = optimizer_params['name']
+    optimizer_configs = optimizer_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
+    pt_path = optimizer_params.get('load_state')
+    
+    vprint(f"\n### Creating PyTorch '{optimizer_name}' optimizer with configs = {optimizer_configs} ###", verbose=verbose)
+    
+    # Get the optimizer class from torch.optim
+    optimizer_class = getattr(torch.optim, optimizer_name, None)
+    
+    if optimizer_class is None:
+        raise ValueError(f"Optimizer '{optimizer_name}' is not supported.")
+    optimizer = optimizer_class(optimizable_params, **optimizer_configs)
+
+    if pt_path is not None:
+        optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
+        vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
+    return optimizer
+
 def kr_filter(obj, radius, width):
     ''' Apply kr_filter using the 2D sigmoid filter '''
     
@@ -411,6 +440,12 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase')
         
     return fobj
 
+def sort_by_mode_int(modes):
+    modes_int =  modes.abs().pow(2).sum(tuple(range(1,modes.ndim))) # Sum every but 1st dimension
+    _, indices = torch.sort(modes_int, descending=True)
+    modes = modes[indices]
+    return modes
+
 def orthogonalize_modes_vec(modes, sort = False):
     ''' orthogonalize the modes using SVD'''
     # Input:
@@ -446,8 +481,6 @@ def orthogonalize_modes_vec(modes, sort = False):
 
     # sort modes by their contribution
     if sort:
-        modes_int =  ortho_modes.abs().pow(2).sum(tuple(range(1,ortho_modes.ndim))) # Sum every but 1st dimension
-        _, indices = torch.sort(modes_int, descending=True)
-        ortho_modes = ortho_modes[indices]
+        ortho_modes = sort_by_mode_int(ortho_modes)
         
     return ortho_modes

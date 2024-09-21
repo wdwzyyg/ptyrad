@@ -57,6 +57,21 @@ def time_sync():
     t = time()
     return t
 
+def parse_sec_to_time_str(seconds):
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    if days > 0:
+        return f"{int(days)} day {int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif hours > 0:
+        return f"{int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif minutes > 0:
+        return f"{int(minutes)} min {secs:.3f} sec"
+    else:
+        return f"{secs:.3f} sec"
+
 def compose_affine_matrix(scale, asymmetry, rotation, shear):
     # Adapted from PtychoShelves +math/compose_affine_matrix.m
     # The input rotation and shear is in unit of degree
@@ -72,7 +87,21 @@ def compose_affine_matrix(scale, asymmetry, rotation, shear):
 
     return affine_mat
 
-def get_decomposed_affine_matrix(A, B):
+def decompose_affine_matrix(input_affine_mat):
+    from scipy.optimize import least_squares
+    def err_fun(x):
+        scale, asymmetry, rotation, shear = x
+        fit_affine_mat = compose_affine_matrix(scale, asymmetry, rotation, shear)
+        return (input_affine_mat - fit_affine_mat).ravel()
+
+    # Initial guess
+    initial_guess = np.array([1, 0, 0, 0])
+    result = least_squares(err_fun, initial_guess)
+    scale, asymmetry, rotation, shear = result.x
+
+    return scale, asymmetry, rotation, shear
+
+def get_decomposed_affine_matrix_from_bases(input, output):
     """ Fit the affine matrix components from input and output matrices A and B """
     # This util function is used to quickly estimate the needed affine transformation for scan positions
     # If we know the lattice constant and angle between lattice vectors, then we can easily correct the scale, asymmetry, and shear
@@ -89,7 +118,7 @@ def get_decomposed_affine_matrix(A, B):
         return np.linalg.norm(B - F @ A)
 
     initial_guess = [1, 0, 0, 0]  # Initial guess for scale, asymmetry, rotation, shear
-    result = minimize(objective, initial_guess, args=(A, B), method='L-BFGS-B')
+    result = minimize(objective, initial_guess, args=(input, output), method='L-BFGS-B')
     
     if result.success:
         (scale, asymmetry, rotation, shear) = result.x
@@ -108,7 +137,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
 
     # Set default values for subscan params
     if subscan_slow is None and subscan_fast is None:
-        vprint(f"Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
+        vprint("Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
         subscan_slow = N_scan_slow//2
         subscan_fast = N_scan_fast//2
         
@@ -135,7 +164,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
+def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
@@ -149,10 +178,12 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : model.optimizable_tensors,
+                'optim_state_dict'      : optimizer.state_dict(),
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
                      'obj_preblur_std'  : model.obj_preblur_std,
+                     'start_iter'       : model.start_iter,
                      'lr_params'        : model.lr_params,
                      'omode_occu'       : model.omode_occu,
                      'H'                : model.H,
@@ -170,16 +201,15 @@ def make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_
                 'loss_iters'            : loss_iters,
                 'iter_t'                : iter_t,
                 'niter'                 : niter,
+                'indices'               : indices,
                 'batch_losses'          : batch_losses,
                 'avg_losses'            : avg_losses
                 }
     
     return save_dict
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, show_lr=True, show_constraint=True, show_model=True, show_loss=True, show_init=True, verbose=True):
+def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
     ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
-    
-    # Note that if recon_params['SAVE_ITERS'] is None, the output_path is returned but not generated
     
     # # Example
     # NITER        = 50
@@ -198,9 +228,9 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     
     output_path  = output_dir
     meas_flipT   = exp_params['meas_flipT']
-    indices_mode = recon_params['INDICES_MODE']
+    indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
-    batch_size   = recon_params['BATCH_SIZE']
+    batch_size   = recon_params['BATCH_SIZE'].get('size') * recon_params['BATCH_SIZE'].get('grad_accumulation') # Affix the effective batch size
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']
@@ -214,13 +244,16 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
+    init_conv_angle = exp_params['conv_angle']
+    init_defocus = exp_params['defocus']
+    optimizer_str = model.optimizer_params['name']
+    start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
     prefix  = prefix + '_' if prefix  != '' else ''
     postfix = '_'+ postfix if postfix != '' else ''
     if prefix_date:
         prefix = get_date() + '_' + prefix 
-    
     
     # Setup basic params   
     output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
@@ -238,12 +271,38 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         z_distance = model.z_distance.cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
     
-    # Attach learning rate (optional)
-    if show_lr:
-        output_path += f"_plr{probe_lr}_oalr{obja_lr}_oplr{objp_lr}_slr{pos_lr}_tlr{tilt_lr}"
+    # Attach optimizer name (optional)
+    if 'optimizer' in recon_dir_affixes:
+        output_path += f"_{optimizer_str}"
     
+    # Attach start_iter (optional)
+    if 'start_iter' in recon_dir_affixes:
+        if start_iter_dict['probe'] is not None and start_iter_dict['probe'] > 1:
+            output_path += f"_ps{start_iter_dict['probe']}"
+        if start_iter_dict['obja'] is not None and start_iter_dict['obja'] > 1:
+            output_path += f"_oas{start_iter_dict['obja']}"
+        if start_iter_dict['objp'] is not None and start_iter_dict['objp'] > 1:
+            output_path += f"_ops{start_iter_dict['objp']}"
+        if start_iter_dict['probe_pos_shifts'] is not None and start_iter_dict['probe_pos_shifts'] > 1:
+            output_path += f"_ss{start_iter_dict['probe_pos_shifts']}"
+        if start_iter_dict['obj_tilts'] is not None and start_iter_dict['obj_tilts'] > 1:
+            output_path += f"_ts{start_iter_dict['obj_tilts']}"
+    
+    # Attach learning rate (optional)
+    if 'lr' in recon_dir_affixes:
+        if probe_lr != 0:
+            output_path += f"_plr{probe_lr}"
+        if obja_lr != 0:
+            output_path += f"_oalr{obja_lr}"
+        if objp_lr != 0:
+            output_path += f"_oplr{objp_lr}"
+        if pos_lr != 0:
+            output_path += f"_slr{pos_lr}" 
+        if tilt_lr != 0:
+            output_path += f"_tlr{tilt_lr}"
+            
     # Attach model params (optional)
-    if show_model:    
+    if 'model' in recon_dir_affixes:    
         if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
             output_path += f"_opreb{model.obj_preblur_std}"
             
@@ -251,7 +310,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_dpblur{model.detector_blur_std}"
     
     # Attach constraint params (optional)
-    if show_constraint:
+    if 'constraint' in recon_dir_affixes:
         if constraint_params['kr_filter']['freq'] is not None:
             obj_type = constraint_params['kr_filter']['obj_type']
             kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
@@ -278,7 +337,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
         
         if constraint_params['objp_postiv']['freq'] is not None:
-            output_path += f"_opos"
+            output_path += "_opos"
         
         if constraint_params['tilt_smooth']['freq'] is not None:
             output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
@@ -287,7 +346,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
 
     # Attach loss params (optional)
-    if show_loss:    
+    if 'loss' in recon_dir_affixes:    
         if loss_params['loss_single']['state']:
             output_path += f"_sng{round(loss_params['loss_single']['weight'],2)}"
 
@@ -304,7 +363,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
 
     # # Attach init params (optional)
-    if show_init:
+    if 'init' in recon_dir_affixes:
+        output_path += f"_ca{init_conv_angle:.3g}"
+        output_path += f"_df{init_defocus:.3g}"
+        
         if scan_affine is not None:
             affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
             output_path += f"_aff{affine_str}"
@@ -315,12 +377,20 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     
     output_path += postfix
     
-    if recon_params['SAVE_ITERS'] is not None:
-        os.makedirs(output_path, exist_ok=True)
-        vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
-    else:
-        vprint(f"output_path = '{output_path}' but is NOT generated!", verbose=verbose)
+    os.makedirs(output_path, exist_ok=True)
+    vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
     return output_path
+
+def copy_params_to_dir(params_path, output_dir, verbose=True):
+    import shutil
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    file_name = os.path.basename(params_path)
+    output_path = os.path.join(output_dir, file_name)
+    shutil.copy2(params_path, output_path)
+    vprint(f"Successfully copy '{file_name}' to '{output_dir}'", verbose=verbose)
 
 def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     ''' Make batches from input indices '''
@@ -421,32 +491,141 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             
             return sparse_batches
 
-def save_results(output_path, model, params, loss_iters, iter_t, niter, batch_losses):
-    save_dict = make_save_dict(output_path, model, params, loss_iters, iter_t, niter, batch_losses)
-
-    torch.save(save_dict, os.path.join(output_path, f"model_iter{str(niter).zfill(4)}.pt"))
-
-    imwrite(os.path.join(output_path, f"probe_amp_iter{str(niter).zfill(4)}.tif"), model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32'))
+def parse_hypertune_params_to_str(hypertune_params):
     
-    omode_occu = model.omode_occu
+    hypertune_str = ''
+    for key, value in hypertune_params.items():
+        hypertune_str += f"_{str(key)}_{value:.3g}"
+    
+    return hypertune_str
+
+def normalize_from_zero_to_one(arr):
+    norm_arr = (arr - arr.min())/(arr.max()-arr.min())
+    return norm_arr
+
+def normalize_by_bit_depth(arr, bit_depth):
+
+    if bit_depth == '8':
+        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(arr))
+    elif bit_depth == '16':
+        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(arr))
+    elif bit_depth == '32':
+        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(arr))
+    elif bit_depth == 'raw':
+        norm_arr_in_bit_depth = np.float32(arr)
+    else:
+        print(f'Unsuported bit_depth :{bit_depth} was passed into `result_modes`, `raw` is used instead')
+        norm_arr_in_bit_depth = np.float32(arr)
+    
+    return norm_arr_in_bit_depth
+
+def save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
+    
+    save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
+    result_modes = params['recon_params'].get('result_modes')
+    iter_str = '_iter' + str(niter).zfill(4)
+    
+    if 'model' in save_result_list:
+        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+        torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
+
+    probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
+    objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
+    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
+    # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
+    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
+    y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
+    x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     
-    # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
-    
-    if omode == 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_iter{str(niter).zfill(4)}.tif"), model.opt_objp[0,0].detach().cpu().numpy().astype('float32'))
-    elif omode == 1 and zslice > 1:
-        imwrite(os.path.join(output_path, f"objp_zstack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[0,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_zsum_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[0,:].sum(0).detach().cpu().numpy().astype('float32'))
-    elif omode > 1 and zslice == 1:
-        imwrite(os.path.join(output_path, f"objp_ostack_iter{str(niter).zfill(4)}.tif"),       model.opt_objp[:,0].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_iter{str(niter).zfill(4)}.tif"),        model.opt_objp[:,0].mean(0).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostd_iter{str(niter).zfill(4)}.tif"),         model.opt_objp[:,0].std(0).detach().cpu().numpy().astype('float32'))
-    else:
-        imwrite(os.path.join(output_path, f"objp_4D_iter{str(niter).zfill(4)}.tif"),           model.opt_objp[:,:].detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_ostack_zsum_iter{str(niter).zfill(4)}.tif"),  model.opt_objp[:,:].sum(1).detach().cpu().numpy().astype('float32'))
-        imwrite(os.path.join(output_path, f"objp_omean_zstack_iter{str(niter).zfill(4)}.tif"), model.opt_objp[:,:].mean(0).detach().cpu().numpy().astype('float32'))
+    for bit in result_modes['bit']:
+        if bit == '8':
+            bit_str = '_08bit'
+        elif bit == '16':
+            bit_str = '_16bit'
+        elif bit == '32':
+            bit_str = '_32bit'
+        elif bit == 'raw':
+            bit_str = ''
+        else:
+            bit_str = ''
+        if 'probe' in save_result_list:
+            imwrite(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
+        for fov in result_modes['FOV']:
+            if fov == 'crop':
+                fov_str = '_crop'
+                objp_crop = objp[:, :, y_min-1:y_max, x_min-1:x_max]
+                obja_crop = obja[:, :, y_min-1:y_max, x_min-1:x_max]
+            elif fov == 'full':
+                fov_str = ''
+                objp_crop = objp
+                obja_crop = obja
+            else:
+                fov_str = ''
+                objp_crop = objp
+                obja_crop = obja
+                
+            postfix_str = fov_str + bit_str + collate_str + iter_str
+                
+            if any(keyword in save_result_list for keyword in ['obj', 'objp', 'object']):
+                # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+                
+                for dim in result_modes['obj_dim']:
+                    
+                    if omode == 1 and zslice == 1:
+                        if dim == 2: 
+                            imwrite(os.path.join(output_path, f"objp{postfix_str}.tif"),              normalize_by_bit_depth(objp_crop[0,0], bit))
+                    elif omode == 1 and zslice > 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_zstack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[0,:], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_zsum{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
+                    elif omode > 1 and zslice == 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_ostack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[:,0], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_omean{postfix_str}.tif"),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"objp_ostd{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
+                    else:
+                        if dim == 4:
+                            imwrite(os.path.join(output_path, f"objp_4D{postfix_str}.tif"),           normalize_by_bit_depth(objp_crop[:,:], bit))
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif"),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
+                            imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif"),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
+                            
+            if any(keyword in save_result_list for keyword in ['obja']):
+                # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
+                
+                for dim in result_modes['obj_dim']:
+                    
+                    if omode == 1 and zslice == 1:
+                        if dim == 2: 
+                            imwrite(os.path.join(output_path, f"obja{postfix_str}.tif"),              normalize_by_bit_depth(obja_crop[0,0], bit))
+                    elif omode == 1 and zslice > 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_zstack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[0,:], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_zmean{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_zprod{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].prod(0), bit))
+                    elif omode > 1 and zslice == 1:
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[:,0], bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean{postfix_str}.tif"),        normalize_by_bit_depth(obja_crop[:,0].mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostd{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[:,0].std(0), bit))
+                    else:
+                        if dim == 4:
+                            imwrite(os.path.join(output_path, f"obja_4D{postfix_str}.tif"),           normalize_by_bit_depth(obja_crop[:,:], bit))
+                        if dim == 3:
+                            imwrite(os.path.join(output_path, f"obja_ostack_zmean{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].mean(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_ostack_zprod{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].prod(1), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(obja_crop[:,:].mean(0), bit))
+                        if dim == 2:
+                            imwrite(os.path.join(output_path, f"obja_omean_zmean{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).mean(0), bit))
+                            imwrite(os.path.join(output_path, f"obja_omean_zprod{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).prod(0), bit))
 
 def imshift_single(img, shift, grid):
     """
@@ -1088,8 +1267,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(tilt_y_interp)
     im1=axs[1].imshow(tilt_x_interp)
-    axs[0].set_title(f"tilt_y_interp")
-    axs[1].set_title(f"tilt_x_interp")
+    axs[0].set_title("tilt_y_interp")
+    axs[1].set_title("tilt_x_interp")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1119,8 +1298,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     fig, axs = plt.subplots(1,2, figsize=(12,6))
     im0=axs[0].imshow(surface_tilt_y)
     im1=axs[1].imshow(surface_tilt_x)
-    axs[0].set_title(f"surface_tilt_y")
-    axs[1].set_title(f"surface_tilt_x")
+    axs[0].set_title("surface_tilt_y")
+    axs[1].set_title("surface_tilt_x")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)
@@ -1138,8 +1317,8 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
     axs[0].invert_yaxis()
     axs[1].invert_yaxis()
 
-    axs[0].set_title(f"tilt_ys")
-    axs[1].set_title(f"tilt_xs")
+    axs[0].set_title("tilt_ys")
+    axs[1].set_title("tilt_xs")
     cbar0 = fig.colorbar(im0, shrink=0.7)
     cbar0.ax.set_ylabel('mrad')
     cbar1 = fig.colorbar(im1, shrink=0.7)

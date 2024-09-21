@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_tif
+from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif
 from ptyrad.utils import (
     compose_affine_matrix,
     get_default_probe_simu_params,
@@ -140,11 +140,14 @@ class Initializer:
         if source   == 'custom':
             meas = params
         elif source == 'tif':
-            meas = load_tif(params.get('path')) # key is ignored because it's not needed for tif files
+            meas = load_tif(params['path']) # key is ignored because it's not needed for tif files
         elif source == 'mat':
-            meas = load_fields_from_mat(params.get('path'), params.get('key'))[0]
+            meas = load_fields_from_mat(params['path'], params['key'])[0]
         elif source == 'hdf5':
-            meas = load_hdf5(params.get('path'), params.get('key'))
+            meas = load_hdf5(params['path'], params['key'])
+        elif source == 'raw':
+            default_shape = (self.init_variables['N_scans'], self.init_variables['Npix'], self.init_variables['Npix'])
+            meas = load_raw(params['path'], shape=params.get('shape', default_shape), offset=params.get('offset', 0), gap=params.get('gap', 1024))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', or 'hdf5'!!")
         vprint(f"Imported meausrements shape = {meas.shape}", verbose=self.verbose)
@@ -286,7 +289,7 @@ class Initializer:
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
-                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows']) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
+                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'], verbose=self.verbose) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
                                 
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")

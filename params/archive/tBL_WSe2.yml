@@ -7,8 +7,8 @@ exp_params : {
     'dx_spec'           : 0.1494, # Ang
     'defocus'           : 0, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # Ang, spherical aberration coefficients
-    'z_distance'        : 1, # Ang
-    'Nlayer'            : 12,
+    'z_distance'        : 12, # Ang
+    'Nlayer'            : 1,
     'N_scans'           : 16384,
     'N_scan_slow'       : 128,
     'N_scan_fast'       : 128,
@@ -17,7 +17,7 @@ exp_params : {
     'scan_affine'       : null, # (scale, asymmetry, rotation, shear)
     'scan_rand_std'     : 0.15, # None or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
     'omode_max'         : 1,
-    'omode_init_occu'   : {'occu_type':'uniform', 'init_occu':null},
+    'omode_init_occu'   : {'occu_type': 'uniform', 'init_occu': null},
     'pmode_max'         : 4,
     'pmode_init_pows'   : [0.02],
     'probe_permute'     : null,
@@ -49,9 +49,11 @@ source_params : {
 hypertune_params : {
     'n_trials'      : 1000,
     'use_pruning'   : True,
-    'storage_path'  : 'sqlite:///hypertune_database.sqlite3',
-    'study_name'    : 'ptyrad_tBL_WSe2_2',
+    'storage_path'  : 'sqlite:///20240827_hypertune.sqlite3',
+    'study_name'    : 'tBL_WSe2',
     'tune_params'   : {
+        'conv_angle': {'state': true, 'min': 24, 'max': 26, 'step': 0.1},
+        'defocus'   : {'state': true, 'min': -50, 'max': 50, 'step': 10},
         'z_distance': {'state': false, 'min': 1.5, 'max': 2.5, 'step': 0.5},
         'scale'     : {'state': true, 'min': 0.9, 'max': 1.1, 'step': 0.05},
         'asymmetry' : {'state': true, 'min': -0.2, 'max': 0.2, 'step': 0.05},
@@ -96,12 +98,15 @@ constraint_params : {
 recon_params: {
   'NITER': 50,
   'INDICES_MODE': 'full',  # 'full', 'center', 'sub'
+  'subscan_slow': null,
+  'subscan_fast': null,
   'BATCH_SIZE': 32,
   'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
   'SAVE_ITERS': 10,  # scalar or None
-  'output_dir': 'output/tBL-WSe2',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
-  'prefix_date': true,
+  'output_dir': 'output/tBL-WSe2/',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+  'dir_affixes': ['lr', 'constraint', 'model', 'loss', 'init'],
+  'prefix_date': false,
   'prefix': '',
-  'postfix': 'acc',
+  'postfix': '',
   'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
 }

@@ -324,9 +324,9 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     if pass_fig:
         return fig
 
-def plot_summary(output_path, model, loss_iters, niter, indices, init_variables, fig_list=['loss', 'forward', 'probe_r_amp', 'pos'], show_fig=True, save_fig=False, verbose=True):
+def plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'], collate_str='', show_fig=True, save_fig=False, verbose=True):
     """ Wrapper function for most visualization function """
-    # fig_list can take 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all'
+    # selected_figs can take 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all'
     # Note: Set show_fig=False and save_fig=True if you just want to save the figure without showing
     
     # Sets figure saving to be True if you accidiently disable both show_fig and save_fig
@@ -336,52 +336,57 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     if save_fig and verbose:
         print(f"Saving summary figures for iter {niter}")
     
+    iter_str = '_iter' + str(niter).zfill(4)
+    
     # loss curves
-    if 'loss' in fig_list or 'all' in fig_list:
+    if 'loss' in selected_figs or 'all' in selected_figs:
         fig_loss = plot_loss_curves(loss_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
         if show_fig:
             fig_loss.show()
         if save_fig:
-            fig_loss.savefig(output_path + f"/summary_loss_iter{str(niter).zfill(4)}.png")
+            fig_loss.savefig(output_path + f"/summary_loss{collate_str}{iter_str}.png")
     
     # Forward pass
-    if 'forward' in fig_list or 'all' in fig_list:
-        fig_forward = plot_forward_pass(model, np.random.choice(indices,2, replace=False), 0.5, show_fig=False, pass_fig=True)
+    if 'forward' in selected_figs or 'all' in selected_figs:
+        n = int(len(indices)**0.5)
+        n2 = int(len(indices))
+        plot_indices = indices[np.int32([n2/2+n/4, n2/2+3*n/4])] # The idea is to get 2 regions of (N/2)x(N/2) that are +-N/4 from the center of the FOV.
+        fig_forward = plot_forward_pass(model, plot_indices, 0.5, show_fig=False, pass_fig=True)
         fig_forward.suptitle(f"Forward pass at iter {niter}", fontsize=24)
         if show_fig:
             fig_forward.show()
         if save_fig:
-            fig_forward.savefig(output_path + f"/summary_forward_pass_iter{str(niter).zfill(4)}.png")
+            fig_forward.savefig(output_path + f"/summary_forward_pass{collate_str}{iter_str}.png")
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
     opt_probe = model.opt_probe.detach().cpu().numpy()
 
-    if 'probe_r_amp' in fig_list or 'all' in fig_list:
+    if 'probe_r_amp' in selected_figs or 'all' in selected_figs:
         fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', show_fig=False, pass_fig=True)
         fig_probe_modes_real_amp.suptitle(f"Probe modes amplitude in real space at iter {niter}", fontsize=18)
         if show_fig:
             fig_probe_modes_real_amp.show()
         if save_fig:
-            fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+            fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp{collate_str}{iter_str}.png",bbox_inches='tight')
             
 
-    if 'probe_k_amp' in fig_list or 'all' in fig_list:
+    if 'probe_k_amp' in selected_figs or 'all' in selected_figs:
         fig_probe_modes_fourier_amp   = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='amplitude', show_fig=False, pass_fig=True)
         fig_probe_modes_fourier_amp.suptitle(f"Probe modes amplitude in fourier space at iter {niter}", fontsize=18)
         if show_fig:
             fig_probe_modes_fourier_amp.show()
         if save_fig:
-            fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+            fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp{collate_str}{iter_str}.png",bbox_inches='tight')
             
 
-    if 'probe_k_phase' in fig_list or 'all' in fig_list:
+    if 'probe_k_phase' in selected_figs or 'all' in selected_figs:
         fig_probe_modes_fourier_phase = plot_probe_modes(init_probe, opt_probe, real_or_fourier='fourier', amp_or_phase='phase', show_fig=False, pass_fig=True)
         fig_probe_modes_fourier_phase.suptitle(f"Probe modes phase in fourier space at iter {niter}", fontsize=18)
         if show_fig:
             fig_probe_modes_fourier_phase.show()
         if save_fig:
-            fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase_iter{str(niter).zfill(4)}.png",bbox_inches='tight')
+            fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase{collate_str}{iter_str}.png",bbox_inches='tight')
             
             
     # Scan positions and tilts
@@ -390,21 +395,21 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     tilts = model.opt_obj_tilts.detach().cpu().numpy()
     tilts = np.broadcast_to(tilts, (len(pos), 2)) # tilts has to be (N_scan, 2)
     
-    if 'pos' in fig_list or 'all' in fig_list:
+    if 'pos' in selected_figs or 'all' in selected_figs:
         fig_scan_pos, ax = plot_scan_positions(pos=pos[indices], init_pos=init_pos[indices], dot_scale=1, show_fig=False, pass_fig=True)
         ax.set_title(f"Scan positions at iter {niter}", fontsize=16)
         if show_fig:
             fig_scan_pos.show()
         if save_fig:
-            fig_scan_pos.savefig(output_path + f"/summary_scan_pos_iter{str(niter).zfill(4)}.png")
+            fig_scan_pos.savefig(output_path + f"/summary_scan_pos{collate_str}{iter_str}.png")
     
-    if 'tilt' in fig_list or 'all' in fig_list:
+    if 'tilt' in selected_figs or 'all' in selected_figs:
         fig_obj_tilts, ax = plot_obj_tilts(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
         ax.set_title(f"Object tilts at iter {niter}", fontsize=16)
         if show_fig:
             fig_obj_tilts.show()
         if save_fig:
-            fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts_iter{str(niter).zfill(4)}.png")
+            fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts{collate_str}{iter_str}.png")
         
     # Close figures after saving
     plt.close('all')
