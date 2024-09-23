@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from accelerate import Accelerator # Multi GPU training from HuggingFace
+from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs # Multi GPU training library from HuggingFace
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
 from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
@@ -27,7 +27,7 @@ from ptyrad.utils import (
 )
 from ptyrad.visualization import plot_pos_grouping, plot_summary
 
-class PtyRADSolver:
+class PtyRADSolver(object):
     """
     A wrapper class to perform ptychographic reconstruction or hyperparameter tuning.
 
@@ -66,7 +66,11 @@ class PtyRADSolver:
         self.params       = params
         self.if_hypertune = self.params['hypertune_params']['if_hypertune']
         self.verbose      = not self.params['recon_params']['if_quiet']
-        self.accelerator  = Accelerator(split_batches=True)
+        
+        # Set up accelerator for multiGPU setting, note that this has no effect when we launch it with just `python <script>`
+        dataloader_config = DataLoaderConfiguration(split_batches=False) # This supress the warning when we do `Accelerator(split_batches=True)`
+        kwargs_handlers   = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
+        self.accelerator  = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
@@ -198,7 +202,8 @@ def prepare_recon(model, init, params):
             - output_path (str): The path to the directory where reconstruction results 
               and figures will be saved.
     """
-    vprint("\n### Generating indices, batches, and output_path ###", verbose=model.verbose)
+    verbose = not params['recon_params']['if_quiet']
+    vprint("\n### Generating indices, batches, and output_path ###", verbose=verbose)
     # Parse the variables
     init_variables = init.init_variables
     exp_params = init.init_params.get('exp_params') # These could be modified by Optuna, hence can be different from params['exp_params]
@@ -222,19 +227,19 @@ def prepare_recon(model, init, params):
     pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
     probe_int    = model.opt_probe.abs().pow(2).sum(0).detach().cpu().numpy()
     dx           = init_variables['dx']
-    d_out        = get_blob_size(dx, probe_int, output='d90', verbose=model.verbose) # d_out unit is in Ang
-    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=model.verbose)
-    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=model.verbose)
+    d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
+    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
+    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=verbose)
     fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
-    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=model.verbose)
+    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=verbose)
 
     # Create the output path, save fig_grouping, and copy params file
     if SAVE_ITERS is not None:
-        output_path = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=model.verbose)
+        output_path = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
         fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
         if copy_params:
             # Save params.yml to separate reconstruction folder for normal mode, and to the main output_dir for hypertune mode
-            copy_params_to_dir(params_path, output_dir if if_hypertune else output_path, verbose=model.verbose)
+            copy_params_to_dir(params_path, output_dir if if_hypertune else output_path, verbose=verbose)
     else:
         output_path = None
     
@@ -281,26 +286,31 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     SAVE_ITERS        = recon_params['SAVE_ITERS']
     grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation", 1)
     selected_figs     = recon_params['selected_figs']
+    verbose           = not recon_params['if_quiet']
     
-    vprint("\n### Start the PtyRAD iterative ptycho reconstruction ###", verbose=model.verbose)
+    vprint("\n### Start the PtyRAD iterative ptycho reconstruction ###", verbose=verbose)
     
     # Optimization loop
     loss_iters = []
     for niter in range(1,NITER+1):
         
-        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=model.verbose, acc=acc)
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
         
         # Only log the main process
         if acc is None or acc.is_main_process:
-            loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=model.verbose)))
+            loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
             
             ## Saving intermediate results
             if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
+                
+                # Use the method on the wrapped model (DDP) if it exists
+                model_instance = model.module if hasattr(model, "module") else model
+                
                 # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-                save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+                save_results(output_path, model_instance, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
                 
                 ## Saving summary
-                plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=model.verbose)
+                plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
     return loss_iters
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -335,42 +345,47 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     batch_losses = {name: [] for name in loss_fn.loss_params.keys()}
     start_iter_t = time_sync()
     
+    # Use the method on the wrapped model (DDP) if it exists
+    model_instance = model.module if hasattr(model, "module") else model
+    
     # Toggle the grad calculation to disable AD update on tensors before certain iteration
-    start_iter_dict = model.start_iter
+    start_iter_dict = model_instance.start_iter
+    optimizable_tensors = model_instance.optimizable_tensors
     for param_name, start_iter in start_iter_dict.items():
         if start_iter is None or niter < start_iter:
-            model.optimizable_tensors[param_name].requires_grad = False
+            optimizable_tensors[param_name].requires_grad = False
         else:
-            model.optimizable_tensors[param_name].requires_grad = True
-        vprint(f"Iter: {niter}, {param_name}.requires_grad = {model.optimizable_tensors[param_name].requires_grad}", verbose=verbose)
+            optimizable_tensors[param_name].requires_grad = True
+        vprint(f"Iter: {niter}, {param_name}.requires_grad = {optimizable_tensors[param_name].requires_grad}", verbose=verbose)
     
     # Start mini-batch optimization
     optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         model_DP, object_patches = model(batch)
-        measured_DP = model.get_measurements(batch)
-        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model.omode_occu)
+        measured_DP = model_instance.get_measurements(batch)
+        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
         
         if acc is not None:
             acc.backward(loss_batch)
         else:
-            loss_batch.backward()
+            loss_batch.backward() # This is kept when we run PtyRAD in the detailed walkthrough notebook without `accelerate`
             
         # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
         if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+            acc.wait_for_everyone()
             optimizer.step() # batch update
             optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
-
+        
+        acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
 
         if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
             vprint(f"Done batch {batch_idx+1} in {batch_t:.3f} sec", verbose=verbose)
     
-    # Apply iter-wise constraint
-    constraint_fn(model, niter)
+    constraint_fn(model_instance, niter)
     
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t

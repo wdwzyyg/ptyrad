@@ -2,12 +2,11 @@
 #SBATCH --job-name=multiGPU
 #SBATCH --mail-user=cl2696@cornell.edu       # Where to send mail
 #SBATCH --nodes=1                            # number of nodes requested
-##SBATCH --exclude=c0002                      # For some reason it takes way too long (~2500sec for 50k dp) for a specific c0002 GPU slice to calculate MiniBatchKMeans for compact group
 #SBATCH --ntasks=1                           # number of tasks to run in parallel
-#SBATCH --cpus-per-task=8                    # number of CPUs required for each task
+#SBATCH --cpus-per-task=32                    # number of CPUs required for each task
 #SBATCH --gres=gpu:a100:2                 # request a GPU #gpu:a100:1, gpu:2g.20gb:1
-#SBATCH --time=48:00:00                      # Time limit hrs:min:sec
-#SBATCH --output=logs/log_job_%j_ptyrad_acc.txt  # Standard output and error log to /logs, you need to create this folder first!
+#SBATCH --time=00:10:00                      # Time limit hrs:min:sec
+#SBATCH --output=logs/log_job_%j_ptyrad_acc2_no_split.txt  # Standard output and error log to /logs, you need to create this folder first!
 
 pwd; hostname; date
 
@@ -16,7 +15,7 @@ module load cuda/11.8
 source activate ptyrad_acc
 
 # Set the params_path variable
-PARAMS_PATH="ptyrad/inputs/full_params_tBL_WSe2.yml"
+PARAMS_PATH="params/demo/tBL_WSe2_reconstruct.yml"
 echo params_path = ${PARAMS_PATH}
 
 nvidia-smi
@@ -25,8 +24,9 @@ nvidia-smi
 # accelerate test
 # Run the above line to check the accelerate configuration
 
-# python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 #--hypertune --quiet  
+# python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
 accelerate launch --multi_gpu --num_processes=2 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
+# accelerate launch --num_processes=1 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
 # accelerate launch ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
 
 date

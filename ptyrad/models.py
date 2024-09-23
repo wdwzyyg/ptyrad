@@ -1,6 +1,7 @@
 ## Defining PtychoAD class for the optimization object
 
 import torch
+import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
@@ -77,7 +78,7 @@ class PtychoAD(torch.nn.Module):
             Performs the forward pass and computes diffraction patterns for given indices.
     """
 
-    def __init__(self, init_variables, model_params, device='cuda:0', verbose=True):
+    def __init__(self, init_variables, model_params, device, verbose=True):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
             self.device                 = device
@@ -94,14 +95,14 @@ class PtychoAD(torch.nn.Module):
             self.start_iter             = start_iter_dict
             self.lr_params              = lr_dict
             
-            self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
-            self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
-            self.opt_obj_tilts          = torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device)
-            self.opt_probe              = torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)  
-            self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device)
-            self.omode_occu             = torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device) 
-            self.H                      = torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device)
-            self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
+            self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device)))
+            self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device)))
+            self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device))
+            self.opt_probe              = nn.Parameter(torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)) 
+            self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device))
+            self.register_buffer        ('omode_occu', torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device))
+            self.register_buffer        ('H',          torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device))
+            self.register_buffer        ('measurements', torch.tensor(init_variables['measurements'],    dtype=torch.float32,   device=device))
             self.N_scan_slow            = torch.tensor(init_variables['N_scan_slow'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.N_scan_fast            = torch.tensor(init_variables['N_scan_fast'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
             self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.

@@ -12,6 +12,11 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def cycle(it):
+    while True:
+        for el in it:
+            yield el
+
 def vprint(*args, verbose=True, **kwargs):
     """Verbose print with individual control, only for rank 0 in DDP."""
     if verbose and (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
