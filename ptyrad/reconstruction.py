@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torch.distributed as dist
 
 from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs # Multi GPU training library from HuggingFace
 from ptyrad.initialization import Initializer
@@ -62,15 +63,17 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params):
+    def __init__(self, params, split_batches=True):
         self.params       = params
         self.if_hypertune = self.params['hypertune_params']['if_hypertune']
         self.verbose      = not self.params['recon_params']['if_quiet']
+        self.split_batches = split_batches
         
         # Set up accelerator for multiGPU setting, note that this has no effect when we launch it with just `python <script>`
-        dataloader_config = DataLoaderConfiguration(split_batches=False) # This supress the warning when we do `Accelerator(split_batches=True)`
+        dataloader_config = DataLoaderConfiguration(split_batches=self.split_batches) # This supress the warning when we do `Accelerator(split_batches=True)`
         kwargs_handlers   = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
         self.accelerator  = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        self.accelerator.print(f"Accelerator DataLoader split_batches = {self.split_batches}")
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
@@ -97,15 +100,26 @@ class PtyRADSolver(object):
     def reconstruct(self):
         params = self.params
         device = self.device
-
+        batch_size = params['recon_params']['BATCH_SIZE']['size']
+        
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
-        indices, batches, output_path = prepare_recon(model, self.init, params)
-        batches_dl    = BatchesDataset(batches)
+        indices, _, output_path = prepare_recon(model, self.init, params) # `batches` would not be used for the IndicedDataset because I haven't figured out how to do specified indices
         
-        model, optimizer, batches_dl = self.accelerator.prepare(model, optimizer, batches_dl)
-        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches_dl, output_path, acc=self.accelerator)
+        # Dataset setup
+        self.ds = IndicesDataset(indices)
+        dl = torch.utils.data.DataLoader(self.ds, batch_size = batch_size, shuffle = True) # This will do the batching
+        dl = self.accelerator.prepare(dl)
+        self.dl = dl
+        
+        vprint(f"len(DataLoader) = num_batches = {len(self.dl)}, DataLoader.batch_size = {len(indices)//len(self.dl)}", verbose=self.verbose)
+        if dist.is_initialized:
+            vprint("Note that the DataLoader will be duplicated for each process, while DataLoader.batch_size is the effective batch size (batch_size_per_process * num_process)", verbose=self.verbose) 
+            vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
+            vprint("Therefore, for batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
+        model, optimizer = self.accelerator.prepare(model, optimizer)
+        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, self.dl, output_path, acc=self.accelerator)
     
     def hypertune(self):
         import optuna
@@ -165,16 +179,15 @@ class PtyRADSolver(object):
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
         self.accelerator.print(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
 
-class BatchesDataset(Dataset):
-    def __init__(self, batches):
-        self.batches = batches
+class IndicesDataset(Dataset):
+    def __init__(self, indices):
+        self.indices = indices
 
     def __len__(self):
-        return len(self.batches)
+        return len(self.indices)
 
     def __getitem__(self, idx):
-        batch = self.batches[idx]
-        return batch
+        return self.indices[idx]
 
 def prepare_recon(model, init, params):
     """
@@ -225,7 +238,7 @@ def prepare_recon(model, init, params):
     
     # Generate the indices, batches, and fig_grouping
     pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
-    probe_int    = model.opt_probe.abs().pow(2).sum(0).detach().cpu().numpy()
+    probe_int    = model.get_complex_probe_view().abs().pow(2).sum(0).detach().cpu().numpy()
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
@@ -373,17 +386,19 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
             
         # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
         if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
-            acc.wait_for_everyone()
+            if acc is not None:
+                acc.wait_for_everyone()
             optimizer.step() # batch update
             optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
         
-        acc.wait_for_everyone()
+        if acc is not None:
+            acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
 
         if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
-            vprint(f"Done batch {batch_idx+1} in {batch_t:.3f} sec", verbose=verbose)
+            vprint(f"Done batch {batch_idx+1} with {len(batch)} indices ({batch[:5].tolist()}...) in {batch_t:.3f} sec", verbose=verbose)
     
     constraint_fn(model_instance, niter)
     

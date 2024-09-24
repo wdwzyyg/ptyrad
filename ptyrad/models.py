@@ -98,7 +98,7 @@ class PtychoAD(torch.nn.Module):
             self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device)))
             self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device)))
             self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device))
-            self.opt_probe              = nn.Parameter(torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)) 
+            self.opt_probe              = nn.Parameter(torch.view_as_real(torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device))) # The `torch.view_as_real` allows correct handling of DDP via NCCL even in PyTorch 2.4
             self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device))
             self.register_buffer        ('omode_occu', torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device))
             self.register_buffer        ('H',          torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device))
@@ -112,7 +112,7 @@ class PtychoAD(torch.nn.Module):
             self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
             self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
-            self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
+            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
             
             # Create grids for shifting
             self.create_grids()
@@ -125,6 +125,11 @@ class PtychoAD(torch.nn.Module):
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
+    
+    def get_complex_probe_view(self):
+        """ Retrieve complex view of the probe """
+        # This is a post-processing to ensure minimal code changes in PtyRAD for the DDP (multiGPU) via NCCL due to limited support for Complex value
+        return torch.view_as_complex(self.opt_probe)
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -132,7 +137,8 @@ class PtychoAD(torch.nn.Module):
         # Currently (2024.04.24) only the shift_probes_grid, rpy_grid, rpx_grid are used for sub-px shifts and obj_ROI selection
         
         device = self.device
-        Npy, Npx = self.opt_probe.shape[-2:] # Number of probe pixels in y and x directions
+        probe = self.get_complex_probe_view()
+        Npy, Npx = probe.shape[-2:] # Number of probe pixels in y and x directions
         Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
         
         rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
@@ -212,10 +218,12 @@ class PtychoAD(torch.nn.Module):
         # This function will return a single probe when self.shift_probes = False,
         # and would only be returning multiple sub-px shifted probes if you're optimizing self.opt_probe_pos_shifts
 
+        probe = self.get_complex_probe_view()
+        
         if self.shift_probes:
-            probes = imshift_batch(self.opt_probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
+            probes = imshift_batch(probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
         else:
-            probes = torch.broadcast_to(self.opt_probe, (len(indices), *self.opt_probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
+            probes = torch.broadcast_to(probe, (len(indices), *probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
         return probes
     
     def get_propagators(self, indices):

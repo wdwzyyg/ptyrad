@@ -1,33 +1,48 @@
-# Notes of multiGPU for ptychorgaphy
-Iterative algorithms for ptychography is very computational heavy even with GPU. Most packages utilize 1 GPU like PtychoShelves, py4DSTEM, and PtyRAD, while multi-GPU can "potentially" provide 2 benefits:
+# Notes of multi-GPU for ptychorgaphy
+Iterative algorithms for ptychography is very computational heavy even with GPU. Popular packages like PtychoShelves and py4DSTEM use only 1 GPU, while multi-GPU can "potentially" provide 2 benefits:
 1. More VRAM can enable larger reconstruction jobs (larger dataset, larger batch size, etc) that might not fit into a single GPU
 2. Accelerate the iteration time by spreading the workload on more CUDA cores
 
-Although multiGPU might seem attempting, the reality is:
-1. it's much harder to code, maintain, or make it compatible with different hardware setup from different users. 
-2. Typical iterative ptychorgaphic reconstruction algorithms require fairly small VRAM even if we load the entire dataset. 20 GB of VRAM is very sufficient unless you're doing ptychotomo reconstruction. Even you do, `gradient accumulation` can probably reduce a lot of the memory usage so using multiple GPU for more VRAM is more relevant in ML community than in ptychorgaphy.
-3. Due to the GPU-GPU internection is usually much slower even with NVlink, the multiGPU speed up is usually sublinear, and I've been getting 1.3-1.7x for common ML models. It might be a better use of time to try a better initialization, better optimizer, or just fine tune the learning rate if you want faster ptychogrphic convergence.
+Although multi-GPU might seem attempting, the reality is:
+1. It's much harder to code, maintain, and make it compatible with different hardware setup from different users.
+2. Typical iterative ptychorgaphic reconstruction algorithms require fairly small VRAM even if we load the entire dataset. 20 GB of VRAM is very sufficient unless you're doing ptychotomo reconstruction. Even you do, `gradient accumulation` (introduced in PtyRAD beta2.5) can probably reduce most of the memory requitement. Therefore, using multiple GPU for more VRAM is more relevant in ML community than in ptychorgaphy.
+3. Due to the GPU-GPU inter-communication is usually much slower than the internal VRAM-CUDA inner communication in a single GPU, the multi-GPU speed up is usually sublinear, and I've been getting 1.3-1.7x for common ML models. `NVLink` is arguably a must have for multi-GPU setup and it's only available for data center cards. Better initialization, better optimizer, or just fine tune the learning rate might get you much more meaningful speedful of ptychogrphic convergence.
 
 Chia-Hao Lee, cl2696@cornell.edu
-Last update: 2024.09.22
+Last update: 2024.09.24
 
 ---
 
 ## Current status
-- 2024.09.23: Code runs for python, accelerate with 1 GPU, accelerate with 2 GPUs, but no speed up. I'm suspecting it's the `split_batches` not working on my custom `BatchesDataset`
+- 2024.09.23: Code runs for python, accelerate with 1 GPU, accelerate with 2 GPUs, but no speed up. I'm suspecting it's the `split_batches` not working on my custom `BatchesDataset`. Tested til 5AM and confirms it's the `BatchesDataset` and `split_batches` were not set correctly. With `IndicesDataset` it's running more correctly, although it's indeed slower than 1 GPU. Another issue is the reconstruction is incorrect when run via `accelerate`, turns out it's the Complex probe not handled correctly in PyTorch 2.4 even though it didn't complain. Need to use the `torch.view_as_complex` trick to get away with it.
+- 2024.09.24: Clean up the code. It's running smoothly locally in jupyter notebook, in cluster via python or accelerate. Model saving/loading without any issue.
+
+## multi-GPU speed up table
+- I did quick tests using the full A100 node with tBL-WSe2 dataset
+- 128x128x128x128 4D-dataset, 6 probe modes with 12 slices of 1 Ang, 1 object mode
+- Batch size from 32 to 4096, no gradient accumulation
+- 1 shot of 10 iterations, save figures every 5 iters (saving is slow so I'm only reporting the averaged iter time)
+
+![Iteration_time_vs_batch_size](./docs/20240924_multi-GPU/iteration_time_vs_batch_size.png)
+
+## Some multi-GPU todo
+- Check the gradient accumulation setup with multi-GPU
+- Find workaround to actually use the `GROUP_MODE` indices for multi-GPU (currently the DataLoader can only do random indices)
+- Decide whether to work with hypertune or not. Currently I'd prefer let each BO trials takes a full GPU for simplicity
 
 ## Lesson learned
 - PyTorch hasn't support distributed training (multi GPU) on MIG yet. See [here](https://discuss.pytorch.org/t/parallel-training-with-invidia-migs/159445) and [here](https://github.com/pytorch/pytorch/issues/130181)
-- `accelerate` from HuggingFace is essentially a wrapper over PyTorch's DDP, and DDP has a lot of restrictions.
+- `accelerate` from HuggingFace is essentially a wrapper over PyTorch's DDP (DistributedDataParallel), and DDP has quite some details.
 - Note that when `accelerate` fails to run things in DDP it "may not" throw any error......
-- `amp` doesn't support ComplexFloat yet
-- NCCL doesn't support Windows or Mac. See [here](https://discuss.pytorch.org/t/nccl-for-windows/203543). So the workaround is to use `gloo` instead of `NCCL` as the backend as described [here] (https://discuss.pytorch.org/t/how-to-set-backend-to-gloo-on-windows/161448/3)
-- DDP is also a wrapper over original `model`, so we can't do `model.<attribute>` directly. The error looks like `AttributeError: 'DistributedDataParallel' object has no attribute <attribute>`. Although `model.module.<attribute>` can be used to access the entry, it's not single/multiGPU compatible anymore, a better way to handle this is to create a `get_attribute` method inside `model` and check if there's a `module` attached.
-- PyTorch 2.1 doesn't support complex valued network for DDP, it's a NCCL issue and will give `RuntimeError: Input tensor data type is not supported for NCCL process group: ComplexFloat`. [PyTorch 2.4 handles it internally to avoid the error.](https://github.com/pytorch/pytorch/issues/71613) 
-- Windows does not support `NCCL` backend and we need to do `import torch.distributed as dist` and then `dist.init_process_group(backend='gloo')`.
-- The key to DDP or distributed training is through "device placement", `accelerate` provides `.prepare()` wrapper function to do it, but for custom PyTorch model (`torch.nn.Module`) the `.to()` method might not work as expected, because model is just an artificial construct that holds parameters. In order to get `.prepare(model)` or `model.to(device)` working properly, you must "register" the model parameters with either `nn.Parameter()` or `register_buffer()`. See [here] (https://discuss.pytorch.org/t/what-is-the-difference-between-register-buffer-and-register-parameter-of-nn-module/32723) and [here] (https://discuss.pytorch.org/t/why-model-to-device-wouldnt-put-tensors-on-a-custom-layer-to-the-same-device/17964/10) for more information.
+- `amp` doesn't support ComplexFloat yet, but it's unclear whether the `torch.view_as_real` trick will work or not
+- NCCL doesn't support Windows or Mac. See [here](https://discuss.pytorch.org/t/nccl-for-windows/203543). So the workaround is to use `gloo` instead of `NCCL` as the backend as described [here] (https://discuss.pytorch.org/t/how-to-set-backend-to-gloo-on-windows/161448/3) on Windows. Do `import torch.distributed as dist` and then `dist.init_process_group(backend='gloo')` on Windows or Mac, although it's probably much easier to do things on Linux machines.
+- DDP is also a wrapper over original `model`, so we can't do `model.<attribute>` directly. The error looks like `AttributeError: 'DistributedDataParallel' object has no attribute <attribute>`. Although `model.module.<attribute>` can be used to access the entry, it's not single/multi-GPU compatible anymore, a better way to handle this is to create some `get_attribute` method inside `model` and check if there's a `module` attached to handle it internally.
+- PyTorch 2.1 doesn't support complex valued network for DDP, it's a NCCL issue and will give `RuntimeError: Input tensor data type is not supported for NCCL process group: ComplexFloat`. [PyTorch 2.4 handles it internally to avoid the error.](https://github.com/pytorch/pytorch/issues/71613)
+- Follow up that the internal solution for Complex in NCCL did not really handle PtyRAD model correctly and gives incorrect reconstruction without throwing any error, so I have to do some `torch.view_as_complex` trick to work around
+- The key to DDP or distributed training is through "device placement", `accelerate` provides `.prepare()` wrapper function to do it, but for custom PyTorch model (`torch.nn.Module`) the `.to()` method might not work as expected, because custom model is just an artificial construct that holds parameters. In order to get `.prepare(model)` or `model.to(device)` working properly, you must "register" the model parameters with either `nn.Parameter()` or `register_buffer()`. See [here] (https://discuss.pytorch.org/t/what-is-the-difference-between-register-buffer-and-register-parameter-of-nn-module/32723) and [here] (https://discuss.pytorch.org/t/why-model-to-device-wouldnt-put-tensors-on-a-custom-layer-to-the-same-device/17964/10) for more information.
 - iteration-wise constraints might change the grad layout and gives you warning as `UserWarning: Grad strides do not match bucket view strides. This may indicate grad was not created according to the gradient layout contract, or that the param's strides changed since DDP was constructed.  This is not an error, but may impair performance.` Use `params=params.contiguous()` after `.permute()` or `.reshape` to avoid the warning.
-
+- Overall speaking, in order to get all the juice from ML community we have to code in their flavor and it's been quite a learning process. 
+- `torch.compile` for JIT does not support Windows, and it also does not support complex value in the graph
 
 ### References for multi gpu ptychorgaphy
 - https://opg.optica.org/oe/fulltext.cfm?uri=oe-22-26-32082&id=306954

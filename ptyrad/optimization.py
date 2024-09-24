@@ -220,10 +220,10 @@ class CombinedConstraint(torch.nn.Module):
         ''' Apply orthogonality constraint to probe modes '''
         ortho_pmode_freq = self.constraint_params['ortho_pmode']['freq']
         if ortho_pmode_freq is not None and niter % ortho_pmode_freq == 0:
-            model.opt_probe.data = orthogonalize_modes_vec(model.opt_probe, sort=True)
-            probe_int = model.opt_probe.abs().pow(2)
+            model.opt_probe.data = torch.view_as_real(orthogonalize_modes_vec(model.get_complex_probe_view(), sort=True).contiguous()) # Note that model stores the complex probe as a (pmode, Ny, Nx, 2) float tensor (real view) so we need to do some real-complex view conversion.
+            probe_int = model.get_complex_probe_view().abs().pow(2)
             probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
-            vprint(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
+            vprint(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {probe_int.sum():.4f}", verbose=self.verbose)
 
     def apply_probe_mask_k(self, model, niter):
         ''' Apply probe amplitude constraint in Fourier space '''
@@ -237,30 +237,33 @@ class CombinedConstraint(torch.nn.Module):
         relative_width    = self.constraint_params['probe_mask_k']['width']
         power_thresh      = self.constraint_params['probe_mask_k']['power_thresh']
         if probe_mask_k_freq is not None and niter % probe_mask_k_freq == 0:
-            Npix = model.opt_probe.size(-1)
-            powers = model.opt_probe.abs().pow(2).sum((-2,-1)) / model.opt_probe.abs().pow(2).sum()
+            probe = model.get_complex_probe_view()
+            Npix = probe.size(-1)
+            powers = probe.abs().pow(2).sum((-2,-1)) / probe.abs().pow(2).sum()
             powers_cumsum = powers.cumsum(0)
             pmode_index = (powers_cumsum > power_thresh).nonzero()[0].item() # This gives the pmode index that the cumulative power along mode dimension is greater than the power_thresh and should have mask extend to this index
-            mask = torch.ones_like(model.opt_probe, dtype=torch.float32, device=model.device)
+            mask = torch.ones_like(probe, dtype=torch.float32, device=model.device)
             mask_value = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
             mask[:pmode_index+1] = mask_value
-            probe_k = fftshift2 (fft2(ifftshift2(model.opt_probe), norm='ortho')) # probe_k at center for later masking
+            probe_k = fftshift2 (fft2(ifftshift2(probe), norm='ortho')) # probe_k at center for later masking
             probe_r = fftshift2(ifft2(ifftshift2(mask * probe_k),  norm='ortho')) # probe_r at center. Note that the norm='ortho' is explicitly specified but not needed for a round-trip
-            
+            probe_int = model.get_complex_probe_view().abs().pow(2)
             # Re-sort the probe modes, note that the masked strong modes might be swapping order with unmasked weak modes
-            model.opt_probe.data = sort_by_mode_int(probe_r)
-            vprint(f"Apply Fourier-space probe amplitude constraint at iter {niter}, pmode_index = {pmode_index} when power_thresh = {power_thresh}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
+            model.opt_probe.data = torch.view_as_real(sort_by_mode_int(probe_r))
+            vprint(f"Apply Fourier-space probe amplitude constraint at iter {niter}, pmode_index = {pmode_index} when power_thresh = {power_thresh}, probe int sum = {probe_int.sum():.4f}", verbose=self.verbose)
     
     def apply_fix_probe_int(self, model, niter):
         ''' Apply probe intensity constraint '''
         # Note that the probe intensity fluctuation (std/mean) is typically only 0.5%, there's very little point to do a position-dependent probe intensity constraint
         # Therefore, a mean probe intensity is used here as the target intensity
         fix_probe_int_freq = self.constraint_params['fix_probe_int']['freq']
-        if fix_probe_int_freq is not None and niter % fix_probe_int_freq == 0: 
-            current_amp = model.opt_probe.abs().pow(2).sum().pow(0.5)
+        if fix_probe_int_freq is not None and niter % fix_probe_int_freq == 0:
+            probe = model.get_complex_probe_view()
+            current_amp = probe.abs().pow(2).sum().pow(0.5)
             target_amp  = model.probe_int_sum**0.5   
-            model.opt_probe.data = model.opt_probe * target_amp/current_amp
-            vprint(f"Apply fix probe int constraint at iter {niter}, probe int sum = {model.opt_probe.abs().pow(2).sum():.4f}", verbose=self.verbose)
+            model.opt_probe.data = torch.view_as_real(probe * target_amp/current_amp)
+            probe_int = model.get_complex_probe_view().abs().pow(2)
+            vprint(f"Apply fix probe int constraint at iter {niter}, probe int sum = {probe_int.sum():.4f}", verbose=self.verbose)
             
     def apply_obj_rblur(self, model, niter):
         ''' Apply Gaussian blur to object, this only applies to the last 2 dimension (...,H,W) '''

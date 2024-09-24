@@ -241,8 +241,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']
-    pmode        = model.opt_probe.size(0)
-    dp_size      = model.measurements.size(1)
+    pmode        = model.get_complex_probe_view().size(0)
+    dp_size      = model.get_complex_probe_view().size(-1)
     obj_shape    = model.opt_objp.shape
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
@@ -535,14 +535,14 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_t, nite
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
-
-    probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
+    probe      = model.get_complex_probe_view() 
+    probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
     objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
     obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
     # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
-    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
+    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(probe.detach().cpu().numpy().shape[-2:])//2
     y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
     x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     

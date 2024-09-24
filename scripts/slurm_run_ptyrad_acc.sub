@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32                    # number of CPUs required for each task
 #SBATCH --gres=gpu:a100:2                 # request a GPU #gpu:a100:1, gpu:2g.20gb:1
 #SBATCH --time=00:10:00                      # Time limit hrs:min:sec
-#SBATCH --output=logs/log_job_%j_ptyrad_acc2_no_split.txt  # Standard output and error log to /logs, you need to create this folder first!
+#SBATCH --output=logs/log_job_%j_ptyrad_benchmark_acc2.txt  # Standard output and error log to /logs, you need to create this folder first!
 
 pwd; hostname; date
 
@@ -24,9 +24,7 @@ nvidia-smi
 # accelerate test
 # Run the above line to check the accelerate configuration
 
-# python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
-accelerate launch --multi_gpu --num_processes=2 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
-# accelerate launch --num_processes=1 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
-# accelerate launch ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1
+# python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs typical python on 1 GPU
+accelerate launch --multi_gpu --num_processes=2 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs via `accelerate`
 
 date
