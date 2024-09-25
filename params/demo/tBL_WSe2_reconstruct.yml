@@ -7,7 +7,8 @@ exp_params : {
     'Npix'              : 128, # type: integer, unit: px (k-space). Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'dx_spec'           : 0.1494, # type: float, unit: Ang. Real space pixel size calibration at specimen plane (object, probe, and probe positions share the same pixel size)
     'defocus'           : 0, # type: float, unit: Ang. Defocus (-C1) aberration coefficient for the probe. Positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
-    'c3'                : 0, # type: float, unit: Ang. Spherical aberration coefficient (Cs) for the probe
+    'c3'                : 0, # type: float, unit: Ang. 3rd-order spherical aberration coefficient (C3) for the simulated probe
+    'c5'                : 0, # type: float, unit: Ang. 5th-order spherical aberration coefficient (C5) for the simulated probe
     'z_distance'        : 12, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
     'Nlayer'            : 1, # type: int, unit: #. Number of slices for multislice object
     'N_scans'           : 16384, # type: int, unit: #. Number of probe positions (or equivalently diffraction patterns since 1 DP / position)
@@ -62,12 +63,14 @@ hypertune_params : {
     'study_name'     : 'tBL_WSe2', # type: str. Name of the hypertune record (i.e., study). Hypertune of different dataset or different search space (i.e., different optimizable parameters) are encouraged to use different study name or even separate database file
     'tune_params'    : {
         'conv_angle' : {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
-        'defocus'    : {'state': false, 'min': -50, 'max': 50, 'step': 10},
+        'defocus'    : {'state': true, 'min': -50, 'max': 50, 'step': null},
+        'c3'         : {'state': true, 'min': 4000, 'max': 10000, 'step': null},
+        'c5'         : {'state': true, 'min': 50000, 'max': 100000, 'step': 5000},
         'z_distance' : {'state': false, 'min': 4, 'max': 8, 'step': 0.5},
-        'scale'      : {'state': true, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
-        'asymmetry'  : {'state': true, 'min': -0.2, 'max': 0.2, 'step': 0.05},
-        'rotation'   : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
-        'shear'      : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
+        'scale'      : {'state': false, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
+        'asymmetry'  : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
+        'rotation'   : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'shear'      : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
         'tilt_y'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}, # This refers to the 'init_tilts' under 'source_params['tilt_params']['init_tilts']'
         'tilt_x'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
     }
