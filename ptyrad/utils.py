@@ -844,21 +844,21 @@ def make_stem_probe(params_dict, verbose=True):
     from numpy.fft import fftfreq, fftshift, ifft2, ifftshift
     
     ## Basic params
-    voltage     = params_dict["kv"]         # Ang
-    conv_angle  = params_dict["conv_angle"] # mrad
-    Npix        = params_dict["Npix"]       # Number of pixel of thr detector/probe
-    dx          = params_dict["dx"]         # px size in Angstrom
+    voltage     = float(params_dict["kv"])         # Ang
+    conv_angle  = float(params_dict["conv_angle"]) # mrad
+    Npix        = int(params_dict["Npix"])       # Number of pixel of thr detector/probe
+    dx          = float(params_dict["dx"])         # px size in Angstrom
     ## Aberration coefficients
-    df          = params_dict["df"] #first-order aberration (defocus) in angstrom
-    c3          = params_dict["c3"] #third-order spherical aberration in angstrom
-    c5          = params_dict["c5"] #fifth-order spherical aberration in angstrom
-    c7          = params_dict["c7"] #seventh-order spherical aberration in angstrom
-    f_a2        = params_dict["f_a2"] #twofold astigmatism in angstrom
-    f_a3        = params_dict["f_a3"] #threefold astigmatism in angstrom
-    f_c3        = params_dict["f_c3"] #coma in angstrom
-    theta_a2    = params_dict["theta_a2"] #azimuthal orientation in radian
-    theta_a3    = params_dict["theta_a3"] #azimuthal orientation in radian
-    theta_c3    = params_dict["theta_c3"] #azimuthal orientation in radian
+    df          = float(params_dict["df"]) #first-order aberration (defocus) in angstrom
+    c3          = float(params_dict["c3"]) #third-order spherical aberration in angstrom
+    c5          = float(params_dict["c5"]) #fifth-order spherical aberration in angstrom
+    c7          = float(params_dict["c7"]) #seventh-order spherical aberration in angstrom
+    f_a2        = float(params_dict["f_a2"]) #twofold astigmatism in angstrom
+    f_a3        = float(params_dict["f_a3"]) #threefold astigmatism in angstrom
+    f_c3        = float(params_dict["f_c3"]) #coma in angstrom
+    theta_a2    = float(params_dict["theta_a2"]) #azimuthal orientation in radian
+    theta_a3    = float(params_dict["theta_a3"]) #azimuthal orientation in radian
+    theta_c3    = float(params_dict["theta_c3"]) #azimuthal orientation in radian
     shifts      = params_dict["shifts"] #shift probe center in angstrom
     
     # Calculate some variables
@@ -871,7 +871,7 @@ def make_stem_probe(params_dict, verbose=True):
     # Make k space sampling and probe forming aperture
     kx = fftshift(fftfreq(Npix, 1/Npix))
     # kx = np.linspace(-np.floor(Npix/2),np.ceil(Npix/2)-1,Npix)
-    [kX,kY] = np.meshgrid(kx,kx, indexing='xy')
+    kX,kY = np.meshgrid(kx,kx, indexing='xy')
 
     kX = kX*dk
     kY = kY*dk
