@@ -39,7 +39,8 @@ def multislice_forward_model_vec_all(object_patches, omode_occu, probe, H, eps=1
     """
     
     # Cast the object back to actual complex tensor
-    object_cplx = torch.polar(object_patches[...,0], object_patches[...,1]) # (N, omode, Nz, Ny, Nx)
+    # object_cplx = torch.polar(object_patches[...,0], object_patches[...,1]) # (N, omode, Nz, Ny, Nx)
+    object_cplx = object_patches[...,0] * torch.exp(1.0j * object_patches[...,1]) # (N, omode, Nz, Ny, Nx). Workaround because torch.polar on CUDA doesn't support Half precision yet
     n_slices = object_cplx.shape[2]
     
     # Expand psi to include omode dimension

@@ -15,7 +15,7 @@ Last update: 2024.09.24
 
 ## Current status
 - 2024.09.23: Code runs for python, accelerate with 1 GPU, accelerate with 2 GPUs, but no speed up. I'm suspecting it's the `split_batches` not working on my custom `BatchesDataset`. Tested til 5AM and confirms it's the `BatchesDataset` and `split_batches` were not set correctly. With `IndicesDataset` it's running more correctly, although it's indeed slower than 1 GPU. Another issue is the reconstruction is incorrect when run via `accelerate`, turns out it's the Complex probe not handled correctly in PyTorch 2.4 even though it didn't complain. Need to use the `torch.view_as_complex` trick to get away with it.
-- 2024.09.24: Clean up the code. It's running smoothly locally in jupyter notebook, in cluster via python or accelerate. Model saving/loading without any issue.
+- 2024.09.24: Clean up the code. It's running smoothly locally in jupyter notebook, in cluster via python or accelerate. Model saving/loading without any issue. Add the `mixed_precision_type` support. Tried the `base_precision_type` for fix precision attempt for 'bf16' and 'fp16' but it would get stuck at the backward part. No solution yet, fall back to `amp` seems to be the only option.
 
 ## multi-GPU speed up table
 - I did quick tests using the full A100 node with tBL-WSe2 dataset
@@ -34,7 +34,8 @@ Last update: 2024.09.24
 - PyTorch hasn't support distributed training (multi GPU) on MIG yet. See [here](https://discuss.pytorch.org/t/parallel-training-with-invidia-migs/159445) and [here](https://github.com/pytorch/pytorch/issues/130181)
 - `accelerate` from HuggingFace is essentially a wrapper over PyTorch's DDP (DistributedDataParallel), and DDP has quite some details.
 - Note that when `accelerate` fails to run things in DDP it "may not" throw any error......
-- `amp` doesn't support ComplexFloat yet, but it's unclear whether the `torch.view_as_real` trick will work or not
+- `amp` doesn't support ComplexFloat yet, but seems like `torch.view_as_real` can work!
+- Although most operation in `fp16` and `bf16` can work, the final `.backward` hasn't been successful and `amp` is probably always needed for the mixed-precision purpose
 - NCCL doesn't support Windows or Mac. See [here](https://discuss.pytorch.org/t/nccl-for-windows/203543). So the workaround is to use `gloo` instead of `NCCL` as the backend as described [here] (https://discuss.pytorch.org/t/how-to-set-backend-to-gloo-on-windows/161448/3) on Windows. Do `import torch.distributed as dist` and then `dist.init_process_group(backend='gloo')` on Windows or Mac, although it's probably much easier to do things on Linux machines.
 - DDP is also a wrapper over original `model`, so we can't do `model.<attribute>` directly. The error looks like `AttributeError: 'DistributedDataParallel' object has no attribute <attribute>`. Although `model.module.<attribute>` can be used to access the entry, it's not single/multi-GPU compatible anymore, a better way to handle this is to create some `get_attribute` method inside `model` and check if there's a `module` attached to handle it internally.
 - PyTorch 2.1 doesn't support complex valued network for DDP, it's a NCCL issue and will give `RuntimeError: Input tensor data type is not supported for NCCL process group: ComplexFloat`. [PyTorch 2.4 handles it internally to avoid the error.](https://github.com/pytorch/pytorch/issues/71613)
@@ -94,6 +95,27 @@ RuntimeError: "_amp_foreach_non_finite_check_and_unscale_cuda" not implemented f
 ### 2024.09.21 Error message for unused parameters
 RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss. You can enable unused parameter detection by passing the keyword argument `find_unused_parameters=True` to `torch.nn.parallel.DistributedDataParallel`, and by making sure all `forward` function outputs participate in calculating loss. If you already have done the above, then the distributed data parallel module wasn't able to locate the output tensors in the return value of your module's `forward` function. Please include the loss function and the structure of the return value of `forward` of your module when reporting this issue (e.g. list, dict, iterable). Parameter indices which did not receive grad for rank 1: 6. In addition, you can set the environment variable TORCH_DISTRIBUTED_DEBUG to either INFO or DETAIL to print out information about which particular parameters did not receive gradient on this rank as part of this error
 
-
-
-
+### 2024.09.24 Error message for half precision during .backward()
+Traceback (most recent call last):
+  File "/home/fs01/cl2696/workspace/ptyrad/./scripts/run_ptyrad.py", line 38, in <module>
+    ptycho_solver.run()
+  File "/home/fs01/cl2696/workspace/ptyrad/ptyrad/reconstruction.py", line 178, in run
+    self.reconstruct()
+  File "/home/fs01/cl2696/workspace/ptyrad/ptyrad/reconstruction.py", line 124, in reconstruct
+    recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, self.dl, output_path, acc=self.accelerator)
+  File "/home/fs01/cl2696/workspace/ptyrad/ptyrad/reconstruction.py", line 312, in recon_loop
+    batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/fs01/cl2696/workspace/ptyrad/ptyrad/reconstruction.py", line 386, in recon_step
+    acc.backward(loss_batch)
+  File "/home/fs01/cl2696/anaconda3/envs/ptyrad_acc/lib/python3.12/site-packages/accelerate/accelerator.py", line 2196, in backward
+    loss.backward(**kwargs)
+  File "/home/fs01/cl2696/anaconda3/envs/ptyrad_acc/lib/python3.12/site-packages/torch/_tensor.py", line 521, in backward
+    torch.autograd.backward(
+  File "/home/fs01/cl2696/anaconda3/envs/ptyrad_acc/lib/python3.12/site-packages/torch/autograd/__init__.py", line 289, in backward
+    _engine_run_backward(
+  File "/home/fs01/cl2696/anaconda3/envs/ptyrad_acc/lib/python3.12/site-packages/torch/autograd/graph.py", line 769, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Found dtype Half but expected Float
+Wed Sep 25 00:42:48 EDT 2024

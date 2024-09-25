@@ -5,7 +5,7 @@ import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
-from ptyrad.utils import add_tilts_to_propagator, imshift_batch, vprint
+from ptyrad.utils import add_tilts_to_propagator, get_compatible_complex_dtype, imshift_batch, str_to_dtype, vprint
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -78,13 +78,17 @@ class PtychoAD(torch.nn.Module):
             Performs the forward pass and computes diffraction patterns for given indices.
     """
 
-    def __init__(self, init_variables, model_params, device, verbose=True):
+    def __init__(self, init_variables, model_params, base_precision_str='bfloat16', device='cuda', verbose=True):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
+            # Setup model behaviors
+            self.base_precision_type    = str_to_dtype(base_precision_str)
+            self.cplx_precision_type    = get_compatible_complex_dtype(base_precision_str)
             self.device                 = device
             self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
+
             # Parse the learning rate and start iter for optimizable tensors
             start_iter_dict = {}
             lr_dict = {}
@@ -95,26 +99,30 @@ class PtychoAD(torch.nn.Module):
             self.start_iter             = start_iter_dict
             self.lr_params              = lr_dict
             
-            self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device)))
-            self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device)))
-            self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device))
-            self.opt_probe              = nn.Parameter(torch.view_as_real(torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device))) # The `torch.view_as_real` allows correct handling of DDP via NCCL even in PyTorch 2.4
-            self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device))
-            self.register_buffer        ('omode_occu', torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device))
-            self.register_buffer        ('H',          torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device))
-            self.register_buffer        ('measurements', torch.tensor(init_variables['measurements'],    dtype=torch.float32,   device=device))
-            self.N_scan_slow            = torch.tensor(init_variables['N_scan_slow'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.N_scan_fast            = torch.tensor(init_variables['N_scan_fast'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
-            self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
-            self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
+            # Optimizable parameters
+            self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],    device=device)).to(self.base_precision_type))
+            self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],  device=device)).to(self.base_precision_type))
+            self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],                dtype=self.base_precision_type, device=device))
+            self.opt_probe              = nn.Parameter(torch.view_as_real(torch.tensor(init_variables['probe'], dtype=self.cplx_precision_type, device=device))) # The `torch.view_as_real` allows correct handling of DDP via NCCL even in PyTorch 2.4
+            self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],         dtype=self.base_precision_type, device=device))
+            
+            # Buffers are used during forward pass
+            self.register_buffer      ('omode_occu',   torch.tensor(init_variables['omode_occu'],       dtype=self.base_precision_type, device=device))
+            self.register_buffer      ('H',            torch.tensor(init_variables['H'],                dtype=self.cplx_precision_type, device=device))
+            self.register_buffer      ('measurements', torch.tensor(init_variables['measurements'],     dtype=self.base_precision_type, device=device))
+            self.register_buffer      ('N_scan_slow',  torch.tensor(init_variables['N_scan_slow'],      dtype=torch.int16, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('N_scan_fast',  torch.tensor(init_variables['N_scan_fast'],      dtype=torch.int16, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('crop_pos',     torch.tensor(init_variables['crop_pos'],         dtype=torch.int16, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('z_distance',   torch.tensor(init_variables['z_distance'],       dtype=self.base_precision_type, device=device))# Saving this for reference
+            self.register_buffer      ('dx',           torch.tensor(init_variables['dx'],               dtype=self.base_precision_type, device=device))# Saving this for reference
+            self.register_buffer      ('dk',           torch.tensor(init_variables['dk'],               dtype=self.base_precision_type, device=device))# Saving this for reference
+
             self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
             self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
             
-            # Create grids for shifting
+            # Create grids for shifting the probe
             self.create_grids()
 
             # Create a dictionary to store the optimizable tensors
@@ -125,6 +133,7 @@ class PtychoAD(torch.nn.Module):
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
+            self.half()
     
     def get_complex_probe_view(self):
         """ Retrieve complex view of the probe """
@@ -142,9 +151,9 @@ class PtychoAD(torch.nn.Module):
         Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
         
         rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
-                                torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
+                                  torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
         roy, rox = torch.meshgrid(torch.arange(Noy, dtype=torch.int32, device=device), 
-                                torch.arange(Nox, dtype=torch.int32, device=device), indexing='ij') # real space grid for object in y and x directions
+                                  torch.arange(Nox, dtype=torch.int32, device=device), indexing='ij') # real space grid for object in y and x directions
         
         self.shift_probes_grid = torch.stack([rpy/Npy, rpx/Npx], dim=0) # (2,Npy,Npx), normalized k-space grid stack for sub-px probe shifting 
         self.shift_object_grid = torch.stack([roy/Noy, rox/Nox], dim=0) # (2,Noy,Nox), normalized k-space grid stack for sub-px object shifting

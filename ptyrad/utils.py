@@ -12,6 +12,28 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def str_to_dtype(dtype_str):
+    dtype_mapping = {
+        'float16':    torch.float16,
+        'float32':    torch.float32,
+        'float64':    torch.float64,
+        'bfloat16':   torch.bfloat16,     # Brain floating point type (used for mixed precision)
+        'complex64':  torch.complex64,
+        'complex128': torch.complex128,
+    }
+    return dtype_mapping.get(dtype_str, torch.float32)  # Default to float32 if not found
+
+def get_compatible_complex_dtype(float_type_str):
+    """Returns the corresponding complex type based on the base precision type."""
+    # Map base precision to their respective complex types
+    complex_type_mapping = {
+        'float16':  torch.complex32,   # Complex32 for half precision (fp16)
+        'bfloat16': torch.complex32,  # Complex32 for bfloat16
+        'float32':  torch.complex64,   # Complex64 for single precision (fp32)
+        'float64':  torch.complex128,  # Complex128 for double precision (fp64)
+    }
+    return complex_type_mapping.get(float_type_str, torch.complex64)  # Default to complex64
+
 def cycle(it):
     while True:
         for el in it:
@@ -250,7 +272,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
-    init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
+    init_tilts   = model.opt_obj_tilts.detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
     init_conv_angle = exp_params['conv_angle']
     init_defocus = exp_params['defocus']
     optimizer_str = model.optimizer_params['name']
@@ -275,7 +297,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # Attach obj shape and dz
     output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
-        z_distance = model.z_distance.cpu().numpy().round(2)
+        z_distance = model.z_distance.detach().to(torch.float32).cpu().numpy().round(2) # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
         output_path += f"_dz{z_distance:.3g}"
     
     # Attach optimizer name (optional)
@@ -536,13 +558,13 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_t, nite
         save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
     probe      = model.get_complex_probe_view() 
-    probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
-    objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
-    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
+    probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
+    objp       = model.opt_objp.detach().to(torch.float32).cpu().numpy()
+    obja       = model.opt_obja.detach().to(torch.float32).cpu().numpy()
     # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
-    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(probe.detach().cpu().numpy().shape[-2:])//2
+    crop_pos   = model.crop_pos[indices].detach().cpu().numpy() + np.array(probe.shape[-2:])//2
     y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
     x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     
@@ -782,7 +804,7 @@ def test_loss_fn(model, indices, loss_fn):
 
         # Print loss_name and loss_value with padding
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
-            print(f"{loss_name.ljust(11)}: {loss_value.detach().cpu().numpy():.8f}")
+            print(f"{loss_name.ljust(11)}: {loss_value.detach().cpu().to(torch.float32).numpy():.8f}") # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
     return
 
 def test_constraint_fn(test_model, constraint_fn, plot_forward_pass):
@@ -1027,9 +1049,9 @@ def check_modes_ortho(tensor, atol = 2e-5):
         for j in range(i + 1, tensor.shape[0]):
             dot_product = torch.dot(tensor[i].view(-1), tensor[j].view(-1))
             if torch.allclose(dot_product, torch.tensor(0., dtype=dot_product.dtype, device=dot_product.device), atol=atol):
-                print(f"Modes {i} and {j} are orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
+                print(f"Modes {i} and {j} are orthogonal with abs(dot) = {dot_product.abs().detach().cpu().to(torch.float32).numpy()}")
             else:
-                print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().numpy()}")
+                print(f"Modes {i} and {j} are not orthogonal with abs(dot) = {dot_product.abs().detach().cpu().to(torch.float32).numpy()}")
 
 def get_center_of_mass(image, corner_centered=False):
     """ Finds and returns the center of mass of an real-valued 2/3D tensor """

@@ -1,14 +1,13 @@
 ## Define the loss function class with loss and regularizations
 ## Define the constraint class for iter-wist constraints
 
-import numpy as np
 import torch
 from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn
 from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.data_io import load_pt
-from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint
+from ptyrad.utils import fftshift2, gaussian_blur_1d, str_to_dtype, ifftshift2, make_sigmoid_mask, vprint
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
@@ -26,7 +25,7 @@ class CombinedLoss(torch.nn.Module):
 
     Args:
         loss_params (dict): A dictionary containing the configuration and weights for each of the loss components.
-        device (str, optional): The device on which the computations will be performed, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+        device (str, optional): The device on which the computations will be performed, e.g., 'cuda'. Defaults to 'cuda'.
 
     Methods:
         get_loss_single(model_DP, measured_DP):
@@ -47,11 +46,13 @@ class CombinedLoss(torch.nn.Module):
         forward(model_DP, measured_DP, object_patches, omode_occu):
             Combines all the loss components and returns the total loss and individual losses.
     """
-    def __init__(self, loss_params, device='cuda:0'):
+    def __init__(self, loss_params, base_precision_str='float32', device='cuda'):
         super(CombinedLoss, self).__init__()
+        self.base_precision_type = str_to_dtype(base_precision_str)
         self.device = device
         self.loss_params = loss_params
         self.mse = torch.nn.MSELoss(reduction='mean')
+        self.half()
 
     def get_loss_single(self, model_DP, measured_DP):
         # Calculate loss_single
@@ -65,7 +66,7 @@ class CombinedLoss(torch.nn.Module):
             loss_single = self.mse(model_DP.pow(dp_pow), measured_DP.pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_single *= single_params['weight']
         else:
-            loss_single = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
+            loss_single = torch.tensor(0, dtype=self.base_precision_type, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         return loss_single
     
     def get_loss_poissn(self, model_DP, measured_DP):
@@ -89,7 +90,7 @@ class CombinedLoss(torch.nn.Module):
             loss_poissn = -torch.mean(measured_DP.pow(dp_pow) * torch.log(model_DP.pow(dp_pow) + eps) - model_DP.pow(dp_pow)) / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_poissn *= poissn_params['weight']
         else:
-            loss_poissn = torch.tensor(0, dtype=torch.float32, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
+            loss_poissn = torch.tensor(0, dtype=self.base_precision_type, device=self.device) # Return a scalar 0 tensor so that the append/sum would work normally without NaN
         return loss_poissn
     
     def get_loss_pacbed(self, model_DP, measured_DP):
@@ -100,7 +101,7 @@ class CombinedLoss(torch.nn.Module):
             loss_pacbed = self.mse(model_DP.mean(0).pow(dp_pow), measured_DP.mean(0).pow(dp_pow))**0.5
             loss_pacbed *= pacbed_params['weight']
         else:
-            loss_pacbed = torch.tensor(0, dtype=torch.float32, device=self.device)
+            loss_pacbed = torch.tensor(0, dtype=self.base_precision_type, device=self.device)
         return loss_pacbed
         
     def get_loss_sparse(self, objp_patches, omode_occu):
@@ -114,7 +115,7 @@ class CombinedLoss(torch.nn.Module):
             ln_order = sparse_params['ln_order']
             loss_sparse = sparse_params['weight'] * (torch.mean(objp_patches.abs().pow(ln_order), dim=(0,2,3,4)).pow(1/ln_order) * omode_occu).sum()
         else:
-            loss_sparse = torch.tensor(0, dtype=torch.float32, device=self.device)
+            loss_sparse = torch.tensor(0, dtype=self.base_precision_type, device=self.device)
         return loss_sparse
     
     def get_loss_simlar(self, object_patches, omode_occu):
@@ -128,7 +129,7 @@ class CombinedLoss(torch.nn.Module):
             scale_factor = simlar_params['scale_factor']
             obja_patches = object_patches[...,0]
             objp_patches = object_patches[...,1]
-            temp_loss = torch.tensor(0, dtype=torch.float32, device=self.device)
+            temp_loss = torch.tensor(0, dtype=self.base_precision_type, device=self.device)
             
             if obj_type in ['amplitude', 'both']:
                 if obj_blur_std is not None and obj_blur_std != 0:
@@ -149,7 +150,7 @@ class CombinedLoss(torch.nn.Module):
                 temp_loss += (objp_patches * omode_occu[:,None,None,None]).std(1).mean()
             loss_simlar = simlar_params['weight'] * temp_loss
         else:
-            loss_simlar = torch.tensor(0, dtype=torch.float32, device=self.device)
+            loss_simlar = torch.tensor(0, dtype=self.base_precision_type, device=self.device)
         return loss_simlar
     
     def forward(self, model_DP, measured_DP, object_patches, omode_occu):
@@ -173,7 +174,7 @@ class CombinedConstraint(torch.nn.Module):
     Args:
         constraint_params (dict): A dictionary containing the configuration for each constraint. Each constraint should have a 
             frequency and other parameters necessary for its application.
-        device (str, optional): The device on which the tensors are located (e.g., 'cuda:0' or 'cpu'). Defaults to 'cuda:0'.
+        device (str, optional): The device on which the tensors are located (e.g., 'cuda' or 'cpu'). Defaults to 'cuda'.
         verbose (bool, optional): If True, prints messages during the application of constraints. Defaults to True.
 
     Methods:
@@ -210,11 +211,12 @@ class CombinedConstraint(torch.nn.Module):
         forward(model, niter):
             Applies all the defined constraints at the appropriate iteration frequency.
     """
-    def __init__(self, constraint_params, device='cuda:0', verbose=True):
+    def __init__(self, constraint_params, device='cuda', verbose=True):
         super(CombinedConstraint, self).__init__()
         self.device = device
         self.constraint_params = constraint_params
         self.verbose = verbose
+        self.half()
 
     def apply_ortho_pmode(self, model, niter):
         ''' Apply orthogonality constraint to probe modes '''
@@ -222,8 +224,8 @@ class CombinedConstraint(torch.nn.Module):
         if ortho_pmode_freq is not None and niter % ortho_pmode_freq == 0:
             model.opt_probe.data = torch.view_as_real(orthogonalize_modes_vec(model.get_complex_probe_view(), sort=True).contiguous()) # Note that model stores the complex probe as a (pmode, Ny, Nx, 2) float tensor (real view) so we need to do some real-complex view conversion.
             probe_int = model.get_complex_probe_view().abs().pow(2)
-            probe_pow = (probe_int.sum((1,2))/probe_int.sum()).detach().cpu().numpy().round(3)
-            vprint(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow}, probe int sum = {probe_int.sum():.4f}", verbose=self.verbose)
+            probe_pow = (probe_int.sum((1,2))/probe_int.sum())
+            vprint(f"Apply ortho pmode constraint at iter {niter}, relative pmode power = {probe_pow:.3f}, probe int sum = {probe_int.sum():.4f}", verbose=self.verbose)
 
     def apply_probe_mask_k(self, model, niter):
         ''' Apply probe amplitude constraint in Fourier space '''
@@ -242,7 +244,7 @@ class CombinedConstraint(torch.nn.Module):
             powers = probe.abs().pow(2).sum((-2,-1)) / probe.abs().pow(2).sum()
             powers_cumsum = powers.cumsum(0)
             pmode_index = (powers_cumsum > power_thresh).nonzero()[0].item() # This gives the pmode index that the cumulative power along mode dimension is greater than the power_thresh and should have mask extend to this index
-            mask = torch.ones_like(probe, dtype=torch.float32, device=model.device)
+            mask = torch.ones_like(probe, dtype=self.base_precision_type, device=model.device)
             mask_value = make_sigmoid_mask(Npix, relative_radius, relative_width).to(model.device)
             mask[:pmode_index+1] = mask_value
             probe_k = fftshift2 (fft2(ifftshift2(probe), norm='ortho')) # probe_k at center for later masking
@@ -338,7 +340,7 @@ class CombinedConstraint(torch.nn.Module):
         if obja_thresh_freq is not None and niter % obja_thresh_freq == 0: 
             model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp(min=thresh[0], max=thresh[1])
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            vprint(f"Apply {relax_str} threshold constraint with thresh = {np.round(thresh,5)} on obja at iter {niter}", verbose=self.verbose)
+            vprint(f"Apply {relax_str} threshold constraint with thresh = {thresh:.5} on obja at iter {niter}", verbose=self.verbose)
 
     def apply_objp_postiv(self, model, niter):
         ''' Apply positivity constraint on objp at voxel level '''
@@ -471,7 +473,8 @@ def orthogonalize_modes_vec(modes, sort = False):
 
     #input_shape = modes.shape # input_shape could be either (N,Y,X) or (N,Z,Y,X)
     
-    if modes.dtype != torch.complex64:
+    orig_modes_dtype = modes.dtype
+    if orig_modes_dtype != torch.complex64:
         modes = torch.complex(modes, torch.zeros_like(modes))
     input_shape = modes.shape
     modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
@@ -486,4 +489,4 @@ def orthogonalize_modes_vec(modes, sort = False):
     if sort:
         ortho_modes = sort_by_mode_int(ortho_modes)
         
-    return ortho_modes
+    return ortho_modes.to(orig_modes_dtype)
