@@ -10,6 +10,15 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def set_gpu_device(gpuid):
+    device = torch.device("cuda:" + str(gpuid))
+    print("Execution device: ", device)
+    print("PyTorch version: ", torch.__version__)
+    print("CUDA available: ", torch.cuda.is_available())
+    print("CUDA version: ", torch.version.cuda)
+    print("CUDA device: ", torch.cuda.get_device_name(gpuid))
+    return device
+
 def vprint(*args, verbose=True, **kwargs):
     """ Verbose print with individual control """ 
     if verbose:
@@ -245,8 +254,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     init_conv_angle = exp_params['conv_angle']
-    init_defocus = exp_params['defocus']
-    optimizer_str = model.optimizer_params['name']
+    init_defocus    = exp_params['defocus']
+    init_c3    = exp_params['c3']
+    init_c5    = exp_params['c5']
+    optimizer_str   = model.optimizer_params['name']
     start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
@@ -366,6 +377,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if 'init' in recon_dir_affixes:
         output_path += f"_ca{init_conv_angle:.3g}"
         output_path += f"_df{init_defocus:.3g}"
+        if init_c3 != 0:
+            output_path += f"_c3{format(init_c3, '.0e')}"
+        if init_c5 != 0:
+            output_path += f"_c5{format(init_c5, '.0e')}"
         
         if scan_affine is not None:
             affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
@@ -812,12 +827,12 @@ def get_default_probe_simu_params(exp_params):
                     "conv_angle"     : exp_params['conv_angle'],
                     "Npix"           : exp_params['Npix'],
                     "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                    "pmodes"         : exp_params['pmode_max'],
+                    "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
                     "pmode_init_pows": exp_params['pmode_init_pows'],
                     ## Aberration coefficients
-                    "df": exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
-                    "c3": exp_params['c3'] , #third-order spherical aberration in angstrom
-                    "c5":0, #fifth-order spherical aberration in angstrom
+                    "df"             : exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
+                    "c3"             : exp_params['c3'] , #third-order spherical aberration in angstrom
+                    "c5"             : exp_params['c5'], #fifth-order spherical aberration in angstrom
                     "c7":0, #seventh-order spherical aberration in angstrom
                     "f_a2":0, #twofold astigmatism in angstrom
                     "f_a3":0, #threefold astigmatism in angstrom
@@ -844,21 +859,21 @@ def make_stem_probe(params_dict, verbose=True):
     from numpy.fft import fftfreq, fftshift, ifft2, ifftshift
     
     ## Basic params
-    voltage     = params_dict["kv"]         # Ang
-    conv_angle  = params_dict["conv_angle"] # mrad
-    Npix        = params_dict["Npix"]       # Number of pixel of thr detector/probe
-    dx          = params_dict["dx"]         # px size in Angstrom
+    voltage     = float(params_dict["kv"])         # Ang
+    conv_angle  = float(params_dict["conv_angle"]) # mrad
+    Npix        = int  (params_dict["Npix"])       # Number of pixel of thr detector/probe
+    dx          = float(params_dict["dx"])         # px size in Angstrom
     ## Aberration coefficients
-    df          = params_dict["df"] #first-order aberration (defocus) in angstrom
-    c3          = params_dict["c3"] #third-order spherical aberration in angstrom
-    c5          = params_dict["c5"] #fifth-order spherical aberration in angstrom
-    c7          = params_dict["c7"] #seventh-order spherical aberration in angstrom
-    f_a2        = params_dict["f_a2"] #twofold astigmatism in angstrom
-    f_a3        = params_dict["f_a3"] #threefold astigmatism in angstrom
-    f_c3        = params_dict["f_c3"] #coma in angstrom
-    theta_a2    = params_dict["theta_a2"] #azimuthal orientation in radian
-    theta_a3    = params_dict["theta_a3"] #azimuthal orientation in radian
-    theta_c3    = params_dict["theta_c3"] #azimuthal orientation in radian
+    df          = float(params_dict["df"]) #first-order aberration (defocus) in angstrom
+    c3          = float(params_dict["c3"]) #third-order spherical aberration in angstrom
+    c5          = float(params_dict["c5"]) #fifth-order spherical aberration in angstrom
+    c7          = float(params_dict["c7"]) #seventh-order spherical aberration in angstrom
+    f_a2        = float(params_dict["f_a2"]) #twofold astigmatism in angstrom
+    f_a3        = float(params_dict["f_a3"]) #threefold astigmatism in angstrom
+    f_c3        = float(params_dict["f_c3"]) #coma in angstrom
+    theta_a2    = float(params_dict["theta_a2"]) #azimuthal orientation in radian
+    theta_a3    = float(params_dict["theta_a3"]) #azimuthal orientation in radian
+    theta_c3    = float(params_dict["theta_c3"]) #azimuthal orientation in radian
     shifts      = params_dict["shifts"] #shift probe center in angstrom
     
     # Calculate some variables
@@ -871,7 +886,7 @@ def make_stem_probe(params_dict, verbose=True):
     # Make k space sampling and probe forming aperture
     kx = fftshift(fftfreq(Npix, 1/Npix))
     # kx = np.linspace(-np.floor(Npix/2),np.ceil(Npix/2)-1,Npix)
-    [kX,kY] = np.meshgrid(kx,kx, indexing='xy')
+    kX,kY = np.meshgrid(kx,kx, indexing='xy')
 
     kX = kX*dk
     kY = kY*dk

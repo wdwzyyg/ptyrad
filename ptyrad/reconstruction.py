@@ -427,16 +427,16 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
     ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
     ## For example, re-initialize `dx_spec` would require re-initializing everything including the 4D-STEM data.
     
-    # probe_params (conv_angle, defocus)
+    # probe_params (conv_angle, defocus, c3, c5)
     remake_probe = False
-    for vname in ['conv_angle', 'defocus']:
+    for vname in ['conv_angle', 'defocus', 'c3', 'c5']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
-            vmin, vmax, step = vparams['min'], vparams['max'], vparams['step']
+            vmin, vmax, step = vparams['min'], vparams['max'], vparams['step'] if vparams['step'] else None
             init.init_params['exp_params'][vname] = trial.suggest_float(vname, vmin, vmax, step=step)
             remake_probe = True
-        if remake_probe:
-            init.init_probe()
+    if remake_probe:
+        init.init_probe()
             
     # z_distance
     if tune_params['z_distance']['state']:
@@ -481,7 +481,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
    
     # Create the model and optimizer, prepare indices, batches, and output_path
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)
-    optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
+    optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params, verbose=verbose)
     indices, batches, output_path = prepare_recon(model, init, params)
       
     # Optimization loop

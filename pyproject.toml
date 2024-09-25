@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ptyrad"
+version = "0.1.0-beta2.5"
+authors = [
+  { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
+]
+description = "PtyRAD: PTYchographic Reconstruction using Automatic Differentiation"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "cupy",
+  "pytorch-cuda",
+  "h5py",
+  "torchvision",
+  "scikit-learn",
+  "tifffile",
+  "scipy",
+  "matplotlib",
+  "optuna"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/chiahao3/ptyrad"
+"Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
