@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=32                    # number of CPUs required for each task
 #SBATCH --gres=gpu:a100:1                 # request a GPU #gpu:a100:1, gpu:2g.20gb:1
 #SBATCH --time=00:10:00                      # Time limit hrs:min:sec
-#SBATCH --output=logs/log_job_%j_ptyrad_tBL_WSe2_bfp16.txt  # Standard output and error log to /logs, you need to create this folder first!
+#SBATCH --output=logs/log_job_%j_ptyrad_tBL_WSe2.txt  # Standard output and error log to /logs, you need to create this folder first!
 
 pwd; hostname; date
 
@@ -19,6 +19,7 @@ PARAMS_PATH="params/demo/tBL_WSe2_reconstruct.yml"
 echo params_path = ${PARAMS_PATH}
 
 python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs typical python on 1 GPU
-# accelerate launch --multi_gpu --num_processes=2 ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs via `accelerate`
+# accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs via `accelerate`
+# accelerate launch --num_processes=1 --mixed_precision='fp16' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs via `accelerate`
 
 date

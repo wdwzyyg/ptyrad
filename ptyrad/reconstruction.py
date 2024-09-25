@@ -63,19 +63,13 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, split_batches=True, mixed_precision_type='no'):
+    def __init__(self, params):
         self.params       = params
         self.if_hypertune = self.params['hypertune_params']['if_hypertune']
         self.verbose      = not self.params['recon_params']['if_quiet']
-        self.split_batches = split_batches
-        self.base_precision_type  = 'float16' # self.params['model_params']['base_precision_type']
-        self.mixed_precision_type = mixed_precision_type 
         
         # Set up accelerator for multiGPU setting, note that this has no effect when we launch it with just `python <script>`
-        dataloader_config = DataLoaderConfiguration(split_batches=self.split_batches) # This supress the warning when we do `Accelerator(split_batches=True)`
-        kwargs_handlers   = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
-        self.accelerator  = Accelerator(mixed_precision=self.mixed_precision_type, dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
-        self.accelerator.print(f"Accelerator DataLoader split_batches = {self.split_batches}")
+        self.init_accelerator()
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
@@ -86,6 +80,12 @@ class PtyRADSolver(object):
     @property
     def device(self):
         return self.accelerator.device
+    
+    def init_accelerator(self):
+        dataloader_config = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
+        kwargs_handlers   = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
+        self.accelerator  = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        self.accelerator.print(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
     
     def init_initializer(self):
         self.accelerator.print("\n### Initializing Initializer ###")
@@ -105,7 +105,7 @@ class PtyRADSolver(object):
         batch_size = params['recon_params']['BATCH_SIZE']['size']
         
         # Create the model and optimizer, prepare indices, batches, and output_path
-        model         = PtychoAD(self.init.init_variables, params['model_params'], base_precision_str=self.base_precision_type, device=device, verbose=self.verbose)
+        model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
         indices, _, output_path = prepare_recon(model, self.init, params) # `batches` would not be used for the IndicedDataset because I haven't figured out how to do specified indices
         
@@ -239,8 +239,8 @@ def prepare_recon(model, init, params):
     if_hypertune = params['hypertune_params']['if_hypertune']
     
     # Generate the indices, batches, and fig_grouping
-    pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
-    probe_int    = model.get_complex_probe_view().abs().pow(2).sum(0).detach().to(torch.float32).cpu().numpy()
+    pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
+    probe_int    = model.get_complex_probe_view().abs().pow(2).sum(0).detach().cpu().numpy()
     dx           = init_variables['dx']
     d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
     indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
@@ -378,14 +378,17 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         
-        model_DP, object_patches = model(batch)
-        measured_DP = model_instance.get_measurements(batch)
-        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
-        
         if acc is not None:
+            with acc.autocast():
+                model_DP, object_patches = model(batch)
+                measured_DP = model_instance.get_measurements(batch)
+                loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
             acc.backward(loss_batch)
-        else:
-            loss_batch.backward() # This is kept when we run PtyRAD in the detailed walkthrough notebook without `accelerate`
+        else: # This is kept when we run PtyRAD in the detailed walkthrough notebook without launching through `accelerate`
+            model_DP, object_patches = model(batch)
+            measured_DP = model_instance.get_measurements(batch)
+            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+            loss_batch.backward() 
             
         # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
         if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
@@ -398,7 +401,7 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
         if acc is not None:
             acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
-            batch_losses[loss_name].append(loss_value.detach().to(torch.float32).cpu().numpy())
+            batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
         if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
             vprint(f"Done batch {batch_idx+1} with {len(batch)} indices ({batch[:5].tolist()}...) in {batch_t:.3f} sec", verbose=verbose)
     

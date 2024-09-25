@@ -10,7 +10,7 @@ def plot_sigmoid_mask(Npix, relative_radius, relative_width, img=None, show_circ
     """ Plot a sigmoid mask overlay on img with a line profile """
     # Note that relative_radius ranges from 0 - 1 for center -> edge. radius = 1 corresponds to a inscribed circle
     # While relative_width also ranges from 0 - 1 for Npix * relative_width. width = 0.05 corresponds to a width of 5% of the image width would have sigmoid value change from 0 - 1
-    mask = make_sigmoid_mask(Npix, relative_radius, relative_width).detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
+    mask = make_sigmoid_mask(Npix, relative_radius, relative_width).detach().cpu().numpy()
     img = np.ones((Npix,Npix)) if img is None else img/img.max()
     masked_img = mask * img
     fig, axs = plt.subplots(1,2, figsize=(13,6))
@@ -52,11 +52,11 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
         omode_occu               = model.omode_occu
         measured_DP           = model.get_measurements(indices)
         
-        probes_int     = probes_int.detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
-        obja_ROI        = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().to(torch.float32).cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
-        objp_ROI        = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().to(torch.float32).cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
-        model_DP    = model_DP.detach().to(torch.float32).cpu().numpy()
-        measured_DP = measured_DP.detach().to(torch.float32).cpu().numpy()
+        probes_int     = probes_int.detach().cpu().numpy()
+        obja_ROI        = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        objp_ROI        = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        model_DP    = model_DP.detach().cpu().numpy()
+        measured_DP = measured_DP.detach().cpu().numpy()
     
     plt.ioff() # Temporaily disable the interactive plotting mode
     fig, axs = plt.subplots(len(indices), 5, figsize=(24, 5*len(indices)))
@@ -360,7 +360,7 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
-    opt_probe = model.get_complex_probe_view().detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
+    opt_probe = model.get_complex_probe_view().detach().cpu().numpy()
 
     if 'probe_r_amp' in selected_figs or 'all' in selected_figs:
         fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', show_fig=False, pass_fig=True)
@@ -391,8 +391,8 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
             
     # Scan positions and tilts
     init_pos = init_variables['crop_pos'] + init_variables['probe_pos_shifts']
-    pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().to(torch.float32).cpu().numpy() # The .to(torch.float32) upcast is a preventive solution because .numpy() doesn't support bf16
-    tilts = model.opt_obj_tilts.detach().to(torch.float32).cpu().numpy()
+    pos = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
+    tilts = model.opt_obj_tilts.detach().cpu().numpy()
     tilts = np.broadcast_to(tilts, (len(pos), 2)) # tilts has to be (N_scan, 2)
     
     if 'pos' in selected_figs or 'all' in selected_figs:

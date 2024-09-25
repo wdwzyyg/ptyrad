@@ -6,7 +6,6 @@ import sys
 
 import torch
 import torch.distributed as dist
-# dist.init_process_group(backend='gloo') # gloo backend is needed to run multiGPU on Windows
 
 # GPUID = 0
 # DEVICE = torch.device("cuda:" + str(GPUID))
