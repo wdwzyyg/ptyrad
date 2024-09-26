@@ -1,39 +1,43 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.09.21
+# Updated by Chia-Hao Lee on 2024.09.26
 
 import argparse
 import sys
 
-import torch
 import torch.distributed as dist
 
-# GPUID = 0
-# DEVICE = torch.device("cuda:" + str(GPUID))
-# print("Execution device: ", DEVICE)
-if (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
-    print('PyTorch version: ', torch.__version__)
-    print('CUDA available: ', torch.cuda.is_available())
-    print('CUDA version: ', torch.version.cuda)
-    print('CUDA device count: ', torch.cuda.device_count())
-    print('CUDA device: ', [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
-
-PATH_TO_PTYRAD = "/home/fs01/cl2696/workspace/ptyrad" #"H://workspace/ptyrad"  # Change this for the ptyrad package path
+PATH_TO_PTYRAD = "./"  # Change this for the ptyrad package path
 sys.path.append(PATH_TO_PTYRAD)
 from ptyrad.data_io import load_params  # noqa: E402
 from ptyrad.reconstruction import PtyRADSolver  # noqa: E402
+from ptyrad.utils import set_gpu_device  # noqa: E402
 
 if __name__ == "__main__":
-    # Example usage
-    # python ./scripts/run_ptyrad.py --params_path "params/tBL_WSe2.yml"
+    # If you want to run with GPU 0
+    # python ./scripts/run_ptyrad.py --params_path "params/demo/tBL_WSe2_reconstruct.yml" --gpuid 0
+    
+    # If you want to run independent processes on 2 GPUs on your workstation from Bash terminal
+    # parallel --delay 5 python ./scripts/run_ptyrad.py --params_path scan4_64mrad_optune.yml --gpuid ::: 0 1
+    
+    # If you want to run a multi-GPU (2) reconstruction with mixed-precision via `accelerate`
+    # accelerate launch --multi_gpu --num_processes=2 --mixed_precision='fp16' ./scripts/run_ptyrad.py --params_path "params/demo/tBL_WSe2_reconstruct.yml"
        
     parser = argparse.ArgumentParser(
         description="Run PtyRAD", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("--params_path", type=str, required=True)
+    parser.add_argument("--gpuid",       type=int, required=False, default=None)
     args = parser.parse_args()
-
+    
     params = load_params(args.params_path)
-    ptycho_solver = PtyRADSolver(params)
+    device = set_gpu_device(args.gpuid)
+    
+    if args.gpuid is not None:
+        ptycho_solver = PtyRADSolver(params, device=device)
+    else:
+        # This will let `accelerate` to automatically choose the device based on `accelerate config`
+        ptycho_solver = PtyRADSolver(params, device=None)
+
     ptycho_solver.run()
     
     # End the process properly when in DDP mode

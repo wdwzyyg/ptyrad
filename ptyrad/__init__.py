@@ -2,4 +2,4 @@
 # However, this is still included for clarity and for initialization purpose
 
 __version__ = "v0.1.0-beta2.5" # 2024.09.19
-print(f"ptyrad version: {__version__}")
+print(f"\nPtyRAD version: {__version__}")

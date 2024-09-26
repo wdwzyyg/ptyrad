@@ -3,7 +3,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from accelerate import Accelerator
-dist.init_process_group(backend='gloo') # gloo backend is needed to run multiGPU on Windows
+dist.init_process_group(backend='gloo') # gloo backend is needed to run DDP on Windows
 
 def cycle(it):
     while True:

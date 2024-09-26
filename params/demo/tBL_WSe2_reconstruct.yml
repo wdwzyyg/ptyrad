@@ -7,9 +7,10 @@ exp_params : {
     'Npix'              : 128, # type: integer, unit: px (k-space). Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
     'dx_spec'           : 0.1494, # type: float, unit: Ang. Real space pixel size calibration at specimen plane (object, probe, and probe positions share the same pixel size)
     'defocus'           : 0, # type: float, unit: Ang. Defocus (-C1) aberration coefficient for the probe. Positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
-    'c3'                : 0, # type: float, unit: Ang. Spherical aberration coefficient (Cs) for the probe
-    'z_distance'        : 6, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
-    'Nlayer'            : 2, # type: int, unit: #. Number of slices for multislice object
+    'c3'                : 0, # type: float, unit: Ang. 3rd-order spherical aberration coefficient (C3) for the simulated probe
+    'c5'                : 0, # type: float, unit: Ang. 5th-order spherical aberration coefficient (C5) for the simulated probe
+    'z_distance'        : 12, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
+    'Nlayer'            : 1, # type: int, unit: #. Number of slices for multislice object
     'N_scans'           : 16384, # type: int, unit: #. Number of probe positions (or equivalently diffraction patterns since 1 DP / position)
     'N_scan_slow'       : 128, # type: int, unit: #. Number of scan position along slow scan direction. Usually it's the vertical direction of acquisition GUI
     'N_scan_fast'       : 128, # type: int, unit: #. Number of scan position along fast scan direction. usually it's the horizontal direction of acquisition GUI
@@ -40,8 +41,8 @@ source_params : {
     'measurements_params': {'path': 'data/tBL_WSe2/Fig_1h_24.9mrad_Themis/scan_x128_y128.raw'}, # type: dict, or numpy array. For 'measurements_source' = 'mat', or 'hdf5', provide the 'path' and 'key' in a dict {'path': <PATH_TO_DATA>, 'key': <DATA_KEY>} to retrieve the data matrix. 'tif' would only need the {'path':<PATH_TO_DATA>}. For 'raw' you can optionally pass in 'shape':(N,height,width), 'offset':int, 'gap':int to load the .raw files from EMPAD1 and pre-processed EMPAD datasets. For example, {'path': <PATH_TO_DATA>, 'offset':0, 'gap':0} can be used to load pre-processed EMPAD2 raw dataset with no gap between binary diffraction patterns. The 'shape' will be automatically filled in from 'exp_params', while 'offset':0, and 'gap':1024 are default values for EMPAD1 datasets. For py4dstem processed diffraction patterns (hdf5), use '/datacube_root/datacube/data' for your 'key'. For 'custom' source, pass the numpy array to the 'measurements_params' entry after you load this .yml as a dict
     'obj_source'         : 'simu', # type: str. Data source of the object. Currently supporting 'simu', 'PtyRAD', 'PtyShv', and 'custom'
     'obj_params'         : null, # type: null, list of 4 ints, str, or numpy array. Parameters of the object loading/initialization. For 'simu' (simulating object), provide a list of 4 ints (omode, Nz, Ny, Nx) to specify the object shape or null to let PtyRAD determine it (null is suggested and is consistent with how PtyShv creates their initial object). For loading object from 'PtyRAD' or 'PtyShv', provide a str of <PATH_TO_RECONSTRUCTION_FILE>. For 'custom' object source, pass the 4D numpy array to the 'obj_params' entry after you load this .yml as a dict
-    'probe_source'       : 'simu', #'PtyRAD', # type: str. Data source of the probe. Currently supporting 'simu', 'PtyRAD', 'PtyShv', and 'custom'
-    'probe_params'       : null, #'output/tBL-WSe2/20240923_full_N16384_dp128_flipT100_random32_p2_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_ozblur1_opos_sng1.0_spr0.1_local_quick/model_iter0010.pt', # type: null, dict, str, or numpy array. Parameters of the probe loading/initialization. For 'simu' (simulating probe), provide a dict of 'probe_simu_params' to specify the simulation parameters (see 'utils/make_stem_probe' for more details) or null to use only basic paramaters like kV, conv_angle, defocus and c3. For loading probe from 'PtyRAD' or 'PtyShv', provide a str of <PATH_TO_RECONSTRUCTION_FILE>. For 'custom' probe source, pass the 3D numpy array to the 'probe_params' entry after you load this .yml as a dict
+    'probe_source'       : 'PtyRAD', #'PtyRAD', # type: str. Data source of the probe. Currently supporting 'simu', 'PtyRAD', 'PtyShv', and 'custom'
+    'probe_params'       : 'H://workspace/ptyrad/output/tBL-WSe2/20240926_full_N16384_dp128_flipT100_random32_p6_1obj_1slice_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_ozblur1_opos_sng1.0_spr0.1/model_iter0010.pt', #'output/tBL-WSe2/20240923_full_N16384_dp128_flipT100_random32_p2_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_ozblur1_opos_sng1.0_spr0.1_local_quick/model_iter0010.pt', # type: null, dict, str, or numpy array. Parameters of the probe loading/initialization. For 'simu' (simulating probe), provide a dict of 'probe_simu_params' to specify the simulation parameters (see 'utils/make_stem_probe' for more details) or null to use only basic paramaters like kV, conv_angle, defocus and c3. For loading probe from 'PtyRAD' or 'PtyShv', provide a str of <PATH_TO_RECONSTRUCTION_FILE>. For 'custom' probe source, pass the 3D numpy array to the 'probe_params' entry after you load this .yml as a dict
     'pos_source'         : 'simu', # type: str. Data source of the probe positions. Currently supporting 'simu', 'PtyRAD', 'PtyShv', and 'custom'
     'pos_params'         : null, # # type: null, str, or numpy array. Parameters of the probe positions loading/initialization. For 'simu' (simulating probe positions), provide null and check whether you need 'scan_flipT'. The positions would be simulated based on 'N_scan_slow', 'N_scan_fast', 'scan_step_size', and 'scan_affine'. For loading probe positions from 'PtyRAD' or 'PtyShv', provide a str of <PATH_TO_RECONSTRUCTION_FILE>. For 'custom' probe position source, pass the (N_scans,2) numpy array to the 'pos_params' entry after you load this .yml as a dict
     'tilt_source'        : 'simu', # type: str. Data source of the object tilts. Currently supporting 'simu', 'PtyRAD', and 'custom'
@@ -62,12 +63,14 @@ hypertune_params : {
     'study_name'     : 'tBL_WSe2', # type: str. Name of the hypertune record (i.e., study). Hypertune of different dataset or different search space (i.e., different optimizable parameters) are encouraged to use different study name or even separate database file
     'tune_params'    : {
         'conv_angle' : {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
-        'defocus'    : {'state': false, 'min': -50, 'max': 50, 'step': 10},
+        'defocus'    : {'state': true, 'min': -50, 'max': 50, 'step': null},
+        'c3'         : {'state': true, 'min': 4000, 'max': 10000, 'step': null},
+        'c5'         : {'state': true, 'min': 50000, 'max': 100000, 'step': 5000},
         'z_distance' : {'state': false, 'min': 4, 'max': 8, 'step': 0.5},
-        'scale'      : {'state': true, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
-        'asymmetry'  : {'state': true, 'min': -0.2, 'max': 0.2, 'step': 0.05},
-        'rotation'   : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
-        'shear'      : {'state': true, 'min': -4, 'max': 4, 'step': 0.5},
+        'scale'      : {'state': false, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
+        'asymmetry'  : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
+        'rotation'   : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'shear'      : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
         'tilt_y'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}, # This refers to the 'init_tilts' under 'source_params['tilt_params']['init_tilts']'
         'tilt_x'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
     }

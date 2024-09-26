@@ -273,10 +273,10 @@ class Initializer:
             probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0] # PtychoShelves probe generally has (Ny,Nx,pmode,vp) dimension. Usually people prefer pmode over vp.
             vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
             if probe.ndim == 4:
-                vprint(f"Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
+                vprint("Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
                 probe = probe[...,0]
             elif probe.ndim == 2:
-                vprint(f"Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
+                vprint("Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
                 probe = probe[...,None]
             else:
                 probe = probe # probe = (pmode, Ny, Nx)
@@ -285,7 +285,7 @@ class Initializer:
         elif source == 'simu':
             probe_simu_params = params
             if probe_simu_params is None:
-                vprint(f"Use exp_params and default values instead for simulation", verbose=self.verbose)
+                vprint("Use exp_params and default values instead for simulation", verbose=self.verbose)
                 probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
             probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
             if probe_simu_params['pmodes'] > 1:
@@ -556,11 +556,11 @@ class Initializer:
 
         # Check obj tilts
         if len(obj_tilts) in [1, N_scans]:
-            vprint(f"obj_tilts is consistent with either 1 or N_scans", verbose=self.verbose)
+            vprint("obj_tilts is consistent with either 1 or N_scans", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
         
-        vprint(f"Pass the consistency check of initialized variables, initialization is done!", verbose=self.verbose)
+        vprint("Pass the consistency check of initialized variables, initialization is done!", verbose=self.verbose)
     
     def init_all(self):
         # Run this method to initialize all
