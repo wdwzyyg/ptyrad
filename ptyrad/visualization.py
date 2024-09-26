@@ -360,7 +360,7 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
-    opt_probe = model.opt_probe.detach().cpu().numpy()
+    opt_probe = model.get_complex_probe_view().detach().cpu().numpy()
 
     if 'probe_r_amp' in selected_figs or 'all' in selected_figs:
         fig_probe_modes_real_amp      = plot_probe_modes(init_probe, opt_probe, real_or_fourier='real',    amp_or_phase='amplitude', show_fig=False, pass_fig=True)

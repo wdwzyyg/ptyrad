@@ -1,0 +1,122 @@
+# tSTO
+
+exp_params : {
+    'kv'                : 300,  # kV
+    'conv_angle'        : 30.0, # mrad, semi-convergence angle
+    'Npix'              : 128, # Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
+    'rbf'               : null, # Pixels of radius of BF disk, used to calculate dk
+    'dx_spec'           : 0.1513, # Ang
+    'defocus'           : -65, # Ang, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
+    'c3'                : 0, # Ang, spherical aberration coefficients
+    'z_distance'        : 10, # Ang
+    'Nlayer'            : 15,
+    'N_scans'           : 65536,
+    'N_scan_slow'       : 256,
+    'N_scan_fast'       : 256,
+    'scan_step_size'    : 0.415, # Ang
+    'scan_flipT'        : [0,0,1], # (0,0,1) for 'simu' pos, null for loaded pos. Modify scan_flipT would change the image orientation. Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'scan_affine'       : null, #[0.96,0.14,0,6), #(1,0,2,0), # (scale, asymmetry, rotation, shear)
+    'scan_rand_std'     : 0.15, # null or scalar. Randomize the initial guess of scan position with Gaussian distributed displacement (std in px) to avoid raster grid pathology
+    'omode_max'         : 1,
+    'omode_init_occu'   : {'occu_type': 'uniform', 'init_occu': null},
+    'pmode_max'         : 6,
+    'pmode_init_pows'   : [0.02],
+    'probe_permute'     : null,
+    'meas_permute'           : [0,2,1], # [0,2,1] for Ndp256_dp.hdf5
+    'meas_reshape'           : null,
+    'meas_flipT'             : null, # Expected input is [flipup, fliplr, transpose] just like PtychoShleves
+    'meas_crop'              : null, # null or (4,2) array-like for [[scan_slow_start, scan_slow_end], [scan_fast_start, scan_fast_end], [ky_start, ky_end], [kx_start, kx_end]]
+    'meas_resample'          : null, # null or (2,1) array-like for [ky_zoom, kx_zoom]
+    'meas_add_source_size'   : null, # null or a scalar of std (Ang)
+    'meas_add_detector_blur' : null, # null or a scalar of std (px)
+    'meas_add_poisson_noise' : null, # null or a scalar of electrons/Ang^2
+    'probe_simu_params'      : null
+    }
+
+# Source and params, note that these should be changed in accordance with each other
+source_params : {
+    'measurements_source': 'hdf5',
+    'measurements_params': {'path': 'data/20240820_STO_bilayer_04_Hari/data_roi1_Ndp256_dp.hdf5', 'key': 'dp'},
+    'obj_source'         : 'simu', 
+    'obj_params'         : null,
+    'probe_source'       : 'simu',
+    'probe_params'       : null, 
+    'pos_source'         : 'simu',
+    'pos_params'         : null,
+    'tilt_source'        : 'simu',
+    'tilt_params'        : {'tilt_type': 'all', 'init_tilts': [[0,0]]}, # 'init_tilts' : (tilt_y,tilt_x) mrad, 'tilt_type' : 'all', 'each' 
+    # 'obj_source'         : 'PtyRAD', 
+    # 'obj_params'         : ptycho_output_path, 
+    # 'probe_source'       : 'PtyRAD',
+    # 'probe_params'       : ptycho_output_path, 
+    # 'pos_source'         : 'PtyRAD',
+    # 'pos_params'         : ptycho_output_path,
+    # 'tilt_source'        : 'PtyRAD',
+    # 'tilt_params'        : 'ptycho_output_path,
+    # 'obj_source'         : 'PtyShv', 
+    # 'obj_params'         : 'data/20240820_STO_bilayer_04_Hari/Niter800.mat', 
+    # 'probe_source'       : 'PtyShv',
+    # 'probe_params'       : 'data/20240820_STO_bilayer_04_Hari/Niter800.mat', 
+    # 'pos_source'         : 'PtyShv',
+    # 'pos_params'         : 'data/20240820_STO_bilayer_04_Hari/Niter800.mat',
+}
+
+hypertune_params : {
+    'n_trials'      : 100,
+    'use_pruning'   : True,
+    'storage_path'  : 'sqlite:///hypertune_database.sqlite3',
+    'study_name'    : 'ptyrad_tSTO_04',
+    'tune_params'   : {
+        'z_distance': {'state': true, 'min': 5, 'max': 20, 'step': 0.1},
+        'scale'     : {'state': true, 'min': 0.90, 'max': 1.10, 'step': 0.01},
+        'asymmetry' : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
+        'rotation'  : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'shear'     : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
+        'tilt_y'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5},
+        'tilt_x'    : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
+    }
+}
+
+model_params : {
+    'obj_preblur_std'     : null, # scalar(px), null
+    'detector_blur_std'   : 0.5,    # scalar(px), null
+    'lr_params':{
+        'obja'            : 5.0e-4,
+        'objp'            : 5.0e-4,
+        'obj_tilts'       : 0, 
+        'probe'           : 1.0e-4, 
+        'probe_pos_shifts': 1.0e-4}}
+
+loss_params : {
+    'loss_single': {'state': true, 'weight': 1.0, 'dp_pow': 0.5},
+    'loss_poissn': {'state': false, 'weight': 1.0, 'dp_pow': 1.0},
+    'loss_pacbed': {'state': false, 'weight': 0.5, 'dp_pow': 0.2}, # Usually weight:0.5, dp_pow:0.2
+    'loss_sparse': {'state': true, 'weight': 0.1, 'ln_order': 1},
+    'loss_simlar': {'state': false, 'weight': 0.2, 'obj_type': 'both', 'scale_factor': [1,1,1], 'blur_std': 1}
+}
+
+constraint_params : {
+    'ortho_pmode'   : {'freq': 1},
+    'probe_mask_k'  : {'freq': null, 'radius': 0.22, 'width': 0.05}, # k-radius should be larger than 2*rbf/Npix to avoid cutting out the BF disk
+    'fix_probe_int' : {'freq': 1},
+    'obj_rblur'     : {'freq': 1, 'obj_type': 'both', 'kernel_size': 5, 'std': 0.4}, # Ideally kernel size is odd and larger than 6std+1 so it decays to 0
+    'obj_zblur'     : {'freq': 1, 'obj_type': 'both', 'kernel_size': 5, 'std': 1},
+    'kr_filter'     : {'freq': null,    'obj_type': 'both', 'radius': 0.15, 'width': 0.05},
+    'kz_filter'     : {'freq': null,    'obj_type': 'both', 'beta': 0.2, 'alpha': 1},
+    'obja_thresh'   : {'freq': 1, 'relax': 0, 'thresh':[0.98, 1.02]},
+    'objp_postiv'   : {'freq': 1,    'relax': 0},
+    'tilt_smooth'   : {'freq': null, 'std': 2}
+}
+
+recon_params : {
+  'NITER': 50,
+  'INDICES_MODE': 'center',  # 'full', 'center', 'sub'
+  'BATCH_SIZE': 32,
+  'GROUP_MODE': 'random',  # 'random', 'sparse', 'compact' # Note that 'sparse' for 256x256 scan could take more than 10 mins on CPU. PtychoShelves automatically switch to 'random' for Nscans>1e3
+  'SAVE_ITERS': 25,  # scalar or null
+  'output_dir': 'output/tSTO_04',  # Output folder and pre/postfix, note that the needed / and _ are automatically generated
+  'prefix_date': true,
+  'prefix': '',
+  'postfix': '',
+  'fig_list': ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos']  # 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all' for all the figures
+}

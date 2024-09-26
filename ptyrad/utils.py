@@ -5,6 +5,8 @@ from time import time
 
 import numpy as np
 import torch
+import torch.distributed as dist
+
 from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
@@ -20,8 +22,8 @@ def set_gpu_device(gpuid):
     return device
 
 def vprint(*args, verbose=True, **kwargs):
-    """ Verbose print with individual control """ 
-    if verbose:
+    """Verbose print with individual control, only for rank 0 in DDP."""
+    if verbose and (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
         print(*args, **kwargs)
 
 def get_date(date_format = '%Y%m%d'):
@@ -243,8 +245,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']
-    pmode        = model.opt_probe.size(0)
-    dp_size      = model.measurements.size(1)
+    pmode        = model.get_complex_probe_view().size(0)
+    dp_size      = model.get_complex_probe_view().size(-1)
     obj_shape    = model.opt_objp.shape
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
@@ -279,7 +281,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # Attach obj shape and dz
     output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
-        z_distance = model.z_distance.cpu().numpy().round(2)
+        z_distance = model.z_distance.detach().cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
     
     # Attach optimizer name (optional)
@@ -543,14 +545,14 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_t, nite
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
-
-    probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
-    objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
-    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
+    probe      = model.get_complex_probe_view() 
+    probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
+    objp       = model.opt_objp.detach().cpu().numpy()
+    obja       = model.opt_obja.detach().cpu().numpy()
     # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
-    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
+    crop_pos   = model.crop_pos[indices].detach().cpu().numpy() + np.array(probe.shape[-2:])//2
     y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
     x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     

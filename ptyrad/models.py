@@ -1,10 +1,11 @@
 ## Defining PtychoAD class for the optimization object
 
 import torch
+import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
-from ptyrad.utils import add_tilts_to_propagator, imshift_batch
+from ptyrad.utils import add_tilts_to_propagator, imshift_batch, vprint
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -77,13 +78,15 @@ class PtychoAD(torch.nn.Module):
             Performs the forward pass and computes diffraction patterns for given indices.
     """
 
-    def __init__(self, init_variables, model_params, device='cuda:0', verbose=True):
+    def __init__(self, init_variables, model_params, device='cuda', verbose=True):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
+            # Setup model behaviors
             self.device                 = device
             self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
+
             # Parse the learning rate and start iter for optimizable tensors
             start_iter_dict = {}
             lr_dict = {}
@@ -94,24 +97,28 @@ class PtychoAD(torch.nn.Module):
             self.start_iter             = start_iter_dict
             self.lr_params              = lr_dict
             
-            self.opt_obja               = torch.abs(torch.tensor(init_variables['obj'],     dtype=torch.complex64, device=device))
-            self.opt_objp               = torch.angle(torch.tensor(init_variables['obj'],   dtype=torch.complex64, device=device))
-            self.opt_obj_tilts          = torch.tensor(init_variables['obj_tilts'],         dtype=torch.float32,   device=device)
-            self.opt_probe              = torch.tensor(init_variables['probe'],             dtype=torch.complex64, device=device)  
-            self.opt_probe_pos_shifts   = torch.tensor(init_variables['probe_pos_shifts'],  dtype=torch.float32,   device=device)
-            self.omode_occu             = torch.tensor(init_variables['omode_occu'],        dtype=torch.float32,   device=device) 
-            self.H                      = torch.tensor(init_variables['H'],                 dtype=torch.complex64, device=device)
-            self.measurements           = torch.tensor(init_variables['measurements'],      dtype=torch.float32,   device=device)
-            self.N_scan_slow            = torch.tensor(init_variables['N_scan_slow'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.N_scan_fast            = torch.tensor(init_variables['N_scan_fast'],       dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.crop_pos               = torch.tensor(init_variables['crop_pos'],          dtype=torch.int16,     device=device) # Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.z_distance             = torch.tensor(init_variables['z_distance'],        dtype=torch.float32,   device=device) # Saving this for reference
-            self.dx                     = torch.tensor(init_variables['dx'],                dtype=torch.float32,   device=device) # Saving this for reference
-            self.dk                     = torch.tensor(init_variables['dk'],                dtype=torch.float32,   device=device) # Saving this for reference
+            # Optimizable parameters
+            self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],    device=device)).to(torch.float32))
+            self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],  device=device)).to(torch.float32))
+            self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],                dtype=torch.float32, device=device))
+            self.opt_probe              = nn.Parameter(torch.view_as_real(torch.tensor(init_variables['probe'], dtype=torch.complex64, device=device))) # The `torch.view_as_real` allows correct handling of DDP via NCCL even in PyTorch 2.4
+            self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],         dtype=torch.float32, device=device))
+            
+            # Buffers are used during forward pass
+            self.register_buffer      ('omode_occu',   torch.tensor(init_variables['omode_occu'],       dtype=torch.float32, device=device))
+            self.register_buffer      ('H',            torch.tensor(init_variables['H'],                dtype=torch.complex64, device=device))
+            self.register_buffer      ('measurements', torch.tensor(init_variables['measurements'],     dtype=torch.float32, device=device))
+            self.register_buffer      ('N_scan_slow',  torch.tensor(init_variables['N_scan_slow'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('N_scan_fast',  torch.tensor(init_variables['N_scan_fast'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('crop_pos',     torch.tensor(init_variables['crop_pos'],         dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('z_distance',   torch.tensor(init_variables['z_distance'],       dtype=torch.float32, device=device))# Saving this for reference
+            self.register_buffer      ('dx',           torch.tensor(init_variables['dx'],               dtype=torch.float32, device=device))# Saving this for reference
+            self.register_buffer      ('dk',           torch.tensor(init_variables['dk'],               dtype=torch.float32, device=device))# Saving this for reference
+
             self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
             self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
-            self.probe_int_sum          = self.opt_probe.abs().pow(2).sum()
+            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
             
             # Create grids for shifting
             self.create_grids()
@@ -124,6 +131,11 @@ class PtychoAD(torch.nn.Module):
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
+    
+    def get_complex_probe_view(self):
+        """ Retrieve complex view of the probe """
+        # This is a post-processing to ensure minimal code changes in PtyRAD for the DDP (multiGPU) via NCCL due to limited support for Complex value
+        return torch.view_as_complex(self.opt_probe)
         
     def create_grids(self):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
@@ -131,16 +143,17 @@ class PtychoAD(torch.nn.Module):
         # Currently (2024.04.24) only the shift_probes_grid, rpy_grid, rpx_grid are used for sub-px shifts and obj_ROI selection
         
         device = self.device
-        Npy, Npx = self.opt_probe.shape[-2:] # Number of probe pixels in y and x directions
+        probe = self.get_complex_probe_view()
+        Npy, Npx = probe.shape[-2:] # Number of probe pixels in y and x directions
         Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
         
         rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
-                                torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
+                                  torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
         roy, rox = torch.meshgrid(torch.arange(Noy, dtype=torch.int32, device=device), 
-                                torch.arange(Nox, dtype=torch.int32, device=device), indexing='ij') # real space grid for object in y and x directions
+                                  torch.arange(Nox, dtype=torch.int32, device=device), indexing='ij') # real space grid for object in y and x directions
         
         self.shift_probes_grid = torch.stack([rpy/Npy, rpx/Npx], dim=0) # (2,Npy,Npx), normalized k-space grid stack for sub-px probe shifting 
-        self.shift_object_grid = torch.stack([roy/Noy, rox/Nox], dim=0) # (2,Noy,Nox), normalized k-space grid stack for sub-px object shifting
+        self.shift_object_grid = torch.stack([roy/Noy, rox/Nox], dim=0) # (2,Noy,Nox), normalized k-space grid stack for sub-px object shifting (Implemented for completeness, not used in PtyRAD)
         
         self.rpy_grid = rpy # real space grid with y-indices spans across probe extent
         self.rpx_grid = rpx
@@ -171,22 +184,23 @@ class PtychoAD(torch.nn.Module):
             self.print_model_summary()
         
     def print_model_summary(self):
-        print('\n### PtychoAD optimizable variables ###')
+        # Set all the print as vprint so that it'll only print once in DDP, the actual `if verbose` is set outside of the function
+        vprint('\n### PtychoAD optimizable variables ###')
         for name, tensor in self.optimizable_tensors.items():
-            print(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
+            vprint(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
         total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)
         # When you create a new model, make sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"
         
-        print('\n### Optimizable variables statitsics ###')
-        print(  f'Total measurement values:    {self.measurements.numel():,d}\
+        vprint('\n### Optimizable variables statitsics ###')
+        vprint(  f'Total measurement values:    {self.measurements.numel():,d}\
                 \nTotal optimizing variables:  {total_var:,d}\
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         
-        print('\n### Model behavior ###')
-        print(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
-        print(f"Tilt propagator   : {self.tilt_obj}") 
-        print(f"Sub-px probe shift: {self.shift_probes}") 
-        print(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
+        vprint('\n### Model behavior ###')
+        vprint(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
+        vprint(f"Tilt propagator   : {self.tilt_obj}") 
+        vprint(f"Sub-px probe shift: {self.shift_probes}") 
+        vprint(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """
@@ -210,10 +224,12 @@ class PtychoAD(torch.nn.Module):
         # This function will return a single probe when self.shift_probes = False,
         # and would only be returning multiple sub-px shifted probes if you're optimizing self.opt_probe_pos_shifts
 
+        probe = self.get_complex_probe_view()
+        
         if self.shift_probes:
-            probes = imshift_batch(self.opt_probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
+            probes = imshift_batch(probe, shifts = self.opt_probe_pos_shifts[indices], grid = self.shift_probes_grid)
         else:
-            probes = torch.broadcast_to(self.opt_probe, (len(indices), *self.opt_probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
+            probes = torch.broadcast_to(probe, (len(indices), *probe.shape)) # Broadcast a batch dimension, essentially using same probe for all samples
         return probes
     
     def get_propagators(self, indices):

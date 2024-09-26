@@ -1,0 +1,368 @@
+/home/fs01/cl2696/workspace/ptyrad
+c0001
+Mon Sep 23 23:26:18 EDT 2024
+params_path = params/demo/tBL_WSe2_reconstruct.yml
+Mon Sep 23 23:26:18 2024       
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 520.61.05    Driver Version: 520.61.05    CUDA Version: 11.8     |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|                               |                      |               MIG M. |
+|===============================+======================+======================|
+|   0  NVIDIA A100-SXM...  On   | 00000000:81:00.0 Off |                    0 |
+| N/A   37C    P0    63W / 500W |      0MiB / 81920MiB |      0%      Default |
+|                               |                      |             Disabled |
++-------------------------------+----------------------+----------------------+
+                                                                               
++-----------------------------------------------------------------------------+
+| Processes:                                                                  |
+|  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+|        ID   ID                                                   Usage      |
+|=============================================================================|
+|  No running processes found                                                 |
++-----------------------------------------------------------------------------+
+PyTorch version:  2.4.1
+CUDA available:  True
+CUDA version:  11.8
+CUDA device count:  1
+CUDA device:  ['NVIDIA A100-SXM4-80GB']
+ptyrad version: v0.1.0-beta2.5
+### Loading params file ###
+Success! Loaded .yml file path = params/demo/tBL_WSe2_reconstruct.yml
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+Accelerator DataLoader split_batches = True
+
+### Initializing Initializer ###
+
+### Initializing cache ###
+use_cached_obj   = False
+use_cached_probe = False
+use_cached_pos   = False
+
+### Initializing exp_params ###
+Input values are displayed below:
+kv: 80
+conv_angle: 24.9
+Npix: 128
+dx_spec: 0.1494
+defocus: 0
+c3: 0
+z_distance: 1
+Nlayer: 12
+N_scans: 16384
+N_scan_slow: 128
+N_scan_fast: 128
+scan_step_size: 0.429
+scan_flipT: None
+scan_affine: None
+scan_rand_std: 0.15
+omode_max: 1
+omode_init_occu: {'occu_type': 'uniform', 'init_occu': None}
+pmode_max: 6
+pmode_init_pows: [0.02]
+probe_permute: None
+meas_permute: None
+meas_reshape: None
+meas_flipT: [1, 0, 0]
+meas_crop: None
+meas_resample: None
+meas_add_source_size: None
+meas_add_detector_blur: None
+meas_add_poisson_noise: None
+
+Derived values given input exp_params:
+kv          = 80 kV
+wavelength  = 0.0418 Ang
+conv_angle  = 24.9 mrad
+Npix        = 128 px
+dk          = 0.0523 Ang^-1
+kMax        = 3.3467 Ang^-1
+alpha_max   = 139.7495 mrad
+dx          = 0.1494 Ang, Nyquist-limited dmin = 2*dx = 0.2988 Ang
+Rayleigh-limited resolution  = 1.0230 Ang (0.61*lambda/alpha for focused probe )
+Real space probe extent = 19.1232 Ang
+
+### Initializing measurements from 'raw' ###
+Imported meausrements shape = (16384, 128, 128)
+Imported meausrements int. statistics (min, mean, max) = (-30.8785, 1814.7064, 99441.8047)
+Flipping measurements with [flipup, fliplr, transpose] = [1, 0, 0]
+Minimum value of -30.8785 subtracted due to the positive px value constraint of measurements
+Normalizing measurements so the averaged measurement has max intensity at 1
+Radius of bright field disk             (rbf) = 11.0 px, suggested probe_mask_k radius (rbf*2/Npix) > 0.17
+meausrements int. statistics (min, mean, max) = (0.0000, 0.0275, 1.4818)
+measurements                      (N, Ky, Kx) = float32, (16384, 128, 128)
+
+### Initializing probe from 'simu' ###
+Use exp_params and default values instead for simulation
+Start simulating STEM probe
+kv          = 80 kV
+wavelength  = 0.0418 Ang
+conv_angle  = 24.9 mrad
+Npix        = 128 px
+dk          = 0.0523 Ang^-1
+kMax        = 3.3467 Ang^-1
+alpha_max   = 139.7447 mrad
+dx          = 0.1494 Ang, Nyquist-limited dmin = 2*dx = 0.2988 Ang
+Rayleigh-limited resolution  = 1.0229 Ang (0.61*lambda/alpha for focused probe )
+Real space probe extent = 19.1232 Ang
+Start making mixed-state STEM probe with 6 incoherent probe modes
+Relative power of probe modes = [0.9  0.02 0.02 0.02 0.02 0.02]
+probe                         (pmode, Ny, Nx) = complex64, (6, 128, 128)
+sum(|probe_data|**2) = 450.46, while sum(meas)/len(meas) = 450.46
+
+### Initializing probe pos from 'simu' ###
+Simulating probe positions with dx_spec = 0.1494, scan_step_size = 0.429, N_scan_fast = 128, N_scan_slow = 128
+Applying Gaussian distributed random displacement with std = 0.15 px to scan positions
+crop_pos                                (N,2) = int16, (16384, 2)
+crop_pos 1st and last px coords (y,x)         = ([50, 50], [414, 415])
+crop_pos extent (Ang)                         = [54.6804 54.6804]
+probe_pos_shifts                        (N,2) = float32, (16384, 2)
+
+### Initializing obj from 'simu' ###
+obj_shape is not provided, use exp_params, position range, and probe shape for estimated obj_shape (omode, Nz, Ny, Nx)
+object                    (omode, Nz, Ny, Nx) = complex64, (1, 12, 592, 592)
+object extent                 (Z, Y, X) (Ang) = [12.     88.4448 88.4448]
+
+### Initializing omode_occu from 'uniform' ###
+omode_occu                            (omode) = float32, (1,)
+
+### Initializing H (Fresnel propagator) ###
+Calculating H with probe_shape = [128 128], z_distance = 1.0000 Ang, lambd = 0.0418 Ang, extent = [19.1232 19.1232] Ang
+H                                    (Ky, Kx) = complex64, (128, 128)
+
+### Initializing obj tilts from = 'simu' ###
+Initialized obj_tilts with init_tilts = [[0, 0]] (theta_y, theta_x) mrad
+obj_tilts                              (N, 2) = float32, (1, 2)
+
+### Checking consistency between input params with the initialized variables ###
+Npix, DP measurements, probe, and H shapes are consistent as '128'
+N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '16384'
+obj.shape[0] is consistent with len(omode_occu) as '1'
+obj.shape[1] is consistent with Nlayer as '12'
+obj_tilts is consistent with either 1 or N_scans
+Pass the consistency check of initialized variables, initialization is done!
+
+### Initializing loss function ###
+
+### Initializing constraint function ###
+
+### Done initializing PtyRADSolver ###
+
+### Starting the PtyRADSolver in reconstruct mode ###
+
+### PtychoAD optimizable variables ###
+obja            : torch.Size([1, 12, 592, 592])   , torch.float32   , device:cuda:0, grad:True , lr:5e-03
+objp            : torch.Size([1, 12, 592, 592])   , torch.float32   , device:cuda:0, grad:True , lr:5e-03
+obj_tilts       : torch.Size([1, 2])              , torch.float32   , device:cuda:0, grad:False, lr:0e+00
+probe           : torch.Size([6, 128, 128, 2])    , torch.float32   , device:cuda:0, grad:True , lr:1e-03
+probe_pos_shifts: torch.Size([16384, 2])          , torch.float32   , device:cuda:0, grad:True , lr:5e-03
+
+### Optimizable variables statitsics ###
+Total measurement values:    268,435,456                
+Total optimizing variables:  8,640,512                
+Overdetermined ratio:        31.07
+
+### Model behavior ###
+Obj preblur       : False
+Tilt propagator   : False
+Sub-px probe shift: True
+Detector blur     : False
+
+### Creating PyTorch 'Adam' optimizer with configs = {} ###
+
+### Generating indices, batches, and output_path ###
+d90 = 23.000 px or 3.436 Ang
+Selecting indices with the 'full' mode 
+Generated 32 'random' groups of ~512 scan positions in 0.001 sec
+The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = 512 * 1 = 512
+output_path = 'output/tBL-WSe2//20240923_full_N16384_dp128_flipT100_random512_p6_1obj_12slice_dz1_Adam_plr1e-3_oalr5e-3_oplr5e-3_slr5e-3_ozblur1_opos_sng1.0_spr0.1_altas_benchmark_normal' is generated!
+Successfully copy 'tBL_WSe2_reconstruct.yml' to 'output/tBL-WSe2//20240923_full_N16384_dp128_flipT100_random512_p6_1obj_12slice_dz1_Adam_plr1e-3_oalr5e-3_oplr5e-3_slr5e-3_ozblur1_opos_sng1.0_spr0.1_altas_benchmark_normal'
+len(DataLoader) = num_batches = 32, DataLoader.batch_size = 512
+
+### Start the PtyRAD iterative ptycho reconstruction ###
+Iter: 1, obja.requires_grad = True
+Iter: 1, objp.requires_grad = True
+Iter: 1, obj_tilts.requires_grad = False
+Iter: 1, probe.requires_grad = True
+Iter: 1, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([5573, 10446, 969, 7905, 3938]...) in 0.282 sec
+Done batch 7 with 512 indices ([7594, 11626, 6372, 14760, 10145]...) in 0.254 sec
+Done batch 13 with 512 indices ([7767, 13140, 12371, 10627, 645]...) in 0.254 sec
+Done batch 19 with 512 indices ([10721, 13096, 4266, 15615, 1624]...) in 0.255 sec
+Done batch 25 with 512 indices ([9700, 14098, 5564, 7717, 3214]...) in 0.254 sec
+Done batch 32 with 512 indices ([9995, 9978, 2961, 529, 7172]...) in 0.253 sec
+Apply ortho pmode constraint at iter 1, relative pmode power = [0.871 0.029 0.027 0.025 0.024 0.023], probe int sum = 466.1219
+Apply fix probe int constraint at iter 1, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 1
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 1
+Apply hard positivity constraint on objp at iter 1
+Iter: 1, Total Loss: 0.4155, loss_single: 0.4142, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0013, loss_simlar: 0.0000, in 10.178 sec
+
+Iter: 2, obja.requires_grad = True
+Iter: 2, objp.requires_grad = True
+Iter: 2, obj_tilts.requires_grad = False
+Iter: 2, probe.requires_grad = True
+Iter: 2, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([9880, 5891, 9953, 471, 10857]...) in 0.259 sec
+Done batch 7 with 512 indices ([15094, 3570, 10839, 4172, 6446]...) in 0.253 sec
+Done batch 13 with 512 indices ([9638, 8816, 14472, 9644, 11200]...) in 0.255 sec
+Done batch 19 with 512 indices ([4677, 5235, 7347, 4193, 8965]...) in 0.253 sec
+Done batch 25 with 512 indices ([5622, 7052, 3111, 8069, 8135]...) in 0.254 sec
+Done batch 32 with 512 indices ([14481, 8852, 2597, 4406, 11744]...) in 0.254 sec
+Apply ortho pmode constraint at iter 2, relative pmode power = [0.881 0.031 0.027 0.026 0.019 0.016], probe int sum = 445.1547
+Apply fix probe int constraint at iter 2, probe int sum = 450.4553
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 2
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 2
+Apply hard positivity constraint on objp at iter 2
+Iter: 2, Total Loss: 0.2833, loss_single: 0.2826, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.193 sec
+
+Iter: 3, obja.requires_grad = True
+Iter: 3, objp.requires_grad = True
+Iter: 3, obj_tilts.requires_grad = False
+Iter: 3, probe.requires_grad = True
+Iter: 3, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([15900, 12397, 14056, 10815, 3074]...) in 0.254 sec
+Done batch 7 with 512 indices ([4947, 6211, 14913, 526, 12272]...) in 0.255 sec
+Done batch 13 with 512 indices ([13944, 4604, 13355, 15848, 7089]...) in 0.255 sec
+Done batch 19 with 512 indices ([15348, 6923, 3671, 10422, 2752]...) in 0.254 sec
+Done batch 25 with 512 indices ([9020, 1077, 4170, 4462, 15303]...) in 0.254 sec
+Done batch 32 with 512 indices ([1033, 1411, 13097, 3832, 582]...) in 0.254 sec
+Apply ortho pmode constraint at iter 3, relative pmode power = [0.857 0.036 0.036 0.033 0.02  0.018], probe int sum = 463.9922
+Apply fix probe int constraint at iter 3, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 3
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 3
+Apply hard positivity constraint on objp at iter 3
+Iter: 3, Total Loss: 0.2830, loss_single: 0.2823, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.181 sec
+
+Iter: 4, obja.requires_grad = True
+Iter: 4, objp.requires_grad = True
+Iter: 4, obj_tilts.requires_grad = False
+Iter: 4, probe.requires_grad = True
+Iter: 4, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([13790, 14010, 3646, 8205, 925]...) in 0.254 sec
+Done batch 7 with 512 indices ([279, 3577, 13523, 9042, 5736]...) in 0.254 sec
+Done batch 13 with 512 indices ([9116, 13502, 6848, 7148, 4780]...) in 0.253 sec
+Done batch 19 with 512 indices ([3615, 8705, 8342, 6423, 9212]...) in 0.255 sec
+Done batch 25 with 512 indices ([12588, 1033, 3411, 3511, 8443]...) in 0.255 sec
+Done batch 32 with 512 indices ([11931, 14016, 10632, 15421, 4400]...) in 0.256 sec
+Apply ortho pmode constraint at iter 4, relative pmode power = [0.886 0.035 0.02  0.02  0.02  0.018], probe int sum = 436.1982
+Apply fix probe int constraint at iter 4, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 4
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 4
+Apply hard positivity constraint on objp at iter 4
+Iter: 4, Total Loss: 0.2811, loss_single: 0.2803, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0008, loss_simlar: 0.0000, in 8.174 sec
+
+Iter: 5, obja.requires_grad = True
+Iter: 5, objp.requires_grad = True
+Iter: 5, obj_tilts.requires_grad = False
+Iter: 5, probe.requires_grad = True
+Iter: 5, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([12875, 1795, 10085, 5663, 3728]...) in 0.253 sec
+Done batch 7 with 512 indices ([7132, 14191, 1886, 4815, 13071]...) in 0.254 sec
+Done batch 13 with 512 indices ([13134, 10904, 7637, 14386, 2208]...) in 0.253 sec
+Done batch 19 with 512 indices ([8646, 7755, 1064, 7475, 12929]...) in 0.254 sec
+Done batch 25 with 512 indices ([5701, 15264, 633, 10160, 816]...) in 0.254 sec
+Done batch 32 with 512 indices ([4503, 12392, 2028, 197, 2628]...) in 0.254 sec
+Apply ortho pmode constraint at iter 5, relative pmode power = [0.859 0.037 0.031 0.03  0.023 0.021], probe int sum = 463.5558
+Apply fix probe int constraint at iter 5, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 5
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 5
+Apply hard positivity constraint on objp at iter 5
+Iter: 5, Total Loss: 0.2832, loss_single: 0.2824, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0008, loss_simlar: 0.0000, in 8.163 sec
+
+Saving summary figures for iter 5
+Iter: 6, obja.requires_grad = True
+Iter: 6, objp.requires_grad = True
+Iter: 6, obj_tilts.requires_grad = False
+Iter: 6, probe.requires_grad = True
+Iter: 6, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([7147, 991, 11229, 5832, 10738]...) in 0.265 sec
+Done batch 7 with 512 indices ([2423, 11951, 14815, 2659, 7732]...) in 0.254 sec
+Done batch 13 with 512 indices ([11778, 2807, 5001, 13454, 8316]...) in 0.255 sec
+Done batch 19 with 512 indices ([14259, 2407, 15824, 9432, 15838]...) in 0.254 sec
+Done batch 25 with 512 indices ([14318, 12542, 489, 6822, 4161]...) in 0.253 sec
+Done batch 32 with 512 indices ([847, 9393, 1609, 799, 2444]...) in 0.253 sec
+Apply ortho pmode constraint at iter 6, relative pmode power = [0.867 0.038 0.026 0.026 0.022 0.02 ], probe int sum = 446.7671
+Apply fix probe int constraint at iter 6, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 6
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 6
+Apply hard positivity constraint on objp at iter 6
+Iter: 6, Total Loss: 0.2803, loss_single: 0.2794, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0008, loss_simlar: 0.0000, in 8.182 sec
+
+Iter: 7, obja.requires_grad = True
+Iter: 7, objp.requires_grad = True
+Iter: 7, obj_tilts.requires_grad = False
+Iter: 7, probe.requires_grad = True
+Iter: 7, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([13246, 15020, 769, 15606, 10135]...) in 0.254 sec
+Done batch 7 with 512 indices ([8554, 718, 11899, 12393, 13614]...) in 0.254 sec
+Done batch 13 with 512 indices ([12688, 1070, 4542, 14920, 5867]...) in 0.254 sec
+Done batch 19 with 512 indices ([8326, 2595, 264, 7774, 4881]...) in 0.254 sec
+Done batch 25 with 512 indices ([14908, 1720, 2743, 14842, 15497]...) in 0.253 sec
+Done batch 32 with 512 indices ([12214, 5890, 12426, 7923, 10782]...) in 0.254 sec
+Apply ortho pmode constraint at iter 7, relative pmode power = [0.854 0.04  0.03  0.029 0.025 0.022], probe int sum = 456.5726
+Apply fix probe int constraint at iter 7, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 7
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 7
+Apply hard positivity constraint on objp at iter 7
+Iter: 7, Total Loss: 0.2768, loss_single: 0.2760, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0009, loss_simlar: 0.0000, in 8.178 sec
+
+Iter: 8, obja.requires_grad = True
+Iter: 8, objp.requires_grad = True
+Iter: 8, obj_tilts.requires_grad = False
+Iter: 8, probe.requires_grad = True
+Iter: 8, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([3207, 15559, 2967, 5349, 13684]...) in 0.254 sec
+Done batch 7 with 512 indices ([2638, 8613, 9300, 4321, 4030]...) in 0.254 sec
+Done batch 13 with 512 indices ([6557, 90, 7386, 11869, 15696]...) in 0.254 sec
+Done batch 19 with 512 indices ([12883, 16162, 15906, 14959, 16307]...) in 0.254 sec
+Done batch 25 with 512 indices ([6783, 2718, 15827, 9555, 5726]...) in 0.253 sec
+Done batch 32 with 512 indices ([6876, 1033, 12384, 14435, 4311]...) in 0.255 sec
+Apply ortho pmode constraint at iter 8, relative pmode power = [0.85  0.043 0.029 0.029 0.026 0.023], probe int sum = 452.0135
+Apply fix probe int constraint at iter 8, probe int sum = 450.4553
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 8
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 8
+Apply hard positivity constraint on objp at iter 8
+Iter: 8, Total Loss: 0.2744, loss_single: 0.2735, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0009, loss_simlar: 0.0000, in 13.107 sec
+
+Iter: 9, obja.requires_grad = True
+Iter: 9, objp.requires_grad = True
+Iter: 9, obj_tilts.requires_grad = False
+Iter: 9, probe.requires_grad = True
+Iter: 9, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([5648, 11506, 8542, 14681, 13701]...) in 0.261 sec
+Done batch 7 with 512 indices ([12090, 2018, 10268, 8567, 14642]...) in 0.253 sec
+Done batch 13 with 512 indices ([16224, 1462, 15118, 15799, 3464]...) in 0.254 sec
+Done batch 19 with 512 indices ([2222, 16350, 7022, 4166, 12941]...) in 0.253 sec
+Done batch 25 with 512 indices ([15883, 3447, 8913, 9696, 6847]...) in 0.254 sec
+Done batch 32 with 512 indices ([9431, 1251, 10267, 3339, 14160]...) in 0.254 sec
+Apply ortho pmode constraint at iter 9, relative pmode power = [0.831 0.045 0.036 0.036 0.028 0.025], probe int sum = 460.2866
+Apply fix probe int constraint at iter 9, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 9
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 9
+Apply hard positivity constraint on objp at iter 9
+Iter: 9, Total Loss: 0.2731, loss_single: 0.2722, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0009, loss_simlar: 0.0000, in 12.553 sec
+
+Iter: 10, obja.requires_grad = True
+Iter: 10, objp.requires_grad = True
+Iter: 10, obj_tilts.requires_grad = False
+Iter: 10, probe.requires_grad = True
+Iter: 10, probe_pos_shifts.requires_grad = True
+Done batch 1 with 512 indices ([10282, 8069, 15101, 12515, 15305]...) in 0.254 sec
+Done batch 7 with 512 indices ([10728, 13961, 5902, 11240, 2502]...) in 0.254 sec
+Done batch 13 with 512 indices ([14983, 5724, 12910, 4160, 13773]...) in 0.253 sec
+Done batch 19 with 512 indices ([11188, 3398, 16127, 9565, 8470]...) in 0.253 sec
+Done batch 25 with 512 indices ([1973, 6209, 2830, 3315, 15419]...) in 0.255 sec
+Done batch 32 with 512 indices ([11851, 1216, 5851, 15609, 9040]...) in 0.254 sec
+Apply ortho pmode constraint at iter 10, relative pmode power = [0.831 0.049 0.032 0.032 0.03  0.026], probe int sum = 450.9117
+Apply fix probe int constraint at iter 10, probe int sum = 450.4552
+Apply z-direction Gaussian blur with std = 1 px on obja at iter 10
+Apply z-direction Gaussian blur with std = 1 px on objp at iter 10
+Apply hard positivity constraint on objp at iter 10
+Iter: 10, Total Loss: 0.2709, loss_single: 0.2700, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0009, loss_simlar: 0.0000, in 13.304 sec
+
+Saving summary figures for iter 10
+
+### The PtyRADSolver is finished in 117.750 sec, or 1 min 57.750 sec ###
+Mon Sep 23 23:28:31 EDT 2024

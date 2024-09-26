@@ -4,6 +4,8 @@
 import argparse
 import sys
 
+import torch.distributed as dist
+
 PATH_TO_PTYRAD = "./"  # Change this for the ptyrad package path
 sys.path.append(PATH_TO_PTYRAD)
 from ptyrad.data_io import load_params  # noqa: E402
@@ -26,6 +28,9 @@ if __name__ == "__main__":
     
     device = set_gpu_device(args.gpuid)
     params = load_params(args.params_path)
-
-    ptycho_solver = PtyRADSolver(params, device=device)
+    ptycho_solver = PtyRADSolver(params)
     ptycho_solver.run()
+    
+    # End the process properly when in DDP mode
+    if dist.is_initialized():
+        dist.destroy_process_group()
