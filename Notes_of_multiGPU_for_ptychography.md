@@ -17,6 +17,7 @@ Last update: 2024.09.24
 - 2024.09.23: Code runs for python, accelerate with 1 GPU, accelerate with 2 GPUs, but no speed up. I'm suspecting it's the `split_batches` not working on my custom `BatchesDataset`. Tested til 5AM and confirms it's the `BatchesDataset` and `split_batches` were not set correctly. With `IndicesDataset` it's running more correctly, although it's indeed slower than 1 GPU. Another issue is the reconstruction is incorrect when run via `accelerate`, turns out it's the Complex probe not handled correctly in PyTorch 2.4 even though it didn't complain. Need to use the `torch.view_as_complex` trick to get away with it.
 - 2024.09.24: Clean up the code. It's running smoothly locally in jupyter notebook, in cluster via python or accelerate. Model saving/loading without any issue. Add the `mixed_precision_type` support. Tried the `base_precision_type` for fix precision attempt for 'bf16' and 'fp16' but it would get stuck at the backward part. No solution yet, fall back to `amp` seems to be the only option.
 - 2024.09.25: Implemented the accelerate enabled mixed precision and make it a CLI argument for simplicity. The original grad accumulation implementation seems reasonable with split_batches=True.
+- 2024.09.26: Experimentally merge the `accelerate` into `dev`. Clean up the code structure and driver script logic. Fix the error in `make_save_dict` because the saved probe is in the real view (pmode, Ny, Nx, 2) instead of the complex view.
 
 ## multi-GPU speed up table
 - I did quick tests using the full A100 node with tBL-WSe2 dataset
@@ -27,8 +28,8 @@ Last update: 2024.09.24
 ![Iteration_time_vs_batch_size](./docs/20240924_multi-GPU/iteration_time_vs_batch_size.png)
 
 ## Some multi-GPU todo
+- Update the environment requirement file
 - Find workaround to actually use the `GROUP_MODE` indices for multi-GPU (currently the DataLoader can only do random indices)
-- Decide whether to work with hypertune or not. Currently I'd prefer let each BO trials takes a full GPU for simplicity
 
 ## Lesson learned
 - PyTorch hasn't support distributed training (multi GPU) on MIG yet. See [here](https://discuss.pytorch.org/t/parallel-training-with-invidia-migs/159445) and [here](https://github.com/pytorch/pytorch/issues/130181)

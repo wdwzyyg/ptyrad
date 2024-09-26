@@ -12,13 +12,17 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
-def set_gpu_device(gpuid):
-    device = torch.device("cuda:" + str(gpuid))
-    print("Execution device: ", device)
+def set_gpu_device(gpuid=0):
     print("PyTorch version: ", torch.__version__)
     print("CUDA available: ", torch.cuda.is_available())
     print("CUDA version: ", torch.version.cuda)
-    print("CUDA device: ", torch.cuda.get_device_name(gpuid))
+    print("CUDA device: ", [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
+    
+    if gpuid is not None:
+        device = torch.device("cuda:" + str(gpuid))
+        print(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})\n")
+    else:
+        device = None
     return device
 
 def vprint(*args, verbose=True, **kwargs):
@@ -185,10 +189,14 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, ni
     # the actual values used for reconstuction such as N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from initial value due to the meas_crop, meas_resample
     # the model behavior and learning rates could also be different from the initial params dict if the user
     # run the reconstuction with manually modified `model_params` in the detailed walkthrough notebook
+    
+    # Postprocess the opt_probe back to complex view
+    optimizable_tensors = model.optimizable_tensors
+    optimizable_tensors['probe'] = model.get_complex_probe_view()
         
     save_dict = {
                 'output_path'           : output_path,
-                'optimizable_tensors'   : model.optimizable_tensors,
+                'optimizable_tensors'   : optimizable_tensors,
                 'optim_state_dict'      : optimizer.state_dict(),
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
@@ -1143,7 +1151,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
         plt.vlines(x=HWHM*dx, ymin=0, ymax=1, color="tab:blue", linestyle=":", label='FWHM')
         plt.vlines(x=radius_rms*dx, ymin=0, ymax=1, color="tab:green", linestyle=":", label='Radius_RMS')
         plt.xticks(np.arange(num_ticks)*np.round(len(radial_profile)*dx/num_ticks, decimals = 1-int(np.floor(np.log10(len(radial_profile)*dx)))))
-        ax.set_xlabel("Distance from blob center ($\AA$)")
+        ax.set_xlabel(r"Distance from blob center ($\AA$)")
         ax.set_ylabel("Normalized intensity")
         plt.legend()
         plt.show()

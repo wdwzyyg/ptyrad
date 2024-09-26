@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-import torch.distributed as dist
 
 from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs # Multi GPU training library from HuggingFace
 from ptyrad.initialization import Initializer
@@ -44,8 +43,8 @@ class PtyRADSolver(object):
             be performed instead of regular reconstruction. Defaults to False.
         verbose (bool): A flag to control the verbosity of the output. Defaults to True unless
             if_quiet is set to True.
-        device (str): The device to run the computations on (e.g., 'cuda:0' for GPU, 'cpu' for CPU). 
-            Defaults to 'cuda:0'.
+        device (str): The device to run the computations on (e.g., 'cuda' for GPU, 'cpu' for CPU). 
+            Defaults to None to let `accelerate` automatically decide.
 
     Methods:
         init_initializer():
@@ -63,13 +62,16 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params):
-        self.params       = params
-        self.if_hypertune = self.params['hypertune_params']['if_hypertune']
-        self.verbose      = not self.params['recon_params']['if_quiet']
-        
-        # Set up accelerator for multiGPU setting, note that this has no effect when we launch it with just `python <script>`
+    def __init__(self, params, device=None):
+        self.params        = params
+        self.if_hypertune  = self.params['hypertune_params']['if_hypertune']
+        self.verbose       = not self.params['recon_params']['if_quiet']
+        self.manual_device = device
+        self.use_acc       = True if device is None else False
+
+        # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
         self.init_accelerator()
+        self.device        = self.accelerator.device if self.use_acc else device
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
@@ -77,17 +79,16 @@ class PtyRADSolver(object):
         self.init_constraint()
         self.accelerator.print("\n### Done initializing PtyRADSolver ###")
     
-    @property
-    def device(self):
-        return self.accelerator.device
-    
     def init_accelerator(self):
-        dataloader_config = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
-        kwargs_handlers   = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
-        self.accelerator  = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
+        kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
+        self.accelerator   = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        self.accelerator.print(f"\nuse_acc = {self.use_acc} because the passed in device = {self.manual_device}")
         self.accelerator.print(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
+        self.accelerator.print("### Done Initializing HuggingFace accelerator ###")
     
     def init_initializer(self):
+        # These components are organized into individual methods so we can re-initialize some of them if needed 
         self.accelerator.print("\n### Initializing Initializer ###")
         self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
 
@@ -102,26 +103,30 @@ class PtyRADSolver(object):
     def reconstruct(self):
         params = self.params
         device = self.device
-        batch_size = params['recon_params']['BATCH_SIZE']['size']
         
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
-        indices, _, output_path = prepare_recon(model, self.init, params) # `batches` would not be used for the IndicedDataset because I haven't figured out how to do specified indices
         
-        # Dataset setup
-        self.ds = IndicesDataset(indices)
-        dl = torch.utils.data.DataLoader(self.ds, batch_size = batch_size, shuffle = True) # This will do the batching
-        dl = self.accelerator.prepare(dl)
-        self.dl = dl
-        
-        vprint(f"len(DataLoader) = num_batches = {len(self.dl)}, DataLoader.batch_size = {len(indices)//len(self.dl)}", verbose=self.verbose)
-        if dist.is_initialized:
+        if not self.use_acc:
+            indices, batches, output_path = prepare_recon(model, self.init, params)
+        else:
+            vprint(f"params['recon_params']['GROUP_MODE'] is set to 'random' when `use_acc` = {self.use_acc}", verbose=self.verbose)
+            params['recon_params']['GROUP_MODE'] = 'random'
+            # `batches` would be replaced by a random DataLoader if we use_acc because I haven't figured out how to do specified indices in DataLoader
+            # In other words, only `random` grouping is available for accelerate-powered multiGPU and mixed-precision
+            indices, batches, output_path = prepare_recon(model, self.init, params)
+            ds = IndicesDataset(indices)
+            dl = torch.utils.data.DataLoader(ds, batch_size = params['recon_params']['BATCH_SIZE']['size'], shuffle = True) # This will do the batching
+            batches = self.accelerator.prepare(dl) # Note that `batches` is replaced by a DataLoader (accelerate mode) that is also an iterable object
+            model, optimizer = self.accelerator.prepare(model, optimizer)
+            
+            vprint(f"len(DataLoader) = num_batches = {len(dl)}, DataLoader.batch_size = {len(indices)//len(dl)}", verbose=self.verbose)
             vprint("Note that the DataLoader will be duplicated for each process, while DataLoader.batch_size is the effective batch size (batch_size_per_process * num_process)", verbose=self.verbose) 
             vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
-            vprint("Therefore, for batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
-        model, optimizer = self.accelerator.prepare(model, optimizer)
-        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, self.dl, output_path, acc=self.accelerator)
+            vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
+
+        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
     
     def hypertune(self):
         import optuna
@@ -435,7 +440,7 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     loss_iter = sum(avg_losses.values())
     return loss_iter
 
-def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0', verbose=False):
+def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda', verbose=False):
     """
     Objective function for Optuna hyperparameter tuning in ptychographic reconstruction.
 
@@ -454,7 +459,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda:0
         loss_fn (CombinedLoss): The loss function object that calculates the reconstruction loss.
         constraint_fn (CombinedConstraint): The constraint function object that applies constraints 
             during optimization.
-        device (str, optional): The device to run the reconstruction on, e.g., 'cuda:0'. Defaults to 'cuda:0'.
+        device (str, optional): The device to run the reconstruction on, e.g., 'cuda'. Defaults to 'cuda'.
         verbose (bool, optional): If True, enables verbose output. Defaults to False.
 
     Returns:

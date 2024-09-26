@@ -21,7 +21,7 @@ def multislice_forward_model_vec_all(object_patches, omode_occu, probe, H, eps=1
 
     Args:
         object_patches (torch.Tensor): Tensor of shape (N, omode, Nz, Ny, Nx, 2), representing
-            pseudo-complex object patches with float32 real and imaginary components. 
+            pseudo-complex object patches with float32 amplitude and phase components. 
             N is the number of samples in a batch, omode is the number of object modes, 
             Nz, Ny, Nx are the dimensions of the object patches.
         omode_occu (torch.Tensor): Tensor of shape (omode,) with float32 values, representing 
