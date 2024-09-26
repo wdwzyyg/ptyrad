@@ -191,8 +191,11 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, ni
     # run the reconstuction with manually modified `model_params` in the detailed walkthrough notebook
     
     # Postprocess the opt_probe back to complex view
-    optimizable_tensors = model.optimizable_tensors
-    optimizable_tensors['probe'] = model.get_complex_probe_view()
+    optimizable_tensors = {}
+    for name, tensor in model.optimizable_tensors.items():
+        optimizable_tensors[name] = tensor.detach().clone()
+        if name == 'probe':
+            optimizable_tensors['probe'] = model.get_complex_probe_view().detach().clone()
         
     save_dict = {
                 'output_path'           : output_path,
