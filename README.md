@@ -34,7 +34,13 @@ conda create -n ptyrad --file ./envs/spec-file_ptyrad_windows.txt
 ```bash
 conda create -n ptyrad --file ./envs/spec-file_ptyrad_linux.txt
 ```
-Note: `ptyrad` can be changed to your preferred conda environment name, and `./envs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
+
+If you want to create an environment for PtyRAD with multi-GPU capability, use
+```bash
+conda create -n ptyrad_acc --file ./envs/spec-file_ptyrad_acc_linux.txt
+```
+
+Note: `ptyrad` can be changed into your preferred conda environment name, and `./envs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
 
 ### 2c. Create Conda environment on Windows via specified package
 ```bash
@@ -63,6 +69,8 @@ git clone https://github.com/chiahao3/ptyrad.git
 ```
 
 Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory (easier)
+
+Note: For multi-GPU capability, you'll need to get PtyRAD from the `accelerate` branch and setup corresponding python environment `ptyrad_acc` in Linux to use NCCL and PyTorch DDP
 
 ### 4. Trying the demo in /scripts
 
