@@ -3,8 +3,8 @@
 #SBATCH --mail-user=cl2696@cornell.edu       # Where to send mail
 #SBATCH --nodes=1                            # number of nodes requested
 #SBATCH --ntasks=1                           # number of tasks to run in parallel
-#SBATCH --cpus-per-task=32                    # number of CPUs required for each task
-#SBATCH --gres=gpu:a100:2                 # request a GPU #gpu:a100:1, gpu:2g.20gb:1
+#SBATCH --cpus-per-task=8                    # number of CPUs required for each task. Suggested values are 4 for 10GB slice, 8 for 20GB slice, and 32 for 80GB full A100
+#SBATCH --gres=gpu:2g.20gb:1                 # request a GPU. Most programs only utilize 1 GPU so there's no need to request more
 #SBATCH --time=48:00:00                      # Time limit hrs:min:sec
 #SBATCH --output=logs/log_job_%j_ptyrad_tBL_WSe2.txt  # Standard output and error log to /logs, you need to create this folder first!
 
@@ -12,20 +12,12 @@ pwd; hostname; date
 
 module load cuda/11.8
 
-source activate ptyrad_acc # Use ptyrad_acc if you want to use multi-GPU via `accelerate`
+source activate ptyrad
 
 ## Set the params_path variable
 PARAMS_PATH="params/demo/tBL_WSe2_reconstruct.yml"
 echo params_path = ${PARAMS_PATH}
 
-## Run the script via python or HuggingFace accelerate. Most often you'll do conventional python.
-## For accelerate, do not pass `--gpuid` because accelerate will automatically determine the device for parallelism
-## multi-GPU and mixed-precision are only available while launched via accelerate, and are only supported on non-MIG nodes so we can only do c0001 (full A100s)
-## On A100, mixed-precision do not give significant speedup because A100 uses mostly tensor cores for TF32 dtype
-## multi-GPU can also be much slower if the batch size is too small. Typically smaller batch sizes converge faster unless we scale the learning rate with batch size.
-
-# python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid 0 2>&1 # This runs via typical python on 1 GPU
-# accelerate launch --num_processes=1 --mixed_precision='fp16' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs on 1 GPU with mixed precision via `accelerate`
-accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs without mixed precision via `accelerate`
+python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid 0 2>&1 # This runs via typical python on 1 GPU
 
 date

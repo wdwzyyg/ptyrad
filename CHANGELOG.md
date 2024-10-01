@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Precision selection, maybe float16?
 - Use in-place operations on tensors don't require grad
 
-## [Unrelease]
+## [v0.1.0-beta2.6] - 2024-09-30
 ### Added
 - Add `--gpuid` as a command line argument for `run_ptyrad.py` @sezelt
 - Add `set_gpu_device` to `utils` for cleaner `run_ptyrad.py` script
