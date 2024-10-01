@@ -5,13 +5,27 @@ from time import time
 
 import numpy as np
 import torch
+
 from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def set_gpu_device(gpuid=0):
+    print("PyTorch version: ", torch.__version__)
+    print("CUDA available: ", torch.cuda.is_available())
+    print("CUDA version: ", torch.version.cuda)
+    print("CUDA device: ", [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
+    
+    if gpuid is not None:
+        device = torch.device("cuda:" + str(gpuid))
+        print(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})\n")
+    else:
+        device = None
+    return device
+
 def vprint(*args, verbose=True, **kwargs):
-    """ Verbose print with individual control """ 
+    """Verbose print with individual control, only for rank 0 in DDP."""
     if verbose:
         print(*args, **kwargs)
 
@@ -174,10 +188,17 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, ni
     # the actual values used for reconstuction such as N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from initial value due to the meas_crop, meas_resample
     # the model behavior and learning rates could also be different from the initial params dict if the user
     # run the reconstuction with manually modified `model_params` in the detailed walkthrough notebook
+    
+    # Postprocess the opt_probe back to complex view
+    optimizable_tensors = {}
+    for name, tensor in model.optimizable_tensors.items():
+        optimizable_tensors[name] = tensor.detach().clone()
+        if name == 'probe':
+            optimizable_tensors['probe'] = model.get_complex_probe_view().detach().clone()
         
     save_dict = {
                 'output_path'           : output_path,
-                'optimizable_tensors'   : model.optimizable_tensors,
+                'optimizable_tensors'   : optimizable_tensors,
                 'optim_state_dict'      : optimizer.state_dict(),
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
@@ -234,8 +255,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     prefix_date  = recon_params['prefix_date']
     prefix       = recon_params['prefix']
     postfix      = recon_params['postfix']
-    pmode        = model.opt_probe.size(0)
-    dp_size      = model.measurements.size(1)
+    pmode        = model.get_complex_probe_view().size(0)
+    dp_size      = model.get_complex_probe_view().size(-1)
     obj_shape    = model.opt_objp.shape
     probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
     objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
@@ -245,8 +266,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     init_conv_angle = exp_params['conv_angle']
-    init_defocus = exp_params['defocus']
-    optimizer_str = model.optimizer_params['name']
+    init_defocus    = exp_params['defocus']
+    init_c3    = exp_params['c3']
+    init_c5    = exp_params['c5']
+    optimizer_str   = model.optimizer_params['name']
     start_iter_dict = model.start_iter
 
     # Preprocess prefix and postfix
@@ -268,7 +291,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # Attach obj shape and dz
     output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
-        z_distance = model.z_distance.cpu().numpy().round(2)
+        z_distance = model.z_distance.detach().cpu().numpy().round(2)
         output_path += f"_dz{z_distance:.3g}"
     
     # Attach optimizer name (optional)
@@ -366,6 +389,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     if 'init' in recon_dir_affixes:
         output_path += f"_ca{init_conv_angle:.3g}"
         output_path += f"_df{init_defocus:.3g}"
+        if init_c3 != 0:
+            output_path += f"_c3{format(init_c3, '.0e')}"
+        if init_c5 != 0:
+            output_path += f"_c5{format(init_c5, '.0e')}"
         
         if scan_affine is not None:
             affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
@@ -528,14 +555,14 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_t, nite
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
-
-    probe_amp  = model.opt_probe.reshape(-1, model.opt_probe.size(-1)).t().abs().detach().cpu().numpy().astype('float32')
-    objp       = model.opt_objp.detach().cpu().numpy().astype('float32')
-    obja       = model.opt_obja.detach().cpu().numpy().astype('float32')
+    probe      = model.get_complex_probe_view() 
+    probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
+    objp       = model.opt_objp.detach().cpu().numpy()
+    obja       = model.opt_obja.detach().cpu().numpy()
     # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
     omode      = model.opt_objp.size(0)
     zslice     = model.opt_objp.size(1)
-    crop_pos   = model.crop_pos[indices].cpu().numpy() + np.array(model.opt_probe.detach().cpu().numpy().shape[-2:])//2
+    crop_pos   = model.crop_pos[indices].detach().cpu().numpy() + np.array(probe.shape[-2:])//2
     y_min, y_max = crop_pos[:,0].min(), crop_pos[:,0].max()
     x_min, x_max = crop_pos[:,1].min(), crop_pos[:,1].max()
     
@@ -812,12 +839,12 @@ def get_default_probe_simu_params(exp_params):
                     "conv_angle"     : exp_params['conv_angle'],
                     "Npix"           : exp_params['Npix'],
                     "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                    "pmodes"         : exp_params['pmode_max'],
+                    "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
                     "pmode_init_pows": exp_params['pmode_init_pows'],
                     ## Aberration coefficients
-                    "df": exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
-                    "c3": exp_params['c3'] , #third-order spherical aberration in angstrom
-                    "c5":0, #fifth-order spherical aberration in angstrom
+                    "df"             : exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
+                    "c3"             : exp_params['c3'] , #third-order spherical aberration in angstrom
+                    "c5"             : exp_params['c5'], #fifth-order spherical aberration in angstrom
                     "c7":0, #seventh-order spherical aberration in angstrom
                     "f_a2":0, #twofold astigmatism in angstrom
                     "f_a3":0, #threefold astigmatism in angstrom
@@ -844,21 +871,21 @@ def make_stem_probe(params_dict, verbose=True):
     from numpy.fft import fftfreq, fftshift, ifft2, ifftshift
     
     ## Basic params
-    voltage     = params_dict["kv"]         # Ang
-    conv_angle  = params_dict["conv_angle"] # mrad
-    Npix        = params_dict["Npix"]       # Number of pixel of thr detector/probe
-    dx          = params_dict["dx"]         # px size in Angstrom
+    voltage     = float(params_dict["kv"])         # Ang
+    conv_angle  = float(params_dict["conv_angle"]) # mrad
+    Npix        = int  (params_dict["Npix"])       # Number of pixel of thr detector/probe
+    dx          = float(params_dict["dx"])         # px size in Angstrom
     ## Aberration coefficients
-    df          = params_dict["df"] #first-order aberration (defocus) in angstrom
-    c3          = params_dict["c3"] #third-order spherical aberration in angstrom
-    c5          = params_dict["c5"] #fifth-order spherical aberration in angstrom
-    c7          = params_dict["c7"] #seventh-order spherical aberration in angstrom
-    f_a2        = params_dict["f_a2"] #twofold astigmatism in angstrom
-    f_a3        = params_dict["f_a3"] #threefold astigmatism in angstrom
-    f_c3        = params_dict["f_c3"] #coma in angstrom
-    theta_a2    = params_dict["theta_a2"] #azimuthal orientation in radian
-    theta_a3    = params_dict["theta_a3"] #azimuthal orientation in radian
-    theta_c3    = params_dict["theta_c3"] #azimuthal orientation in radian
+    df          = float(params_dict["df"]) #first-order aberration (defocus) in angstrom
+    c3          = float(params_dict["c3"]) #third-order spherical aberration in angstrom
+    c5          = float(params_dict["c5"]) #fifth-order spherical aberration in angstrom
+    c7          = float(params_dict["c7"]) #seventh-order spherical aberration in angstrom
+    f_a2        = float(params_dict["f_a2"]) #twofold astigmatism in angstrom
+    f_a3        = float(params_dict["f_a3"]) #threefold astigmatism in angstrom
+    f_c3        = float(params_dict["f_c3"]) #coma in angstrom
+    theta_a2    = float(params_dict["theta_a2"]) #azimuthal orientation in radian
+    theta_a3    = float(params_dict["theta_a3"]) #azimuthal orientation in radian
+    theta_c3    = float(params_dict["theta_c3"]) #azimuthal orientation in radian
     shifts      = params_dict["shifts"] #shift probe center in angstrom
     
     # Calculate some variables
@@ -871,7 +898,7 @@ def make_stem_probe(params_dict, verbose=True):
     # Make k space sampling and probe forming aperture
     kx = fftshift(fftfreq(Npix, 1/Npix))
     # kx = np.linspace(-np.floor(Npix/2),np.ceil(Npix/2)-1,Npix)
-    [kX,kY] = np.meshgrid(kx,kx, indexing='xy')
+    kX,kY = np.meshgrid(kx,kx, indexing='xy')
 
     kX = kX*dk
     kY = kY*dk
@@ -1126,7 +1153,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
         plt.vlines(x=HWHM*dx, ymin=0, ymax=1, color="tab:blue", linestyle=":", label='FWHM')
         plt.vlines(x=radius_rms*dx, ymin=0, ymax=1, color="tab:green", linestyle=":", label='Radius_RMS')
         plt.xticks(np.arange(num_ticks)*np.round(len(radial_profile)*dx/num_ticks, decimals = 1-int(np.floor(np.log10(len(radial_profile)*dx)))))
-        ax.set_xlabel("Distance from blob center ($\AA$)")
+        ax.set_xlabel(r"Distance from blob center ($\AA$)")
         ax.set_ylabel("Normalized intensity")
         plt.legend()
         plt.show()
