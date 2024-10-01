@@ -18,6 +18,7 @@ Last update: 2024.09.24
 - 2024.09.24: Clean up the code. It's running smoothly locally in jupyter notebook, in cluster via python or accelerate. Model saving/loading without any issue. Add the `mixed_precision_type` support. Tried the `base_precision_type` for fix precision attempt for 'bf16' and 'fp16' but it would get stuck at the backward part. No solution yet, fall back to `amp` seems to be the only option.
 - 2024.09.25: Implemented the accelerate enabled mixed precision and make it a CLI argument for simplicity. The original grad accumulation implementation seems reasonable with split_batches=True.
 - 2024.09.26: Experimentally merge the `accelerate` into `dev`. Clean up the code structure and driver script logic. Fix the error in `make_save_dict` because the saved probe is in the real view (pmode, Ny, Nx, 2) instead of the complex view.
+- 2024.09.30: Decided to keep the multi-GPU inside the `accelerate` branch for now because I'm a bit concerned about adding a new dependency would break the platform compatibility. Also `accelerate` package at conda-forge channel (0.21) is a bit too old for my current implementation. Besides, I'm not sure if it's possible to do multiple GPU on Windows through this setup so might try to keep `main` branch to be platform independent.
 
 ## multi-GPU speed up table
 - I did quick tests using the full A100 node with tBL-WSe2 dataset

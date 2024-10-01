@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `c5` explicitly under `exp_params` so we have more control on simulated initial probe
 - Add `c3` and `c5` into hypertunable params @sezelt
 - Enable `'step': null` inside `'tune_params'` for continuous parameter space in hypertune mode @sezelt
-- Add multi-GPU and mixed-precision capabilities via HuggingFace `accelerate` package
+- Add multi-GPU and mixed-precision capabilities via HuggingFace `accelerate` package. This is implemented in a separate branch `accelerate` and would require a different environment.
 ### Changes
 - Update `get_default_probe_simu_params` to take in 'c5' from `exp_params` as well
 - Update `make_output_folder` to include c3, c5 values under the `init` condition inside `recon_dir_affixes`
