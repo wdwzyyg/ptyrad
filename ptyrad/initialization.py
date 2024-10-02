@@ -202,13 +202,29 @@ class Initializer:
             vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
             
         # Resample diffraction patterns along the ky, kx dimension
-        if self.init_params['exp_params']['meas_resample'] is not None:
-            zoom_factors = np.array([1, *self.init_params['exp_params']['meas_resample']]) # scipy.ndimage.zoom applies to all axes
-            meas = zoom(meas, zoom_factors, order=1)
-            vprint("Update `exp_params` (Npix) after the measurements resampling", verbose=self.verbose)
-            self.init_params['exp_params']['Npix'] = meas.shape[-1]
+        if self.init_params['exp_params']['meas_resample']['mode'] is not None:
+            mode = self.init_params['exp_params']['meas_resample']['mode']
+            scale_factors = np.array([1, *self.init_params['exp_params']['meas_resample']['scale_factors']]) 
+            
+            if mode == 'precompute':
+                meas = zoom(meas, scale_factors, order=1) # scipy.ndimage.zoom applies to all axes
+                Npix = meas.shape[-1]
+                self.init_variables['on_the_fly_meas_scale_factors'] = None
+
+            elif mode == 'on_the_fly':
+                Npix = meas.shape[-1] * scale_factors[-1]
+                self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
+                
+            else:
+                raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+            
+            self.init_params['exp_params']['Npix'] = Npix
+            vprint(f"Update `exp_params` (Npix) into {Npix} after the measurements resampling mode {mode} by scale_factors = {scale_factors}", verbose=self.verbose)
+
             self.init_exp_params()
             vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
+        else:
+            self.init_variables['on_the_fly_meas_scale_factors'] = None
             
         # Add source size (partial spatial coherence)
         if self.init_params['exp_params']['meas_add_source_size'] is not None:
@@ -523,7 +539,7 @@ class Initializer:
         N_scan_fast = exp_params['N_scan_fast']
         
         # Initialized variables
-        meas            = self.init_variables['measurements']
+        meas             = self.init_variables['measurements']
         probe            = self.init_variables['probe']
         crop_pos         = self.init_variables['crop_pos']
         probe_pos_shifts = self.init_variables['probe_pos_shifts']
@@ -531,10 +547,13 @@ class Initializer:
         omode_occu       = self.init_variables['omode_occu'] 
         H                = self.init_variables['H']
         obj_tilts        = self.init_variables['obj_tilts']
+        scale_factors    = self.init_variables['on_the_fly_meas_scale_factors']
         
         # Check DP shape
         if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'", verbose=self.verbose)
+        elif Npix == meas.shape[-2]*scale_factors[-2] == meas.shape[-1]*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement resampling", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
         # Check scan pattern

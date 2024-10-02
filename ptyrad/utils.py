@@ -1,7 +1,7 @@
 import os
 import warnings
 from math import ceil, floor
-from time import time
+from time import time, perf_counter
 
 import numpy as np
 import torch
@@ -69,7 +69,8 @@ def get_size_bytes(x):
 
 def time_sync():
     torch.cuda.synchronize()
-    t = time()
+    # t = time()
+    t = perf_counter()
     return t
 
 def parse_sec_to_time_str(seconds):
@@ -179,11 +180,12 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses):
+def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
-
+    avg_iter_t = np.mean(iter_times)
+    
     # While it might seem redundant to save bothe `params` and lots of `model_attributes`,    
     # one should note that `params` only stores the initial value from params files,
     # the actual values used for reconstuction such as N_scan_slow, N_scan_fast, dx, dk, Npix, N_scans could be different from initial value due to the meas_crop, meas_resample
@@ -221,7 +223,8 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, ni
                      'probe_int_sum'    : model.probe_int_sum
                      },
                 'loss_iters'            : loss_iters,
-                'iter_t'                : iter_t,
+                'iter_times'            : iter_times,
+                'avg_iter_t'            : avg_iter_t,
                 'niter'                 : niter,
                 'indices'               : indices,
                 'batch_losses'          : batch_losses,
@@ -547,14 +550,14 @@ def normalize_by_bit_depth(arr, bit_depth):
     
     return norm_arr_in_bit_depth
 
-def save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=''):
+def save_results(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=''):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
     result_modes = params['recon_params'].get('result_modes')
     iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
-        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
     probe      = model.get_complex_probe_view() 
     probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()

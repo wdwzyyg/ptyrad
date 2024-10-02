@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [TODO]
 ## Initialization
-- `initialization.py` can probably be refactored a bit, it's too clunky now
+- `initialization.py` can probably be refactored a bit, it's too clunky now. Might consider refactor the process into loading, preprocessing, and initialization. This would also make the `exp_params` much clearer by moving some settings to other dicts.
 - prepare the object for multislice (interpolate, pad vacuum) and multiobj (duplicate)
-- Forward model at different sampling for better accuracy?
+- Let forward model generate diffraction patterns with larger kMax than the actual data, and center-crop the diffraction pattern in the forward process before calculating loss. This would require the object and probe to be initialized at higher real space sampling than the data kMax, but it will allow the forward model to properly scatter outside of the collected region on the detector, hence reduce the edge artifact. This is a better approach than padding the experimental diffraction pattern.
 ## Probe
 - fit aberration to k-space probe. py4DSTEM does it with fit each mode with aberration, although I'm not sure whether that's better or not
 - Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
@@ -22,11 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NMF and PCA for object modes? Given frozen phonon configurations, what is a good decomposition method?
 - Finish the weighted sum of `omode_occu` in `save_results`
 ## BO
+- Add options to select different optuna optimizers and pruners
 - Decouple the BO error from reconstruction loss so we can test different setup
-- Use grid search BO without pruning as a cheat step if we need a range of reconstruction params, similar to abTEM's distribution.
 ## Recon workflow
 - Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
-- Sequential reconstruction (asize_presolve) is also desired
+- Sequential reconstruction (asize_presolve) is also desired (might write a specific notebook to chain them together)
 ### Utils and plotting
 - Apparently plotting and saving matplotlib figure is incredibly slow, it's taking like 1sec/fig and we'll need some improvements
 - Visualize radially accumulated intensity for k-space probe
@@ -45,10 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## PyTorch performance tuning
 - Use DataLoader for measurements. This could be a bit slower than directly loading entire measurements into memory, but it allows dataset larger than memory, and also makes parallel on multiple GPUs possible
 - Delete used variables for lower memory footprint
-- Precision selection, maybe float16?
 - Use in-place operations on tensors don't require grad
 
 ## [Unrelease]
+### Added
+- Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment.
+### Changed
+- Update `time_sync` by replacing `time.time()` with `time.perf_counter()` so that it can better measure events that are shorter than 1 ms.
+- Change the saved `iter_t` in `model.pt` into `iter_times` to have more statistics of the iteration times
+- Let `PtyRADSolver.reconstruct()` create an attribute of reconstructed `PtychoAD` model called `PtyRADSolver.reconstruct_results` so that we can do some further work if needed
+
+## [v0.1.0-beta2.6] - 2024-09-30
 ### Added
 - Add `--gpuid` as a command line argument for `run_ptyrad.py` @sezelt
 - Add `set_gpu_device` to `utils` for cleaner `run_ptyrad.py` script
@@ -56,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `c3` and `c5` into hypertunable params @sezelt
 - Enable `'step': null` inside `'tune_params'` for continuous parameter space in hypertune mode @sezelt
 - Add multi-GPU and mixed-precision capabilities via HuggingFace `accelerate` package. This is implemented in a separate branch `accelerate` and would require a different environment.
-### Changes
+### Changed
 - Update `get_default_probe_simu_params` to take in 'c5' from `exp_params` as well
 - Update `make_output_folder` to include c3, c5 values under the `init` condition inside `recon_dir_affixes`
 - Update `make_stem_probe` with more robust param parsing @sezelt

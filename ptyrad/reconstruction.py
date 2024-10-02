@@ -127,6 +127,7 @@ class PtyRADSolver(object):
             vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
 
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
+        self.reconstruct_results = model
     
     def hypertune(self):
         import optuna
@@ -312,6 +313,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     
     # Optimization loop
     loss_iters = []
+    iter_times = []
     for niter in range(1,NITER+1):
         
         batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
@@ -319,6 +321,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
         # Only log the main process
         if acc is None or acc.is_main_process:
             loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
+            iter_times.append(iter_t)
             
             ## Saving intermediate results
             if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
@@ -327,10 +330,12 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                 model_instance = model.module if hasattr(model, "module") else model
                 
                 # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-                save_results(output_path, model_instance, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
+                save_results(output_path, model_instance, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
                 
                 ## Saving summary
                 plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
+                vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
+
     return loss_iters
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -553,16 +558,19 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
       
     # Optimization loop
     loss_iters = []
+    iter_times = []
     for niter in range(1, NITER+1):
         
         shuffle(batches)
         batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
         loss_iter = loss_logger(batch_losses, niter, iter_t, verbose=verbose)
+        
         loss_iters.append((niter, loss_iter))
+        iter_times.append(iter_t)
         
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
+            save_results(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str='')
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
@@ -575,14 +583,15 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                 # Save the current results of the pruned trials
                 collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
                 if collate_results is not None:
-                    save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+                    save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
     ## Saving collate results and figs of the finished trials
     collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
     if collate_results:
-        save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+        save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
-
+    
+    vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
     return loss_iter
