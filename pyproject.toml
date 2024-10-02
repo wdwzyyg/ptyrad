@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ptyrad"
-version = "0.1.0-beta2.5"
+version = "0.1.0-beta2.6"
 authors = [
   { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
 ]
@@ -26,6 +26,9 @@ dependencies = [
   "matplotlib",
   "optuna"
 ]
+
+[project.optional-dependencies]
+multi_gpu = ["accelerate>=0.34.2"]
 
 [project.urls]
 "Homepage" = "https://github.com/chiahao3/ptyrad"

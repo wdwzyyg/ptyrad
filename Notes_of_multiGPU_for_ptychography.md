@@ -8,8 +8,10 @@ Although multi-GPU might seem attempting, the reality is:
 2. Typical iterative ptychorgaphic reconstruction algorithms require fairly small VRAM even if we load the entire dataset. 20 GB of VRAM is very sufficient unless you're doing ptychotomo reconstruction. Even you do, `gradient accumulation` (introduced in PtyRAD beta2.5) can probably reduce most of the memory requitement. Therefore, using multiple GPU for more VRAM is more relevant in ML community than in ptychorgaphy.
 3. Due to the GPU-GPU inter-communication is usually much slower than the internal VRAM-CUDA inner communication in a single GPU, the multi-GPU speed up is usually sublinear, and I've been getting 1.3-1.7x for common ML models. `NVLink` is arguably a must have for multi-GPU setup and it's only available for data center cards. Better initialization, better optimizer, or just fine tune the learning rate might get you much more meaningful speedful of ptychogrphic convergence.
 
+Due to the platform limitation, currently Windows doesn't have NCCL (NVIDIA Collective Communications Library) support so we can't do multi-GPU communication. **Therefore, multi-GPU reconstruction is not supported on Windows. This is not an accelerate or PyTorch problem, it's an NVidia problem and I have no idea whether they have any plan on it.** `PtyRAD` now has both `main` and `accelerate` branches, while `main` is meant to run without the need to install `accelerate`, the latest commit of `accelerate` branch fixes the dependency so that `accelerate` branch can now run single-GPU tasks without installing `accelerate`. In other words, I might merge the `accelerate` branch into `main` in the near future so that I only need to maintain one branch. Although Windows users would not be able to use multi-GPU, they can still run the same code on single GPU using an environment without `accelerate`. On the other hand, Linux users would be able to try out multi-GPU if they have the environment and hardware setup.
+
 Chia-Hao Lee, cl2696@cornell.edu
-Last update: 2024.09.24
+Last update: 2024.10.02
 
 ---
 
@@ -19,6 +21,7 @@ Last update: 2024.09.24
 - 2024.09.25: Implemented the accelerate enabled mixed precision and make it a CLI argument for simplicity. The original grad accumulation implementation seems reasonable with split_batches=True.
 - 2024.09.26: Experimentally merge the `accelerate` into `dev`. Clean up the code structure and driver script logic. Fix the error in `make_save_dict` because the saved probe is in the real view (pmode, Ny, Nx, 2) instead of the complex view.
 - 2024.09.30: Decided to keep the multi-GPU inside the `accelerate` branch for now because I'm a bit concerned about adding a new dependency would break the platform compatibility. Also `accelerate` package at conda-forge channel (0.21) is a bit too old for my current implementation. Besides, I'm not sure if it's possible to do multiple GPU on Windows through this setup so might try to keep `main` branch to be platform independent.
+- 2024.10.01: Managed to get the `accelerate` branch running on Windows environment without `accelerate` package installed. This partially solves the dependency issue, but we still can't run `accelerate`'s multi-GPU feature on Windows even we install the `accelerate` package on Windows and set the backend to 'gloo'. 'gloo' is really designed for distributed CPU training so there's no point installing accelerate on Windows if you're planning to do multi-GPU. It's just unfortunately not supported. See [here](https://pytorch.org/docs/stable/distributed.html).
 
 ## multi-GPU speed up table
 - I did quick tests using the full A100 node with tBL-WSe2 dataset

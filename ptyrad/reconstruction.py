@@ -8,7 +8,12 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs # Multi GPU training library from HuggingFace
+try:
+    from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
+    ACCELERATE_AVAILABLE = True
+except ImportError:
+    ACCELERATE_AVAILABLE = False
+
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
 from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
@@ -63,41 +68,45 @@ class PtyRADSolver(object):
             tuning mode based on the if_hypertune flag.
     """
     def __init__(self, params, device=None):
-        self.params        = params
-        self.if_hypertune  = self.params['hypertune_params']['if_hypertune']
-        self.verbose       = not self.params['recon_params']['if_quiet']
-        self.manual_device = device
-        self.use_acc       = True if device is None else False
+        self.params          = params
+        self.if_hypertune    = self.params['hypertune_params']['if_hypertune']
+        self.verbose         = not self.params['recon_params']['if_quiet']
+        self.manual_device   = device
+        self.use_acc_device  = True if (device is None and ACCELERATE_AVAILABLE) else False
 
         # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
-        self.init_accelerator()
-        self.device        = self.accelerator.device if self.use_acc else device
+        vprint(f"ACCELERATE_AVAILABLE = {ACCELERATE_AVAILABLE}")
+        if ACCELERATE_AVAILABLE:
+            self.init_accelerator()
+        else:
+            self.accelerator = None
+        self.device          = self.accelerator.device if self.use_acc_device else device
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
         self.init_loss()
         self.init_constraint()
-        self.accelerator.print("\n### Done initializing PtyRADSolver ###")
+        vprint("\n### Done initializing PtyRADSolver ###")
     
     def init_accelerator(self):
         dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
         kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
         self.accelerator   = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
-        self.accelerator.print(f"\nuse_acc = {self.use_acc} because the passed in device = {self.manual_device}")
-        self.accelerator.print(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
-        self.accelerator.print("### Done Initializing HuggingFace accelerator ###")
+        vprint(f"\nuse_acc_device = {self.use_acc_device} because the passed in device = {self.manual_device}")
+        vprint(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
+        vprint("### Done Initializing HuggingFace accelerator ###")
     
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
-        self.accelerator.print("\n### Initializing Initializer ###")
+        vprint("\n### Initializing Initializer ###")
         self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
 
     def init_loss(self):
-        self.accelerator.print("\n### Initializing loss function ###")
+        vprint("\n### Initializing loss function ###")
         self.loss_fn       = CombinedLoss(self.params['loss_params'], device=self.device)
 
     def init_constraint(self):
-        self.accelerator.print("\n### Initializing constraint function ###")
+        vprint("\n### Initializing constraint function ###")
         self.constraint_fn = CombinedConstraint(self.params['constraint_params'], device=self.device, verbose=self.verbose)
     
     def reconstruct(self):
@@ -108,12 +117,12 @@ class PtyRADSolver(object):
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
         
-        if not self.use_acc:
+        if not self.use_acc_device:
             indices, batches, output_path = prepare_recon(model, self.init, params)
         else:
-            vprint(f"params['recon_params']['GROUP_MODE'] is set to 'random' when `use_acc` = {self.use_acc}", verbose=self.verbose)
+            vprint(f"params['recon_params']['GROUP_MODE'] is set to 'random' because `use_acc_device` = {self.use_acc_device}", verbose=self.verbose)
             params['recon_params']['GROUP_MODE'] = 'random'
-            # `batches` would be replaced by a random DataLoader if we use_acc because I haven't figured out how to do specified indices in DataLoader
+            # `batches` would be replaced by a random DataLoader if we use_acc_device because I haven't figured out how to do specified indices in DataLoader
             # In other words, only `random` grouping is available for accelerate-powered multiGPU and mixed-precision
             indices, batches, output_path = prepare_recon(model, self.init, params)
             ds = IndicesDataset(indices)
@@ -177,7 +186,7 @@ class PtyRADSolver(object):
     def run(self):
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
-        self.accelerator.print(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
+        vprint(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
         if self.if_hypertune:
             self.hypertune()
         else:
@@ -185,7 +194,7 @@ class PtyRADSolver(object):
         end_t = time_sync()
         solver_t = end_t - start_t
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
-        self.accelerator.print(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
+        vprint(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
 
 class IndicesDataset(Dataset):
     def __init__(self, indices):
@@ -394,7 +403,7 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
                 measured_DP = model_instance.get_measurements(batch)
                 loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
             acc.backward(loss_batch)
-        else: # This is kept when we run PtyRAD in the detailed walkthrough notebook without launching through `accelerate`
+        else: # When PtyRAD is launch without `accelerate` or when `acc` is None
             model_DP, object_patches = model(batch)
             measured_DP = model_instance.get_measurements(batch)
             loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
