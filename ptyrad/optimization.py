@@ -337,7 +337,7 @@ class CombinedConstraint(torch.nn.Module):
         if obja_thresh_freq is not None and niter % obja_thresh_freq == 0: 
             model.opt_obja.data = relax * model.opt_obja + (1-relax) * model.opt_obja.clamp(min=thresh[0], max=thresh[1])
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_clamp))' if relax != 0 else 'hard'
-            vprint(f"Apply {relax_str} threshold constraint with thresh = {thresh:.5} on obja at iter {niter}", verbose=self.verbose)
+            vprint(f"Apply {relax_str} threshold constraint with thresh = {thresh} on obja at iter {niter}", verbose=self.verbose)
 
     def apply_objp_postiv(self, model, niter):
         ''' Apply positivity constraint on objp at voxel level '''
