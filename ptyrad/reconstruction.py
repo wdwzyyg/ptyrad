@@ -75,10 +75,10 @@ class PtyRADSolver(object):
         self.use_acc_device  = True if (device is None and ACCELERATE_AVAILABLE) else False
 
         # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
-        vprint(f"ACCELERATE_AVAILABLE = {ACCELERATE_AVAILABLE}")
         if ACCELERATE_AVAILABLE:
             self.init_accelerator()
         else:
+            vprint("\n### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
             self.accelerator = None
         self.device          = self.accelerator.device if self.use_acc_device else device
         
@@ -89,12 +89,12 @@ class PtyRADSolver(object):
         vprint("\n### Done initializing PtyRADSolver ###")
     
     def init_accelerator(self):
+        vprint("\n### Initializing HuggingFace accelerator ###")
         dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
         kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
         self.accelerator   = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
-        vprint(f"\nuse_acc_device = {self.use_acc_device} because the passed in device = {self.manual_device}")
+        vprint(f"use_acc_device = {self.use_acc_device} because the passed in device = {self.manual_device}")
         vprint(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
-        vprint("### Done Initializing HuggingFace accelerator ###")
     
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
@@ -383,32 +383,19 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     model_instance = model.module if hasattr(model, "module") else model
     
     # Toggle the grad calculation to disable AD update on tensors before certain iteration
-    start_iter_dict = model_instance.start_iter
-    optimizable_tensors = model_instance.optimizable_tensors
-    for param_name, start_iter in start_iter_dict.items():
-        if start_iter is None or niter < start_iter:
-            optimizable_tensors[param_name].requires_grad = False
-        else:
-            optimizable_tensors[param_name].requires_grad = True
-        vprint(f"Iter: {niter}, {param_name}.requires_grad = {optimizable_tensors[param_name].requires_grad}", verbose=verbose)
+    toggle_grad_requires(model_instance, niter, verbose)
     
     # Start mini-batch optimization
     optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         
-        if acc is not None:
-            with acc.autocast():
-                model_DP, object_patches = model(batch)
-                measured_DP = model_instance.get_measurements(batch)
-                loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
-            acc.backward(loss_batch)
-        else: # When PtyRAD is launch without `accelerate` or when `acc` is None
-            model_DP, object_patches = model(batch)
-            measured_DP = model_instance.get_measurements(batch)
-            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
-            loss_batch.backward() 
-            
+        # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
+        loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
+        
+        # Perform backward pass
+        acc.backward(loss_batch) if acc is not None else loss_batch.backward()
+        
         # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
         if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
             if acc is not None:
@@ -417,6 +404,7 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
             optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
         
+        # Append losses and log batch progress
         if acc is not None:
             acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
@@ -428,6 +416,29 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t
+
+def toggle_grad_requires(model_instance, niter, verbose):
+    """Toggle requires_grad based on start iteration for each optimizable tensor."""
+    start_iter_dict = model_instance.start_iter
+    optimizable_tensors = model_instance.optimizable_tensors
+    for param_name, start_iter in start_iter_dict.items():
+        requires_grad = start_iter is not None and niter >= start_iter
+        optimizable_tensors[param_name].requires_grad = requires_grad
+        vprint(f"Iter: {niter}, {param_name}.requires_grad = {requires_grad}", verbose=verbose)
+
+def compute_loss(batch, model, model_instance, loss_fn, acc=None):
+    """Compute the model output and loss, with optional support for accelerate's autocast."""
+    if acc is not None:
+        with acc.autocast():
+            model_DP, object_patches = model(batch)
+            measured_DP = model_instance.get_measurements(batch)
+            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+    else:
+        model_DP, object_patches = model(batch)
+        measured_DP = model_instance.get_measurements(batch)
+        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+    
+    return loss_batch, losses
 
 def loss_logger(batch_losses, niter, iter_t, verbose=True):
     """

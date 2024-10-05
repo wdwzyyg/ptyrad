@@ -1,26 +1,75 @@
 import os
 import warnings
 from math import ceil, floor
-from time import time, perf_counter
+from time import perf_counter, time
 
 import numpy as np
 import torch
 import torch.distributed as dist
-
 from scipy.spatial.distance import cdist
 from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def print_system_info():
+    
+    import os
+    import platform
+    import sys
+    import numpy as np
+    import torch
+    
+    print("\n### System information ###")
+    
+    # Operating system information
+    print(f"Operating System: {platform.system()} {platform.release()}")
+    print(f"OS Version: {platform.version()}")
+    print(f"Machine: {platform.machine()}")
+    print(f"Processor: {platform.processor()}")
+    
+    # CPU cores
+    if 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
+        cpus =  int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
+    else:
+        # Fallback to the total number of CPU cores on the node
+        cpus = os.cpu_count()
+    print(f"Available CPU cores: {cpus}")
+    
+    # Memory information
+    if 'SLURM_MEM_PER_NODE' in os.environ:
+        # Memory allocated per node by SLURM (in MB)
+        mem_total = int(os.environ['SLURM_MEM_PER_NODE']) / 1024  # Convert MB to GB
+        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+    elif 'SLURM_MEM_PER_CPU' in os.environ:
+        # Memory allocated per CPU by SLURM (in MB)
+        mem_total = int(os.environ['SLURM_MEM_PER_CPU']) * cpus / 1024  # Convert MB to GB
+        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+    else:
+        try:
+            import psutil
+            # Fallback to system memory information
+            mem = psutil.virtual_memory()
+            print(f"Total Memory: {mem.total / (1024 ** 3):.2f} GB")
+            print(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
+        except ImportError:
+            print("Memory information will be available after `conda install conda-forge::psutil`")
+    
+    # CUDA and GPU information
+    print(f"CUDA Available: {torch.cuda.is_available()}")
+    print(f"CUDA Version: {torch.version.cuda}")
+    print(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
+    
+    # Python version and executable
+    print(f"Python Executable: {sys.executable}")
+    print(f"Python Version: {sys.version}")
+    print(f"NumPy Version: {np.__version__}")
+    print(f"PyTorch Version: {torch.__version__}")
+
 def set_gpu_device(gpuid=0):
-    print("PyTorch version: ", torch.__version__)
-    print("CUDA available: ", torch.cuda.is_available())
-    print("CUDA version: ", torch.version.cuda)
-    print("CUDA device: ", [torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]])
     
     if gpuid is not None:
         device = torch.device("cuda:" + str(gpuid))
-        print(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})\n")
+        print(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
     else:
         device = None
     return device
@@ -689,8 +738,8 @@ def imshift_single(img, shift, grid):
     assert img.shape[-2:] == grid.shape[-2:], f"Found incompatible dimensions. img.shape[-2:] = {img.shape[-2:]} while grid.shape[-2:] = {grid.shape[-2:]}"
     
     ndim = img.ndim                                                                   # Get the total img ndim so that the shift is dimension-indepent
-    shift = shift[..., *[None]*(ndim-1)]                                              # Expand shifts to (2,1,1,...) so shifts.ndim = ndim+1
-    grid = grid[:,*[None]*(ndim-2), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+1
+    shift = shift[(...,) + (None,) * (ndim-1)]                                        # Expand shifts to (2,1,1,...) so shift.ndim = ndim+1. It was written as `shifts = shifts[..., *[None]*(ndim-1)]` for Python 3.11 or above with better readability
+    grid = grid[(slice(None),) + (None,) * (ndim - 2) + (...,)]                       # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+1 It was written as `grid = grid[:,*[None]*(ndim-2), ...]` for Python 3.11 or above with better readability
     shift_y, shift_x = shift[0], shift[1]                                             # shift_y, shift_x are (1,1,...) with ndim singletons, so the shift_y.ndim = ndim
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (1,1,...,Ny,Nx) so w.ndim = ndim. w is at the center.
@@ -733,8 +782,8 @@ def imshift_batch(img, shifts, grid):
     assert img.shape[-2:] == grid.shape[-2:], f"Found incompatible dimensions. img.shape[-2:] = {img.shape[-2:]} while grid.shape[-2:] = {grid.shape[-2:]}"
     
     ndim = img.ndim                                                                   # Get the total img ndim so that the shift is dimension-indepent
-    shifts = shifts[..., *[None]*ndim]                                                # Expand shifts to (Nb,2,1,1,...) so shifts.ndim = ndim+2
-    grid = grid[:,*[None]*(ndim-1), ...]                                              # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+2
+    shifts = shifts[(...,) + (None,) * ndim]                                          # Expand shifts to (Nb,2,1,1,...) so shifts.ndim = ndim+2. It was written as `shifts = shifts[..., *[None]*ndim]` for Python 3.11 or above with better readability
+    grid = grid[(slice(None),) + (None,) * (ndim - 1) + (...,)]                       # Expand grid to (2,1,1,...,Ny,Nx) so grid.ndim = ndim+2. It was written as `grid = grid[:,*[None]*(ndim-1), ...]` for Python 3.11 or above with better readability
     shift_y, shift_x = shifts[:, 0], shifts[:, 1]                                     # shift_y, shift_x are (Nb,1,1,...) with ndim singletons, so the shift_y.ndim = ndim+1
     ky, kx = grid[0], grid[1]                                                         # ky, kx are (1,1,...,Ny,Nx) with ndim-2 singletons, so the ky.ndim = ndim+1
     w = torch.exp(-(2j * torch.pi) * (shift_x * kx + shift_y * ky))                   # w = (Nb, 1,1,...,Ny,Nx) so w.ndim = ndim+1. w is at the center.

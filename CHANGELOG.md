@@ -50,11 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unrelease]
 ### Added
 - Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment.
+- Add `print_system_info` into `utils` for better logging
+- Add `20241005_effect_of_cpu_cores/` under `docs/`
 ### Changed
 - Update `time_sync` by replacing `time.time()` with `time.perf_counter()` so that it can better measure events that are shorter than 1 ms.
 - Change the saved `iter_t` in `model.pt` into `iter_times` to have more statistics of the iteration times
 - Let `PtyRADSolver.reconstruct()` create an attribute of reconstructed `PtychoAD` model called `PtyRADSolver.reconstruct_results` so that we can do some further work if needed
 - Modify `accelerate` branch so that the HuggingFace `accelerate` package becomes optional and can work on environments without `accelerate` installed. This makes it possible to merge `accelerate` branch into `main` and allow Windows users to at least run `PtyRAD` on a single GPU using the exact same codebase.
+- Modify `imshift_batch` so that PtyRAD is compatible with older Python version < 3.11 as well
+- Simplify the output of `set_gpu_device()`
 
 ## [v0.1.0-beta2.6] - 2024-09-30
 ### Added
