@@ -5,6 +5,14 @@ from random import shuffle
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+from torch.utils.data import Dataset
+
+try:
+    from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
+    ACCELERATE_AVAILABLE = True
+except ImportError:
+    ACCELERATE_AVAILABLE = False
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
@@ -41,8 +49,8 @@ class PtyRADSolver(object):
         verbose (bool): A flag to control the verbosity of the output. Defaults to True unless
             if_quiet is set to True.
         device (str): The device to run the computations on (e.g., 'cuda' for GPU, 'cpu' for CPU). 
-            Defaults to 'cuda'
-            
+            Defaults to None to let `accelerate` automatically decide.
+
     Methods:
         init_initializer():
             Initializes the variables and objects needed for the reconstruction process.
@@ -59,29 +67,46 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, device='cuda'):
-        self.params        = params
-        self.if_hypertune  = self.params['hypertune_params']['if_hypertune']
-        self.verbose       = not self.params['recon_params']['if_quiet']
-        self.device        = device
+    def __init__(self, params, device=None):
+        self.params          = params
+        self.if_hypertune    = self.params['hypertune_params']['if_hypertune']
+        self.verbose         = not self.params['recon_params']['if_quiet']
+        self.manual_device   = device
+        self.use_acc_device  = True if (device is None and ACCELERATE_AVAILABLE) else False
+
+        # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
+        if ACCELERATE_AVAILABLE:
+            self.init_accelerator()
+        else:
+            vprint("\n### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
+            self.accelerator = None
+        self.device          = self.accelerator.device if self.use_acc_device else device
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
         self.init_loss()
         self.init_constraint()
-        print("\n### Done initializing PtyRADSolver ###")
+        vprint("\n### Done initializing PtyRADSolver ###")
+    
+    def init_accelerator(self):
+        vprint("\n### Initializing HuggingFace accelerator ###")
+        dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
+        kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
+        self.accelerator   = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        vprint(f"use_acc_device = {self.use_acc_device} because the passed in device = {self.manual_device}")
+        vprint(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
     
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
-        print("\n### Initializing Initializer ###")
+        vprint("\n### Initializing Initializer ###")
         self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
 
     def init_loss(self):
-        print("\n### Initializing loss function ###")
+        vprint("\n### Initializing loss function ###")
         self.loss_fn       = CombinedLoss(self.params['loss_params'], device=self.device)
 
     def init_constraint(self):
-        print("\n### Initializing constraint function ###")
+        vprint("\n### Initializing constraint function ###")
         self.constraint_fn = CombinedConstraint(self.params['constraint_params'], device=self.device, verbose=self.verbose)
     
     def reconstruct(self):
@@ -91,8 +116,27 @@ class PtyRADSolver(object):
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
         optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
-        indices, batches, output_path = prepare_recon(model, self.init, params)
-        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path)
+        
+        if not self.use_acc_device:
+            indices, batches, output_path = prepare_recon(model, self.init, params)
+        else:
+            vprint(f"params['recon_params']['GROUP_MODE'] is set to 'random' because `use_acc_device` = {self.use_acc_device}", verbose=self.verbose)
+            params['recon_params']['GROUP_MODE'] = 'random'
+            # `batches` would be replaced by a random DataLoader if we use_acc_device because I haven't figured out how to do specified indices in DataLoader
+            # In other words, only `random` grouping is available for accelerate-powered multiGPU and mixed-precision
+            indices, batches, output_path = prepare_recon(model, self.init, params)
+            ds = IndicesDataset(indices)
+            dl = torch.utils.data.DataLoader(ds, batch_size = params['recon_params']['BATCH_SIZE']['size'], shuffle = True) # This will do the batching
+            batches = self.accelerator.prepare(dl) # Note that `batches` is replaced by a DataLoader (accelerate mode) that is also an iterable object
+            model, optimizer = self.accelerator.prepare(model, optimizer)
+            
+            vprint(f"len(DataLoader) = num_batches = {len(dl)}, DataLoader.batch_size = {len(indices)//len(dl)}", verbose=self.verbose)
+            vprint("Note that the DataLoader will be duplicated for each process, while DataLoader.batch_size is the effective batch size (batch_size_per_process * num_process)", verbose=self.verbose) 
+            vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
+            vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
+
+        recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
+        self.reconstruct_results = model
     
     def hypertune(self):
         import optuna
@@ -142,7 +186,7 @@ class PtyRADSolver(object):
     def run(self):
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
-        print(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
+        vprint(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
         if self.if_hypertune:
             self.hypertune()
         else:
@@ -150,7 +194,17 @@ class PtyRADSolver(object):
         end_t = time_sync()
         solver_t = end_t - start_t
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
-        print(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
+        vprint(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
+
+class IndicesDataset(Dataset):
+    def __init__(self, indices):
+        self.indices = indices
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        return self.indices[idx]
 
 def prepare_recon(model, init, params):
     """
@@ -222,7 +276,7 @@ def prepare_recon(model, init, params):
     plt.close(fig_grouping)
     return indices, batches, output_path
 
-def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path):
+def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
     """
     Executes the iterative optimization loop for ptychographic reconstruction.
 
@@ -268,26 +322,32 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     
     # Optimization loop
     loss_iters = []
+    iter_times = []
     for niter in range(1,NITER+1):
         
-        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)
+        batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose, acc=acc)
         
-        loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
-        
-        ## Saving intermediate results
-        if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
+        # Only log the main process
+        if acc is None or acc.is_main_process:
+            loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
+            iter_times.append(iter_t)
             
-            # Use the method on the wrapped model (DDP) if it exists
-            model_instance = model.module if hasattr(model, "module") else model
-            
-            # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-            save_results(output_path, model_instance, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses)
-            
-            ## Saving summary
-            plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
+            ## Saving intermediate results
+            if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
+                
+                # Use the method on the wrapped model (DDP) if it exists
+                model_instance = model.module if hasattr(model, "module") else model
+                
+                # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
+                save_results(output_path, model_instance, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
+                
+                ## Saving summary
+                plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
+                vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
+
     return loss_iters
 
-def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True):
+def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
     """
     Performs one iteration (or step) of the ptychographic reconstruction in the optimization loop.
 
@@ -323,40 +383,62 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     model_instance = model.module if hasattr(model, "module") else model
     
     # Toggle the grad calculation to disable AD update on tensors before certain iteration
-    start_iter_dict = model_instance.start_iter
-    optimizable_tensors = model_instance.optimizable_tensors
-    for param_name, start_iter in start_iter_dict.items():
-        if start_iter is None or niter < start_iter:
-            optimizable_tensors[param_name].requires_grad = False
-        else:
-            optimizable_tensors[param_name].requires_grad = True
-        vprint(f"Iter: {niter}, {param_name}.requires_grad = {optimizable_tensors[param_name].requires_grad}", verbose=verbose)
+    toggle_grad_requires(model_instance, niter, verbose)
     
     # Start mini-batch optimization
     optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         
-        model_DP, object_patches = model(batch)
-        measured_DP = model_instance.get_measurements(batch)
-        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
-        loss_batch.backward() 
-            
+        # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
+        loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
+        
+        # Perform backward pass
+        acc.backward(loss_batch) if acc is not None else loss_batch.backward()
+        
         # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
         if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+            if acc is not None:
+                acc.wait_for_everyone()
             optimizer.step() # batch update
             optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
         
+        # Append losses and log batch progress
+        if acc is not None:
+            acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
         if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
-            vprint(f"Done batch {batch_idx+1} with {len(batch)} indices in {batch_t:.3f} sec", verbose=verbose)
+            vprint(f"Done batch {batch_idx+1} with {len(batch)} indices ({batch[:5].tolist()}...) in {batch_t:.3f} sec", verbose=verbose)
     
     constraint_fn(model_instance, niter)
     
     iter_t = time_sync() - start_iter_t
     return batch_losses, iter_t
+
+def toggle_grad_requires(model_instance, niter, verbose):
+    """Toggle requires_grad based on start iteration for each optimizable tensor."""
+    start_iter_dict = model_instance.start_iter
+    optimizable_tensors = model_instance.optimizable_tensors
+    for param_name, start_iter in start_iter_dict.items():
+        requires_grad = start_iter is not None and niter >= start_iter
+        optimizable_tensors[param_name].requires_grad = requires_grad
+        vprint(f"Iter: {niter}, {param_name}.requires_grad = {requires_grad}", verbose=verbose)
+
+def compute_loss(batch, model, model_instance, loss_fn, acc=None):
+    """Compute the model output and loss, with optional support for accelerate's autocast."""
+    if acc is not None:
+        with acc.autocast():
+            model_DP, object_patches = model(batch)
+            measured_DP = model_instance.get_measurements(batch)
+            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+    else:
+        model_DP, object_patches = model(batch)
+        measured_DP = model_instance.get_measurements(batch)
+        loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+    
+    return loss_batch, losses
 
 def loss_logger(batch_losses, niter, iter_t, verbose=True):
     """
@@ -496,16 +578,19 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
       
     # Optimization loop
     loss_iters = []
+    iter_times = []
     for niter in range(1, NITER+1):
         
         shuffle(batches)
         batch_losses, iter_t = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
         loss_iter = loss_logger(batch_losses, niter, iter_t, verbose=verbose)
+        
         loss_iters.append((niter, loss_iter))
+        iter_times.append(iter_t)
         
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-            save_results(output_path, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str='')
+            save_results(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str='')
             plot_summary(output_path, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
@@ -518,14 +603,15 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                 # Save the current results of the pruned trials
                 collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
                 if collate_results is not None:
-                    save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+                    save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
     ## Saving collate results and figs of the finished trials
     collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
     if collate_results:
-        save_results(output_dir, model, params, optimizer, loss_iters, iter_t, niter, indices, batch_losses, collate_str=collate_str)
+        save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
-
+    
+    vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
     return loss_iter

@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.09.30
+# Updated by Chia-Hao Lee on 2024.10.05
 
 import argparse
 import sys
@@ -8,7 +8,7 @@ PATH_TO_PTYRAD = "/home/fs01/cl2696/workspace/ptyrad"  # Change this for the pty
 sys.path.append(PATH_TO_PTYRAD)
 from ptyrad.data_io import load_params  # noqa: E402
 from ptyrad.reconstruction import PtyRADSolver  # noqa: E402
-from ptyrad.utils import set_gpu_device  # noqa: E402
+from ptyrad.utils import print_system_info, set_gpu_device  # noqa: E402
 
 if __name__ == "__main__":
     # If you want to run with GPU 0
@@ -24,6 +24,7 @@ if __name__ == "__main__":
     parser.add_argument("--gpuid",       type=int, required=False, default=0)
     args = parser.parse_args()
     
+    print_system_info()
     params = load_params(args.params_path)
     device = set_gpu_device(args.gpuid)
     

@@ -27,6 +27,9 @@ dependencies = [
   "optuna"
 ]
 
+[project.optional-dependencies]
+multi_gpu = ["accelerate>=0.34.2"]
+
 [project.urls]
 "Homepage" = "https://github.com/chiahao3/ptyrad"
 "Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"

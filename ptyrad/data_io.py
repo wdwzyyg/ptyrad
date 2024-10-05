@@ -85,7 +85,7 @@ def load_params(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
-    print("### Loading params file ###")
+    print("\n### Loading params file ###")
 
     param_path, param_type = os.path.splitext(file_path)
     if param_type == ".yml":

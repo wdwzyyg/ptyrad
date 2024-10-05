@@ -1,5 +1,5 @@
 ## Defining PtychoAD class for the optimization object
-
+from math import prod
 import torch
 import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
@@ -86,6 +86,7 @@ class PtychoAD(torch.nn.Module):
             self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
+            self.meas_scale_factors     = init_variables['on_the_fly_meas_scale_factors']
 
             # Parse the learning rate and start iter for optimizable tensors
             start_iter_dict = {}
@@ -197,10 +198,11 @@ class PtychoAD(torch.nn.Module):
                 \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
         
         vprint('\n### Model behavior ###')
-        vprint(f"Obj preblur       : {True if self.obj_preblur_std is not None else False}")
-        vprint(f"Tilt propagator   : {self.tilt_obj}") 
-        vprint(f"Sub-px probe shift: {self.shift_probes}") 
-        vprint(f"Detector blur     : {True if self.detector_blur_std is not None else False}") 
+        vprint(f"Obj preblur             : {True if self.obj_preblur_std is not None else False}")
+        vprint(f"Tilt propagator         : {self.tilt_obj}")
+        vprint(f"Sub-px probe shift      : {self.shift_probes}")
+        vprint(f"Detector blur           : {True if self.detector_blur_std is not None else False}")
+        vprint(f"On-the-fly meas resample: {True if self.meas_scale_factors is not None else False}")
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """
@@ -265,10 +267,20 @@ class PtychoAD(torch.nn.Module):
         # Return the selected measurements based on input indices
         # If no indices are passed, return the entire measurements
         
+        measurements = self.measurements
+        scale_factor = tuple(self.meas_scale_factors) if self.meas_scale_factors is not None else None
+        
         if indices is not None:
-            return self.measurements[indices]
+            measurements = self.measurements[indices]
         else:
-            return self.measurements
+            measurements = self.measurements
+        
+        if self.meas_scale_factors is not None and any(factor != 1 for factor in scale_factor):
+            measurements = torch.nn.functional.interpolate(measurements[None,None], scale_factor=scale_factor, mode='area')[0,0] # interpolate requires 5D input (N, C, D, H, W)
+            measurements = measurements / prod(scale_factor) # This ensures the intensity scale and the integrated intensity are unchanged
+        
+        return measurements
+        
     
     def forward(self, indices):
         """ Doing the forward pass and get an output diffraction pattern for each input index """

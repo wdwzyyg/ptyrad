@@ -17,7 +17,7 @@ Additionally, automatic differentiation is the backbone of [backpropagation](htt
 
 ### PtyRAD Major dependencies:
 
-* Python 3.11 or above
+* Python 3.10 or above
 * CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
 
@@ -70,7 +70,7 @@ git clone https://github.com/chiahao3/ptyrad.git
 
 Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory (easier)
 
-Note: For multi-GPU capability, you'll need to get PtyRAD from the `accelerate` branch and setup corresponding python environment `ptyrad_acc` in Linux to use NCCL and PyTorch DDP
+Note: For multi-GPU capability, you'll need to setup corresponding python environment with HuggingFace `accelerate` package in Linux to use NCCL and PyTorch DDP. `envs/spec-file_ptyrad_acc_linux.txt` is available. For more information, please see `docs/Notes_of_multiGPU_for_ptychography.md`
 
 ### 4. Trying the demo in /scripts
 
