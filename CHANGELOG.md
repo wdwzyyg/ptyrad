@@ -50,7 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.1.0-beta2.7] - 2024-10-05
 ### Added
-- Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment.
 - Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment
 - Add `20241005_effect_of_cpu_cores/` under `docs/`
 ### Changed

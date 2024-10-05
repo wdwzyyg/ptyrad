@@ -76,7 +76,7 @@ def set_gpu_device(gpuid=0):
 
 def vprint(*args, verbose=True, **kwargs):
     """Verbose print with individual control, only for rank 0 in DDP."""
-    if verbose and (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
+    if verbose:
         print(*args, **kwargs)
 
 def get_date(date_format = '%Y%m%d'):
