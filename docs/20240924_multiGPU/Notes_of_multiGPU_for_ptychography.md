@@ -22,6 +22,7 @@ Last update: 2024.10.02
 - 2024.09.26: Experimentally merge the `accelerate` into `dev`. Clean up the code structure and driver script logic. Fix the error in `make_save_dict` because the saved probe is in the real view (pmode, Ny, Nx, 2) instead of the complex view.
 - 2024.09.30: Decided to keep the multi-GPU inside the `accelerate` branch for now because I'm a bit concerned about adding a new dependency would break the platform compatibility. Also `accelerate` package at conda-forge channel (0.21) is a bit too old for my current implementation. Besides, I'm not sure if it's possible to do multiple GPU on Windows through this setup so might try to keep `main` branch to be platform independent.
 - 2024.10.01: Managed to get the `accelerate` branch running on Windows environment without `accelerate` package installed. This partially solves the dependency issue, but we still can't run `accelerate`'s multi-GPU feature on Windows even we install the `accelerate` package on Windows and set the backend to 'gloo'. 'gloo' is really designed for distributed CPU training so there's no point installing accelerate on Windows if you're planning to do multi-GPU. It's just unfortunately not supported. See [here](https://pytorch.org/docs/stable/distributed.html).
+- 2024.10.05: Feel like it's about time to merge the `accelerate` branch into `main` after quite some testing. If anything, an environment without `accelerate` can still work fine.
 
 ## multi-GPU speed up table
 - I did quick tests using the full A100 node with tBL-WSe2 dataset

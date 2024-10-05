@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `initialization.py` can probably be refactored a bit, it's too clunky now. Might consider refactor the process into loading, preprocessing, and initialization. This would also make the `exp_params` much clearer by moving some settings to other dicts.
 - prepare the object for multislice (interpolate, pad vacuum) and multiobj (duplicate)
 - Let forward model generate diffraction patterns with larger kMax than the actual data, and center-crop the diffraction pattern in the forward process before calculating loss. This would require the object and probe to be initialized at higher real space sampling than the data kMax, but it will allow the forward model to properly scatter outside of the collected region on the detector, hence reduce the edge artifact. This is a better approach than padding the experimental diffraction pattern.
+- Optional asynchronous loading of the measurements to further save the memory 
 ## Probe
 - fit aberration to k-space probe. py4DSTEM does it with fit each mode with aberration, although I'm not sure whether that's better or not
 - Fix the probe corner intensity artifact. Feel like some intrinsic phase instability of complex probe
@@ -47,18 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
-## [Unrelease]
+## [v0.1.0-beta2.7] - 2024-10-05
 ### Added
 - Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment.
-- Add `print_system_info` into `utils` for better logging
+- Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment
 - Add `20241005_effect_of_cpu_cores/` under `docs/`
 ### Changed
 - Update `time_sync` by replacing `time.time()` with `time.perf_counter()` so that it can better measure events that are shorter than 1 ms.
-- Change the saved `iter_t` in `model.pt` into `iter_times` to have more statistics of the iteration times
+- Add on-the-fly measurements resampling into `meas_resample` to reduce GPU VRAM usage with negligible performace impairment
 - Let `PtyRADSolver.reconstruct()` create an attribute of reconstructed `PtychoAD` model called `PtyRADSolver.reconstruct_results` so that we can do some further work if needed
 - Modify `accelerate` branch so that the HuggingFace `accelerate` package becomes optional and can work on environments without `accelerate` installed. This makes it possible to merge `accelerate` branch into `main` and allow Windows users to at least run `PtyRAD` on a single GPU using the exact same codebase.
 - Modify `imshift_batch` so that PtyRAD is compatible with older Python version < 3.11 as well
-- Simplify the output of `set_gpu_device()`
+- Simplify the output message of `set_gpu_device()`
+- Merge `accelerate` branch into `main` so that it's easier to maintain. Windows users without NCCL do not need to install `accelerate` package, and they can still use a conda environment without `accelerate` to execute PtyRAD from `main` branch
 
 ## [v0.1.0-beta2.6] - 2024-09-30
 ### Added
