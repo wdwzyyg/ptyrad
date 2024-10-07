@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torch.distributed as dist
 
 try:
     from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
@@ -196,6 +197,10 @@ class PtyRADSolver(object):
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
         vprint(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
 
+        # End the process properly when in DDP mode
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        
 class IndicesDataset(Dataset):
     def __init__(self, indices):
         self.indices = indices

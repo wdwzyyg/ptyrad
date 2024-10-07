@@ -1,5 +1,7 @@
 # __init__.py is not strictly needed since Python 3.3 for the intepreter to recognize it as a package 
 # However, this is still included for clarity and for initialization purpose
 
+from ptyrad.utils import vprint
+
 __version__ = "v0.1.0-beta2.7" # 2024.10.05
-print(f"\nPtyRAD Version: {__version__}")
+vprint(f"\nPtyRAD Version: {__version__}")

@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.10.05
+# Updated by Chia-Hao Lee on 2024.10.07
 
 import argparse
 import sys
@@ -21,7 +21,7 @@ if __name__ == "__main__":
         description="Run PtyRAD", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("--params_path", type=str, required=True)
-    parser.add_argument("--gpuid",       type=int, required=False, default=0)
+    parser.add_argument("--gpuid",       type=int, required=False, default=None)
     args = parser.parse_args()
     
     print_system_info()

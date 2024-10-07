@@ -19,13 +19,13 @@ def print_system_info():
     import numpy as np
     import torch
     
-    print("\n### System information ###")
+    vprint("\n### System information ###")
     
     # Operating system information
-    print(f"Operating System: {platform.system()} {platform.release()}")
-    print(f"OS Version: {platform.version()}")
-    print(f"Machine: {platform.machine()}")
-    print(f"Processor: {platform.processor()}")
+    vprint(f"Operating System: {platform.system()} {platform.release()}")
+    vprint(f"OS Version: {platform.version()}")
+    vprint(f"Machine: {platform.machine()}")
+    vprint(f"Processor: {platform.processor()}")
     
     # CPU cores
     if 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
@@ -33,50 +33,50 @@ def print_system_info():
     else:
         # Fallback to the total number of CPU cores on the node
         cpus = os.cpu_count()
-    print(f"Available CPU cores: {cpus}")
+    vprint(f"Available CPU cores: {cpus}")
     
     # Memory information
     if 'SLURM_MEM_PER_NODE' in os.environ:
         # Memory allocated per node by SLURM (in MB)
         mem_total = int(os.environ['SLURM_MEM_PER_NODE']) / 1024  # Convert MB to GB
-        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+        vprint(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
     elif 'SLURM_MEM_PER_CPU' in os.environ:
         # Memory allocated per CPU by SLURM (in MB)
         mem_total = int(os.environ['SLURM_MEM_PER_CPU']) * cpus / 1024  # Convert MB to GB
-        print(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
+        vprint(f"SLURM-Allocated Total Memory: {mem_total:.2f} GB")
     else:
         try:
             import psutil
             # Fallback to system memory information
             mem = psutil.virtual_memory()
-            print(f"Total Memory: {mem.total / (1024 ** 3):.2f} GB")
-            print(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
+            vprint(f"Total Memory: {mem.total / (1024 ** 3):.2f} GB")
+            vprint(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
         except ImportError:
-            print("Memory information will be available after `conda install conda-forge::psutil`")
+            vprint("Memory information will be available after `conda install conda-forge::psutil`")
     
     # CUDA and GPU information
-    print(f"CUDA Available: {torch.cuda.is_available()}")
-    print(f"CUDA Version: {torch.version.cuda}")
-    print(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
+    vprint(f"CUDA Available: {torch.cuda.is_available()}")
+    vprint(f"CUDA Version: {torch.version.cuda}")
+    vprint(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
     
     # Python version and executable
-    print(f"Python Executable: {sys.executable}")
-    print(f"Python Version: {sys.version}")
-    print(f"NumPy Version: {np.__version__}")
-    print(f"PyTorch Version: {torch.__version__}")
+    vprint(f"Python Executable: {sys.executable}")
+    vprint(f"Python Version: {sys.version}")
+    vprint(f"NumPy Version: {np.__version__}")
+    vprint(f"PyTorch Version: {torch.__version__}")
 
 def set_gpu_device(gpuid=0):
     
     if gpuid is not None:
         device = torch.device("cuda:" + str(gpuid))
-        print(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
+        vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
     else:
         device = None
     return device
 
 def vprint(*args, verbose=True, **kwargs):
     """Verbose print with individual control, only for rank 0 in DDP."""
-    if verbose:
+    if verbose and (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
         print(*args, **kwargs)
 
 def get_date(date_format = '%Y%m%d'):

@@ -4,6 +4,8 @@ import h5py
 import numpy as np
 import scipy.io as sio
 
+from ptyrad.utils import vprint
+
 def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
     # shape = (N, height, width)
     # np.fromfile with custom dtype is faster than the np.read and np.frombuffer
@@ -85,7 +87,7 @@ def load_params(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
-    print("\n### Loading params file ###")
+    vprint("\n### Loading params file ###")
 
     param_path, param_type = os.path.splitext(file_path)
     if param_type == ".yml":
@@ -100,7 +102,7 @@ def load_yml_params(file_path):
 
     with open(file_path, "r") as file:
         params_dict = yaml.safe_load(file)
-    print("Success! Loaded .yml file path =", file_path)
+    vprint("Success! Loaded .yml file path =", file_path)
     params_dict['params_path'] = file_path
     return params_dict
 
