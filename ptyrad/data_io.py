@@ -53,10 +53,18 @@ def load_hdf5(file_path, dataset_key="ds"):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
 
     with h5py.File(file_path, "r") as hf:
-        data = np.array(hf[dataset_key], dtype="float32")
-        print("Success! Loaded .hdf5 file path =", file_path)
-        print("Imported .hdf5 data shape =", data.shape)
-        return data
+        if dataset_key is None:
+            print("Imported entire .hdf5 as a dict:", file_path)
+            f = dict()
+            for key in hf.keys():
+                f[key] = np.array(hf[key])
+            return f
+            
+        else:
+            data = np.array(hf[dataset_key])
+            print("Success! Loaded .hdf5 file path =", file_path)
+            print("Imported .hdf5 data shape =", data.shape)
+            return data
 
 def load_tif(file_path):
     from tifffile import imread

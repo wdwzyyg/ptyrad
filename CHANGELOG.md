@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
+## [Unrelease]
+### Added
+- Add `py4DTEM` as a new source for object, probe, and positions in params file
+### Changed
+- Modify `load_hdf5` so that it can return the entire dict if `dataset_key = None`
+
 ## [v0.1.0-beta2.8] - 2024-10-14
 ### Added
 - Add x-ray ptychography capability to PtyRAD with the help from @ameyluktuke, @xyin-anl, and @yijiang1

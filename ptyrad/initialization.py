@@ -80,7 +80,7 @@ class Initializer:
         self.use_cached_probe = False
         self.use_cached_pos = False
         
-        for source in ('PtyShv', 'PtyRAD'):
+        for source in ('PtyRAD', 'PtyShv', 'py4DSTEM'):
             self.set_use_cached_flags(source)
             
         if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
@@ -90,6 +90,9 @@ class Initializer:
             elif self.cache_source == 'PtyShv':
                 vprint(f"Loading 'PtyShv' file from {self.cache_path} for caching", verbose=self.verbose)
                 self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
+            elif self.cache_source == 'py4DSTEM':
+                vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
+                self.cache_contents = load_hdf5(self.cache_path, dataset_key=None)
             else:
                 raise KeyError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
         vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
@@ -179,7 +182,7 @@ class Initializer:
         elif source == 'mat':
             meas = load_fields_from_mat(params['path'], params['key'])[0]
         elif source == 'hdf5':
-            meas = load_hdf5(params['path'], params['key'])
+            meas = load_hdf5(params['path'], params['key']).astype('float32')
         elif source == 'raw':
             default_shape = (self.init_variables['N_scans'], self.init_variables['Npix'], self.init_variables['Npix'])
             meas = load_raw(params['path'], shape=params.get('shape', default_shape), offset=params.get('offset', 0), gap=params.get('gap', 1024))
@@ -335,6 +338,15 @@ class Initializer:
                 probe = probe # probe = (pmode, Ny, Nx)
             vprint("Permuting PtyShv probe into (pmode, Ny, Nx)", verbose=self.verbose) # For PtychoShelves input, do the transpose
             probe = probe.transpose(2,0,1)
+        elif source == 'py4DSTEM':
+            hdf5_path = params
+            probe = self.cache_contents['probe'] if self.use_cached_probe else load_hdf5(hdf5_path, 'probe') # py4DSTEM probe generally has (pmode,Ny,Nx) dimension.
+            vprint(f"Input py4DSTEM probe has original shape {probe.shape}", verbose=self.verbose)
+            if probe.ndim == 2:
+                vprint("Expanding py4DSTEM probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
+                probe = probe[None,...]
+            else:
+                probe = probe # probe = (pmode, Ny, Nx)
         elif source == 'simu':
             probe_simu_params = params
             if probe_simu_params is None:
@@ -404,6 +416,12 @@ class Initializer:
             pos_offset = np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) - 1 # For Matlab - Python index shift
             probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
             pos                  = probe_positions_yx + pos_offset 
+        elif source == 'py4DSTEM':
+            hdf5_path       = params
+            hdf5_contents   = self.cache_contents if self.use_cached_pos else load_hdf5(hdf5_path, 'positions_px')
+            probe_positions = hdf5_contents['positions_px']
+            probe_shape     = hdf5_contents['probe'].shape[-2:] # py4DSTEM probe is (pmode,Ny,Nx)
+            pos             = probe_positions - np.array(probe_shape)/2 
         elif source == 'simu':
             vprint(f"Simulating probe positions with dx_spec = {dx_spec}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
             pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
@@ -487,6 +505,15 @@ class Initializer:
                 obj = obj[None,None,:,:]
             elif len(obj.shape)==3: # MS-ptycho
                 obj = obj[None,].transpose(0,3,1,2)
+        elif source == 'py4DSTEM':
+            hdf5_path = params
+            obj = self.cache_contents['object'] if self.use_cached_obj else load_hdf5(hdf5_path, 'object')
+            vprint("Expanding py4DSTEM object dimension", verbose=self.verbose)
+            vprint(f"Input PtyShv obj has original shape {obj.shape}", verbose=self.verbose)
+            if len(obj.shape) == 2: # Single-slice ptycho
+                obj = obj[None,None,:,:]
+            elif len(obj.shape)==3: # MS-ptycho
+                obj = obj[None,]
         elif source == 'simu':
             if params is not None:
                 obj_shape = params
