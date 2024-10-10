@@ -348,7 +348,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                 
                 ## Saving summary
                 plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
-                vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
+    vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
 
     return loss_iters
 
