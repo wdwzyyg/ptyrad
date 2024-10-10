@@ -1,64 +1,52 @@
-# ### py4DSTEM ptychography demo
-# 
-# 
-# Last updated: 20240909 - dm852
+# Python script to run py4DSTEM
+# Updated by Chia-Hao Lee on 2024.10.09
 
+import argparse
 import sys
-print(sys.executable)
-print(sys.version)
-print(sys.version_info)
-
 import py4DSTEM
 import numpy as np
-import matplotlib.pyplot as plt
 import h5py
 import os
-import tifffile
-import time
+from time import time
 
-py4DSTEM.__version__
+def load_yml_params(file_path):
+    import yaml
 
-work_dir = "/home/fs01/dm852/workspace/ptyrad_paper"
-os.chdir(work_dir)
-print("Current working dir: ", os.getcwd())
+    with open(file_path, "r") as file:
+        params_dict = yaml.safe_load(file)
+    print("Success! Loaded .yml file path =", file_path)
+    params_dict['params_path'] = file_path
+    return params_dict
 
-#######################
-### start the clock ###
-#######################
-starttime = time.time()
-
-## Define the save function for probe, object, scan_positions
-def save_py4DSTEM(ptycho, save_dir):
-    os.makedirs(save_dir, exist_ok=True)
-    with h5py.File(save_dir + '.h5', "w") as f:
-        f.create_group('output')
-        f['output'].create_dataset('probe', data=ptycho.probe)
-        f['output'].create_dataset('object', data=ptycho.object)
-        f['output'].create_dataset('probe_pos', data=ptycho.positions)
-    f.close()
-
-def get_date(date_format = '%Y%m%d'):
-    from datetime import date
-    date_format = date_format
-    date_str = date.today().strftime(date_format)
-    return date_str
-
-# Wrapper to intialize ptycho class
-def initialize_ptycho(exp_params):
+def initialize_ptycho(datacube, exp_params):
+    
+    Npix = exp_params['Npix']
+    N_scan_fast = exp_params['N_scan_fast']
+    N_scan_slow = exp_params['N_scan_slow']
+    dx_spec = exp_params['dx_spec']
+    scan_step_size = exp_params['scan_step_size']
+    
+    pos_extent = np.array([N_scan_slow,N_scan_fast]) * scan_step_size / dx_spec
+    object_extent = 1.2 * (pos_extent + Npix)
+    object_padding_px = tuple((object_extent - pos_extent)//2)
+    
     if exp_params['Nlayer'] == 1:
-        ms_ptycho = py4DSTEM.process.phase.MixedstatePtychography(
-            datacube=dataset,
+        print("Initializing MixedstatePtychography")
+        ptycho = py4DSTEM.process.phase.MixedstatePtychography(
+            datacube=datacube,
             num_probes = exp_params['pmode_max'],
             verbose=True,
             energy = exp_params['kv']*1e3, # energy in eV
             defocus= exp_params['defocus'], # defocus guess in A
             semiangle_cutoff = exp_params['conv_angle'],
+            object_padding_px = object_padding_px,
             device='gpu', 
             storage='cpu', 
         )
     else:
-        ms_ptycho = py4DSTEM.process.phase.MixedstateMultislicePtychography(
-            datacube=dataset,
+        print("Initializing MixedstateMultislicePtychography")
+        ptycho = py4DSTEM.process.phase.MixedstateMultislicePtychography(
+            datacube=datacube,
             num_probes = exp_params['pmode_max'],
             num_slices=exp_params['Nlayer'],
             slice_thicknesses=exp_params['z_distance'],
@@ -66,101 +54,134 @@ def initialize_ptycho(exp_params):
             energy = exp_params['kv']*1e3, # energy in eV
             defocus= exp_params['defocus'], # defocus guess in A
             semiangle_cutoff = exp_params['conv_angle'],
+            object_padding_px = object_padding_px,
             device='gpu', 
             storage='cpu',
         )
-    return ms_ptycho
+    return ptycho
 
+def get_datacube(exp_params):
+    
+    data_path = exp_params['measurements_params'].get('path')
+    data_key  = exp_params['measurements_params'].get('key')
+    
+    with h5py.File(data_path, 'r') as f:
+        meas = np.array(f[data_key])
+        
+        # Flip the measurements
+        flipT_axes = exp_params['meas_flipT']
+        print(f"Flipping measurements with [flipup, fliplr, transpose] = {flipT_axes}")
+        if flipT_axes[0] != 0:
+            meas = np.flip(meas, 1)
+        if flipT_axes[1] != 0:
+            meas = np.flip(meas, 2)
+        if flipT_axes[2] != 0:
+            meas = np.transpose(meas, (0,2,1))
+        
+        # Reshape
+        dataset = np.reshape(meas, [exp_params['N_scan_slow'],exp_params['N_scan_fast'],exp_params['Npix'],exp_params['Npix']])
+        
+        # Calibrate py4DSTEM datacube
+        datacube = py4DSTEM.DataCube(dataset)
+        datacube.calibration.set_R_pixel_size(exp_params['scan_step_size'])
+        datacube.calibration.set_R_pixel_units('A')
+        datacube.calibration.set_Q_pixel_size(1/(exp_params['dx_spec']*exp_params['Npix']))
+        datacube.calibration.set_Q_pixel_units('A^-1')
+    return datacube
 
-# Note: py4dstem always estimates an affine transformation instead of taking user input
-exp_params = {
-    'kv'                : 80, # type: float, unit: kV. Acceleration voltage for relativistic electron wavelength calculation
-    'conv_angle'        : 24.9, # type: float, unit: mrad. Semi-convergence angle for probe-forming aperture
-    'Npix'              : 128, # type: integer, unit: px (k-space). Detector pixel number, EMPAD is 128. Only supports square detector for simplicity
-    'dx_spec'           : 0.1494, # type: float, unit: Ang. Real space pixel size calibration at specimen plane (object, probe, and probe positions share the same pixel size)
-    'defocus'           : 0, # type: float, unit: Ang. Defocus (-C1) aberration coefficient for the probe. Positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
-    'c3'                : 0, # type: float, unit: Ang. Spherical aberration coefficient (Cs) for the probe
-    'z_distance'        : 2, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
-    'Nlayer'            : 6, # type: int, unit: #. Number of slices for multislice object
-    'N_scans'           : 16384, # type: int, unit: #. Number of probe positions (or equivalently diffraction patterns since 1 DP / position)
-    'N_scan_slow'       : 128, # type: int, unit: #. Number of scan position along slow scan direction. Usually it's the vertical direction of acquisition GUI
-    'N_scan_fast'       : 128, # type: int, unit: #. Number of scan position along fast scan direction. usually it's the horizontal direction of acquisition GUI
-    'scan_step_size'    : 0.4290, # type: float, unit: Ang. Step size between probe positions in a rectangular raster scan pattern
-    'scan_flipT'        : None, # type: None or list of 3 binary booleans (0 or 1) as [flipup, fliplr, transpose] just like PtychoShleves. Default value is None or equivalently [0,0,0]. This applies additional flip and transpose to initialized scan patterns. Note that modifing 'scan_flipT' would change the image orientation, so it's recommended to set this to None, and only use 'meas_flipT' to get the orientation correct
-    'scan_affine'       : None, # type: None or list of 4 floats as [scale, asymmetry, rotation, shear] just like PtychoShleves. Default is None or equivalently [1,0,0,0], rotation and shear are in unit of degree. This applies additional affine transformation to initialized scan patterns to correct sample drift and imperfect scan coils
-    'pmode_max'         : 6, # type: int, unit: #. Maximum number of mixed probe modes. Set to pmode_max = 1 for single probe state, pmode_max > 1 for mixed-state probe during initialization. For simulated initial object, it'll be generated with the specified number of probe modes. For loaded probe, the pmode dimension would be capped at this number
-}
+def get_date(date_format = '%Y%m%d'):
+    from datetime import date
+    date_format = date_format
+    date_str = date.today().strftime(date_format)
+    return date_str
 
-recon_params = {
-    'NITER': 64, # type: int. Total number of reconstruction iterations. 1 iteration means a full pass of all selected diffraction patterns. Usually 20-50 iterations can get 90% of the work done with a proper learning rate between 1e-3 to 1e-4. For faster trials in hypertune mode, set 'NITER' to a smaller number than your typical reconstruction to save time. Usually 10-20 iterations are enough for the hypertune parameters to show their relative performance. 
-    'BATCH_SIZE': 32, # type: int. Number of diffraction patterns processed simultaneously to get the gradient update. "Batch size" is commonly used in machine learning community, while it's called "grouping" in PtychoShelves. Batch size has an effect on both convergence speed and final quality, usually smaller batch size leads to better final quality for iterative gradient descent, but smaller batch size would also lead to longer computation time per iteration because the GPU isn't as utilized as large batch sizes (due to less GPU parallelism). Generally batch size of 32 to 128 is used, although certain algorithms (like ePIE) would prefer a large batch size that is equal to the dataset size for robustness. For extremely large object (or with a lot of object modes), you'll need to reduce batch_size to save GPU memory as well.
-    'step_size': 0.8,
-    'output_dir': 'publication/output/tBL-WSe2/', # type str. Path and name of the main output directory. Ideally the 'output_dir' keeps a series of reconstruction of the same materials system or project. The PtyRAD results and figs will be saved into a reconstruction-specific folder under 'output_dir'. The 'output_dir' folder will be automatically created if it doesn't exist.
-    'prefix_date': True, # type: boolean. Whether to prefix a date str to the reconstruction folder or not. Set to true to automatically prefix a date str like '20240903_' in front of the reconstruction folder name. Suggested value is true for both reconstruction and hypertune modes. In hypertune mode, the date string would be applied on the hypertune folder instead of the reconsstruction folder. 
-    'prefix': '', # type: str. Prefix this string to the reconstruction folder name. Note that "_" will be automatically generated, and the attached str would be after the date str if 'prefix_date' is true. In hypertune mode, the prefix string would be applied on the hypertune folder instead of the reconsstruction folder.  
-    'postfix': '', # type: str. Postfix this string to the reconstruction folder name. Note that "_" will be automatically generated. In hypertune mode, the postfix string would be applied on the hypertune folder instead of the reconsstruction folder.  
-}
+def make_output_folder(params):
+    exp_params = params['exp_params']
+    recon_params = params['recon_params']
 
+    # Preprocess prefix and postfix
+    prefix = recon_params['prefix']
+    postfix = recon_params['postfix']
+    prefix = prefix + '_' if prefix  != '' else ''
+    postfix = '_'+ postfix if postfix != '' else ''
 
+    if recon_params['prefix_date']:
+        prefix = get_date() + '_' + prefix 
 
-file_path = '/media/muller_group/dm852_ExPro/ptyrad_paper/'
-file_data = file_path + 'data/tBL_WSe2/Fig_1h_24.9mrad_Themis/1/data_roi1_Ndp128_step128_dp.hdf5'
-with h5py.File(file_data, 'r') as f:
-    dataset = py4DSTEM.DataCube(np.reshape(f['dp'],[exp_params['Npix'],exp_params['Npix'],exp_params['N_scan_slow'],exp_params['N_scan_fast']]))
+    # Append basic parameters to folder name
+    output_dir  = recon_params['output_dir']
+    meas_flipT  = exp_params['meas_flipT'] 
+    folder_str = prefix + f"N{(exp_params['N_scans'])}_dp{exp_params['Npix']}"
 
-dataset.calibration.set_R_pixel_size(exp_params['scan_step_size']/10)
-dataset.calibration.set_R_pixel_units('nm')
-dataset.calibration.set_Q_pixel_size(1/(exp_params['dx_spec']*exp_params['Npix']))
-dataset.calibration.set_Q_pixel_units('A^-1')
+    if meas_flipT is not None:
+        folder_str = folder_str + '_flipT' + ''.join(str(x) for x in meas_flipT)
 
-ptycho = initialize_ptycho(exp_params)
-ptycho.preprocess(
-    plot_center_of_mass = False,
-    plot_rotation=False,
-    # plot_probe_overlaps=False,
-    # force_com_rotation = -87.0,
-)
+    folder_str += f"_random{recon_params['BATCH_SIZE']}_p{exp_params['pmode_max']}_{exp_params['Nlayer']}slice"
 
-ptycho.reconstruct(
-    reset=True,
-    store_iterations=True,
+    if exp_params['Nlayer'] != 1:
+        z_distance = np.array(exp_params['z_distance']).round(2)
+        folder_str += f"_dz{z_distance:.3g}"
+
+    output_path = os.path.join(output_dir, folder_str)
+    output_path += postfix
+    os.makedirs(output_path, exist_ok=True)
+    print(f"output_path = '{output_path}' is generated!")
+    return output_path
+
+def parse_sec_to_time_str(seconds):
+    days = seconds // 86400
+    hours = (seconds % 86400) // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    if days > 0:
+        return f"{int(days)} day {int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif hours > 0:
+        return f"{int(hours)} hr {int(minutes)} min {secs:.3f} sec"
+    elif minutes > 0:
+        return f"{int(minutes)} min {secs:.3f} sec"
+    else:
+        return f"{secs:.3f} sec"
+
+if __name__ == "__main__":
+    
+    parser = argparse.ArgumentParser(
+        description="Run py4DSTEM", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--params_path", type=str, required=True)
+    parser.add_argument("--gpuid",       type=int, required=False, default=None)
+    args = parser.parse_args()
+    
+    ## Load params and initialize datacube
+    params       = load_yml_params(args.params_path)
+    exp_params   = params['exp_params']
+    recon_params = params['recon_params']
+    datacube     = get_datacube(exp_params)
+    
+    ## Initialize py4dstem ptycho instance
+    ptycho = initialize_ptycho(datacube, exp_params)
+    ptycho.preprocess(
+        plot_center_of_mass = False,
+        plot_rotation=False,
+    )
+    
+    ## Reconstruct py4dstem ptycho
+    output_path = make_output_folder(params)
+    
+    solver_start_t = time()
+    
+    ptycho.reconstruct(
     num_iter = recon_params['NITER'],
-    normalization_min=1,
-    step_size = recon_params['step_size'],
-    #gaussian_filter_sigma = .5,
-    #kz_regularization_gamma = 1000,
-    #reconstruction_method = 'RAAR'
+    reconstruction_method = 'gradient-descent',
     max_batch_size = recon_params['BATCH_SIZE'],
-).visualize(
-    iterations_grid = 'auto'
-)
-
-
-# Set save path
-prefix = recon_params['prefix']
-prefix  = prefix+ '_' if prefix  != '' else '' + 'py4DSTEM' + '_'
-prefix = get_date() + '_' + prefix 
-
-output_dir = recon_params['output_dir']
-save_dir  = file_path + output_dir + prefix + f"N{(exp_params['N_scan_slow']*exp_params['N_scan_fast'])}_dp{exp_params['Npix']}" 
-
-# Save probe, object and scan_positions to .h5 file
-save_py4DSTEM(ptycho, save_dir)
-
-#####################
-### end the clock ###
-#####################
-endtime = time.time()
-
-#####################
-### Print summary ###
-#####################
-print('Printing summary')
-print('Loaded measurement data from:', file_data)
-print('4D data shape:', dataset.shape)
-print('Ptycho engine:', ms_ptycho.__class__)
-print("Saved results to:", save_dir+'.h5')
-print('probe shape:', ms_ptycho.probe.shape)
-print('object shape:', ms_ptycho.object.shape)
-print('Total iterations:', recon_params['NITER'])
-print('Total time comsumption:', endtime - starttime)
+    step_size = 0.5, # Update step size, default is 0.5
+    kz_regularization_gamma = 1,
+    object_positivity = False,
+    reset = True, # If True, previous reconstructions are ignored
+    progress_bar = False, # If True, reconstruction progress is displayed
+    store_iterations = False, # If True, reconstructed objects and probes are stored at each iteration.
+    save_iters = recon_params['SAVE_ITERS'], # Added by CHL to save intermediate results
+    output_path = output_path)
+    
+    solver_end_t = time()
+    print(f"py4DSTEM ptycho solver is finished in {parse_sec_to_time_str(solver_end_t - solver_start_t)}")

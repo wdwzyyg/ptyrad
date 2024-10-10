@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unrelease]
 ### Added
 - Add `py4DTEM` as a new source for object, probe, and positions in params file
+- Refine `run_py4dstem.py`, `slurm_run_py4dstem.sub`, and `run_py4dstem_detailed_walkthrough.ipynb`
 - Add `probe_prop` as a new option for `save_result` list. It'll save a 2D montage of (Nz x Ny, pmode x Nx) to show how the probe propagate through the object
 ### Changed
 - Modify `load_hdf5` so that it can return the entire dict if `dataset_key = None`
