@@ -11,6 +11,23 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+def set_accelerator():
+
+    try:
+        from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
+        dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
+        kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
+        accelerator        = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
+        vprint("\n### Initializing HuggingFace accelerator ###")
+        vprint(f"Accelerator.distributed_type = {accelerator.distributed_type}")
+        vprint(f"Accelerator.num_process      = {accelerator.num_processes}")
+        vprint(f"Accelerator.mixed_precision  = {accelerator.mixed_precision}")
+        return accelerator
+    
+    except ImportError:
+        vprint("\n### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
+        return None
+
 def print_system_info():
     
     import os
@@ -66,12 +83,13 @@ def print_system_info():
     vprint(f"PyTorch Version: {torch.__version__}")
 
 def set_gpu_device(gpuid=0):
-    
+    vprint("\n### Setting GPU ID ###")
     if gpuid is not None:
         device = torch.device("cuda:" + str(gpuid))
         vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
     else:
         device = None
+        vprint(f"Selected gpuid = {gpuid}")
     return device
 
 def vprint(*args, verbose=True, **kwargs):

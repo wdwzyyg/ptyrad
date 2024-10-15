@@ -16,7 +16,6 @@ from ptyrad.utils import (
     vprint,
 )
 
-
 class Initializer:
     def __init__(self, exp_params, source_params, verbose=True):
         self.init_params = {'exp_params':exp_params.copy(), 'source_params':source_params} # Note that self.init_params is a copy of exp_params so they could have different values 
@@ -119,17 +118,17 @@ class Initializer:
             
             # Print some derived values for sanity check
             if self.verbose:
-                print("\nDerived values given input exp_params:")
-                print(f'kv          = {voltage} kV')    
-                print(f'wavelength  = {wavelength:.4f} Ang')
-                print(f'conv_angle  = {conv_angle} mrad')
-                print(f'Npix        = {Npix} px')
-                print(f'dk          = {dk:.4f} Ang^-1')
-                print(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
-                print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
-                print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-                print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-                print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+                vprint("\nDerived values given input exp_params:")
+                vprint(f'kv          = {voltage} kV')    
+                vprint(f'wavelength  = {wavelength:.4f} Ang')
+                vprint(f'conv_angle  = {conv_angle} mrad')
+                vprint(f'Npix        = {Npix} px')
+                vprint(f'dk          = {dk:.4f} Ang^-1')
+                vprint(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
+                vprint(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+                vprint(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+                vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+                vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
 
         elif exp_params['illumination_type']  == 'xray':
             energy      = exp_params['energy']
@@ -147,16 +146,16 @@ class Initializer:
             dk          = 1/(dx*Npix)
             
             if self.verbose:
-                print("\nDerived values given input exp_params:")
-                print(f'x-ray beam energy  = {energy} keV')    
-                print(f'wavelength         = {wavelength} m')
-                print(f'outmost zone width = {dRn} m')
-                print(f'Rn                 = {Rn} m')
-                print(f'D_H                = {D_H} m')
-                print(f'D_FZO              = {D_FZO} m')
-                print(f'Ls                 = {Ls} m')
-                print(f'Npix               = {Npix} px')
-                print(f'dx                 = {dx} m')
+                vprint("\nDerived values given input exp_params:")
+                vprint(f'x-ray beam energy  = {energy} keV')    
+                vprint(f'wavelength         = {wavelength} m')
+                vprint(f'outmost zone width = {dRn} m')
+                vprint(f'Rn                 = {Rn} m')
+                vprint(f'D_H                = {D_H} m')
+                vprint(f'D_FZO              = {D_FZO} m')
+                vprint(f'Ls                 = {Ls} m')
+                vprint(f'Npix               = {Npix} px')
+                vprint(f'dx                 = {dx} m')
         
         else:
             raise KeyError(f"exp_params['illumination_type'] = {exp_params['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")

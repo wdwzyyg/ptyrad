@@ -6,14 +6,8 @@ from random import shuffle
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 import torch.distributed as dist
-
-try:
-    from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
-    ACCELERATE_AVAILABLE = True
-except ImportError:
-    ACCELERATE_AVAILABLE = False
+from torch.utils.data import Dataset
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
@@ -68,19 +62,12 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, device=None):
+    def __init__(self, params, device=None, acc=None):
         self.params          = params
         self.if_hypertune    = self.params['hypertune_params']['if_hypertune']
         self.verbose         = not self.params['recon_params']['if_quiet']
-        self.manual_device   = device
-        self.use_acc_device  = True if (device is None and ACCELERATE_AVAILABLE) else False
-
-        # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
-        if ACCELERATE_AVAILABLE:
-            self.init_accelerator()
-        else:
-            vprint("\n### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
-            self.accelerator = None
+        self.accelerator     = acc
+        self.use_acc_device  = True if (device is None and acc is not None) else False
         self.device          = self.accelerator.device if self.use_acc_device else device
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
@@ -88,14 +75,6 @@ class PtyRADSolver(object):
         self.init_loss()
         self.init_constraint()
         vprint("\n### Done initializing PtyRADSolver ###")
-    
-    def init_accelerator(self):
-        vprint("\n### Initializing HuggingFace accelerator ###")
-        dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
-        kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
-        self.accelerator   = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
-        vprint(f"use_acc_device = {self.use_acc_device} because the passed in device = {self.manual_device}")
-        vprint(f"If launch with accelerate, mixed precision = {self.accelerator.mixed_precision}")
     
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
@@ -339,7 +318,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
             
             ## Saving intermediate results
             if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-                with torch.no_grad:
+                with torch.no_grad():
                     # Use the method on the wrapped model (DDP) if it exists
                     model_instance = model.module if hasattr(model, "module") else model
                     

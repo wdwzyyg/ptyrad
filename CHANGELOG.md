@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Modify `load_hdf5` so that it can return the entire dict if `dataset_key = None`
 - Add a `torch.no_grad` block for the saving/plotting block to locally disable autograd
+- Move the `init_accelerator` from `PtyRADSolver` class to `utils` to reduce duplicated printing because DDP is only initialized after initializing `accelerate`
 
 ## [v0.1.0-beta2.8] - 2024-10-14
 ### Added
