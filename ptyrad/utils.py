@@ -617,6 +617,9 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_times, 
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
     probe      = model.get_complex_probe_view() 
     probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
+    probe_prop = model.get_propagated_probe([0]).permute(0,2,1,3)
+    shape      = probe_prop.shape
+    prop_p_amp = probe_prop.reshape(shape[0]*shape[1], shape[2]*shape[3]).abs().detach().cpu().numpy()
     objp       = model.opt_objp.detach().cpu().numpy()
     obja       = model.opt_obja.detach().cpu().numpy()
     # omode_occu = model.omode_occu # Currently not used but we'll need it when omode_occu != 'uniform'
@@ -639,6 +642,8 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_times, 
             bit_str = ''
         if 'probe' in save_result_list:
             imwrite(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
+        if 'probe_prop' in save_result_list:
+            imwrite(os.path.join(output_path, f"probe_prop{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(prop_p_amp, bit))
         for fov in result_modes['FOV']:
             if fov == 'crop':
                 fov_str = '_crop'
@@ -1096,7 +1101,6 @@ def make_fzp_probe(params_dict, verbose=True):
         probe = np.fft.fftshift(cgh) / pf
 
     return probe
-
 
 def make_mixed_probe(probe, pmodes, pmode_init_pows, verbose=True):
     ''' Make a mixed state probe from a single state probe '''

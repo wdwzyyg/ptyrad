@@ -339,15 +339,15 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
             
             ## Saving intermediate results
             if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
-                
-                # Use the method on the wrapped model (DDP) if it exists
-                model_instance = model.module if hasattr(model, "module") else model
-                
-                # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
-                save_results(output_path, model_instance, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
-                
-                ## Saving summary
-                plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
+                with torch.no_grad:
+                    # Use the method on the wrapped model (DDP) if it exists
+                    model_instance = model.module if hasattr(model, "module") else model
+                    
+                    # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
+                    save_results(output_path, model_instance, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
+                    
+                    ## Saving summary
+                    plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
     vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
 
     return loss_iters

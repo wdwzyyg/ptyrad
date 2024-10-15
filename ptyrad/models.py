@@ -1,6 +1,7 @@
 ## Defining PtychoAD class for the optimization object
 from math import prod
 import torch
+from torch.fft import fft2, ifft2
 import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
@@ -261,6 +262,19 @@ class PtychoAD(torch.nn.Module):
         
         propagators  = add_tilts_to_propagator(self.H, obj_tilts, dz=self.z_distance, dk=self.dk)
         return propagators
+
+    def get_propagated_probe(self, index):
+        probe = self.get_probes(index)[0].detach() # (pmode, Ny, Nx)
+        H = self.get_propagators(index).detach() # (1, Ny, Nx)
+        n_slices = self.opt_objp.shape[1]
+        probe_prop = torch.zeros((n_slices, *probe.shape), dtype=probe.dtype, device=probe.device)
+        
+        psi = probe # (z, pmode, Ny, Nx)
+        for n in range(n_slices):
+            probe_prop[n] = psi
+            psi = ifft2(H[None,] * fft2(psi))
+        
+        return probe_prop
     
     def get_measurements(self, indices=None):
         """ Get measurements for each position """
@@ -281,7 +295,6 @@ class PtychoAD(torch.nn.Module):
         
         return measurements
         
-    
     def forward(self, indices):
         """ Doing the forward pass and get an output diffraction pattern for each input index """
         # The indices are passed in as an array and representing the whole batch

@@ -51,8 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unrelease]
 ### Added
 - Add `py4DTEM` as a new source for object, probe, and positions in params file
+- Add `probe_prop` as a new option for `save_result` list. It'll save a 2D montage of (Nz x Ny, pmode x Nx) to show how the probe propagate through the object
 ### Changed
 - Modify `load_hdf5` so that it can return the entire dict if `dataset_key = None`
+- Add a `torch.no_grad` block for the saving/plotting block to locally disable autograd
 
 ## [v0.1.0-beta2.8] - 2024-10-14
 ### Added

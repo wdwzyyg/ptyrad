@@ -3,6 +3,6 @@ data/*
 !data/demo_data_instruction.txt
 logs/
 output/
-params/work
+params/work/
 __pycache__
 *.sqlite3
