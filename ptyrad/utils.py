@@ -301,6 +301,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # output_path  = make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix)
     
     output_path  = output_dir
+    illumination = exp_params['illumination_type']
     meas_flipT   = exp_params['meas_flipT']
     indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
@@ -318,10 +319,6 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
-    init_conv_angle = exp_params['conv_angle']
-    init_defocus    = exp_params['defocus']
-    init_c3    = exp_params['c3']
-    init_c5    = exp_params['c5']
     optimizer_str   = model.optimizer_params['name']
     start_iter_dict = model.start_iter
 
@@ -440,20 +437,30 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
 
     # # Attach init params (optional)
     if 'init' in recon_dir_affixes:
-        output_path += f"_ca{init_conv_angle:.3g}"
-        output_path += f"_df{init_defocus:.3g}"
-        if init_c3 != 0:
-            output_path += f"_c3{format(init_c3, '.0e')}"
-        if init_c5 != 0:
-            output_path += f"_c5{format(init_c5, '.0e')}"
-        
-        if scan_affine is not None:
-            affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
-            output_path += f"_aff{affine_str}"
-        
-        if np.any(init_tilts):
-            tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel())
-            output_path += f"_tilt{tilts_str}"
+        if illumination == 'electron':
+            init_conv_angle = exp_params['conv_angle']
+            init_defocus    = exp_params['defocus']
+            init_c3    = exp_params['c3']
+            init_c5    = exp_params['c5']
+            output_path += f"_ca{init_conv_angle:.3g}"
+            output_path += f"_df{init_defocus:.3g}"
+            if init_c3 != 0:
+                output_path += f"_c3{format(init_c3, '.0e')}"
+            if init_c5 != 0:
+                output_path += f"_c5{format(init_c5, '.0e')}"
+        elif illumination =='xray':
+            init_Ls = exp_params['Ls']
+            output_path += f"_Ls{init_Ls* 1e9:.0f}"
+        else:
+            raise KeyError(f"exp_params['illumination_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
+            
+    if scan_affine is not None:
+        affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
+        output_path += f"_aff{affine_str}"
+    
+    if np.any(init_tilts):
+        tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel())
+        output_path += f"_tilt{tilts_str}"
     
     output_path += postfix
     
@@ -886,27 +893,45 @@ def kv2wavelength(acceleration_voltage):
     return wavelength
 
 def get_default_probe_simu_params(exp_params):
-    probe_simu_params = {
-                    ## Basic params
-                    "kv"             : exp_params['kv'],
-                    "conv_angle"     : exp_params['conv_angle'],
-                    "Npix"           : exp_params['Npix'],
-                    "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                    "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
-                    "pmode_init_pows": exp_params['pmode_init_pows'],
-                    ## Aberration coefficients
-                    "df"             : exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
-                    "c3"             : exp_params['c3'] , #third-order spherical aberration in angstrom
-                    "c5"             : exp_params['c5'], #fifth-order spherical aberration in angstrom
-                    "c7":0, #seventh-order spherical aberration in angstrom
-                    "f_a2":0, #twofold astigmatism in angstrom
-                    "f_a3":0, #threefold astigmatism in angstrom
-                    "f_c3":0, #coma in angstrom
-                    "theta_a2":0, #azimuthal orientation in radian
-                    "theta_a3":0, #azimuthal orientation in radian
-                    "theta_c3":0, #azimuthal orientation in radian
-                    "shifts":[0,0], #shift probe center in angstrom
-                    }
+    illumination_type = exp_params['illumination_type']
+    if illumination_type == 'electron':
+        probe_simu_params = {
+                        ## Basic params
+                        "kv"             : exp_params['kv'],
+                        "conv_angle"     : exp_params['conv_angle'],
+                        "Npix"           : exp_params['Npix'],
+                        "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
+                        "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": exp_params['pmode_init_pows'],
+                        ## Aberration coefficients
+                        "df"             : exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
+                        "c3"             : exp_params['c3'] , #third-order spherical aberration in angstrom
+                        "c5"             : exp_params['c5'], #fifth-order spherical aberration in angstrom
+                        "c7":0, #seventh-order spherical aberration in angstrom
+                        "f_a2":0, #twofold astigmatism in angstrom
+                        "f_a3":0, #threefold astigmatism in angstrom
+                        "f_c3":0, #coma in angstrom
+                        "theta_a2":0, #azimuthal orientation in radian
+                        "theta_a3":0, #azimuthal orientation in radian
+                        "theta_c3":0, #azimuthal orientation in radian
+                        "shifts":[0,0], #shift probe center in angstrom
+                        }
+    elif illumination_type == 'xray':
+        probe_simu_params = {
+                        ## Basic params
+                        "beam_energy"    : exp_params['energy'],
+                        "Npix"           : exp_params['Npix'],
+                        "dx"             : exp_params['dx_spec'],
+                        "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": exp_params['pmode_init_pows'],
+                        "Ls"             : exp_params['Ls'],
+                        "Rn"             : exp_params['Rn'],
+                        "dRn"            : exp_params['dRn'],
+                        "D_FZP"          : exp_params['D_FZP'],
+                        "D_H"            : exp_params['D_H'],
+        }
+    else:
+        raise KeyError(f"exp_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
     return probe_simu_params
 
 def make_stem_probe(params_dict, verbose=True):
@@ -996,6 +1021,82 @@ def make_stem_probe(params_dict, verbose=True):
         print(f'Real space probe extent = {dx*Npix:.4f} Ang')
     
     return probe
+
+def make_fzp_probe(params_dict, verbose=True):
+    """
+    Generates a Fresnel zone plate probe with internal Fresnel propagation for x-ray ptychography simulations.
+
+    Parameters:
+        N (int): Number of pixels.
+        lambda_ (float): Wavelength.
+        dx (float): Pixel size (in meters) in the sample plane.
+        Ls (float): Distance (in meters) from the focal plane to the sample.
+        Rn (float): Radius of outermost zone (in meters).
+        dRn (float): Width of outermost zone (in meters).
+        D_FZP (float): Diameter of pinhole.
+        D_H (float): Diameter of the central beamstop (in meters).
+
+    Returns:
+        ndarray: Calculated probe field in the sample plane.
+    """
+    N        = int(params_dict['Npix'])
+    energy   = int(params_dict['beam_energy'])
+    dx       = params_dict['dx']
+    Ls       = params_dict['Ls']
+    Rn       = params_dict['Rn']
+    dRn      = params_dict['dRn']
+    D_FZP    = params_dict['D_FZP']
+    D_H      = params_dict['D_H']
+
+    lambda_ = 1.23984193e-9 / energy
+    fl = 2 * Rn * dRn / lambda_  # focal length corresponding to central wavelength
+
+    vprint("Start simulating FZP probe", verbose=verbose)
+
+    dx_fzp = lambda_ * fl / N / dx  # pixel size in the FZP plane
+
+    # Coordinate in the FZP plane
+    lx_fzp = np.linspace(-dx_fzp * N / 2, dx_fzp * N / 2, N)
+    x_fzp, y_fzp = np.meshgrid(lx_fzp, lx_fzp)
+
+    
+    T = np.exp(-1j * 2 * np.pi / lambda_ * (x_fzp**2 + y_fzp**2) / (2 * fl))
+    C = (np.sqrt(x_fzp**2 + y_fzp**2) <= (D_FZP / 2)).astype(np.float64)  # circular function of FZP
+    H = (np.sqrt(x_fzp**2 + y_fzp**2) >= (D_H / 2)).astype(np.float64)  # central block
+
+    
+    IN = C * T * H
+    M, N = IN.shape
+    k = 2 * np.pi / lambda_
+
+    # Coordinate grid for input plane
+    lx = np.linspace(-dx_fzp * M / 2, dx_fzp * M / 2, M)
+    x, y = np.meshgrid(lx, lx)
+
+    # Coordinate grid for output plane
+    fc = 1 / dx_fzp
+    fu = lambda_ * (fl + Ls) * fc
+    lu = np.fft.ifftshift(np.linspace(-fu / 2, fu / 2, M))
+    u, v = np.meshgrid(lu, lu)
+
+    z = fl + Ls
+    if z > 0:
+        # Propagation in the positive z direction
+        pf = np.exp(1j * k * z) * np.exp(1j * k * (u**2 + v**2) / (2 * z))
+        kern = IN * np.exp(1j * k * (x**2 + y**2) / (2 * z))
+        
+        kerntemp = np.fft.fftshift(kern)
+        cgh = np.fft.fft2(kerntemp)
+        probe = np.fft.fftshift(cgh * pf)
+    else:
+        # Propagation in the negative z direction (or backward propagation)
+        z = abs(z)
+        pf = np.exp(1j * k * z) * np.exp(1j * k * (x**2 + y**2) / (2 * z))
+        cgh = np.fft.ifft2(np.fft.ifftshift(IN) / np.exp(1j * k * (u**2 + v**2) / (2 * z)))
+        probe = np.fft.fftshift(cgh) / pf
+
+    return probe
+
 
 def make_mixed_probe(probe, pmodes, pmode_init_pows, verbose=True):
     ''' Make a mixed state probe from a single state probe '''

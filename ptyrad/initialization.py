@@ -9,11 +9,13 @@ from ptyrad.utils import (
     get_default_probe_simu_params,
     get_rbf,
     kv2wavelength,
+    make_fzp_probe,
     make_mixed_probe,
     make_stem_probe,
     near_field_evolution,
     vprint,
 )
+
 
 class Initializer:
     def __init__(self, exp_params, source_params, verbose=True):
@@ -96,34 +98,67 @@ class Initializer:
     
     def init_exp_params(self):
         vprint("\n### Initializing exp_params ###", verbose=self.verbose)
-        exp_params = self.init_params['exp_params']    
-        vprint("Input values are displayed below:", verbose=self.verbose)   
+        exp_params = self.init_params['exp_params']   
+        vprint("Input values are displayed below:", verbose=self.verbose)
         for key, value in exp_params.items():
             vprint(f"{key}: {value}", verbose=self.verbose)
+
+        if exp_params['illumination_type']  == 'electron':    
+            voltage     = exp_params['kv']
+            wavelength  = kv2wavelength(voltage)
+            conv_angle  = exp_params['conv_angle']
+            Npix        = exp_params['Npix']
+            N_scan_slow = exp_params['N_scan_slow']
+            N_scan_fast = exp_params['N_scan_fast']
+            N_scans     = N_scan_slow * N_scan_fast
+            dx          = exp_params['dx_spec']
+            dk          = 1/(dx*Npix)
             
-        voltage     = exp_params['kv']
-        wavelength  = kv2wavelength(voltage)
-        conv_angle  = exp_params['conv_angle']
-        Npix        = exp_params['Npix']
-        N_scan_slow = exp_params['N_scan_slow']
-        N_scan_fast = exp_params['N_scan_fast']
-        N_scans     = N_scan_slow * N_scan_fast
-        dx          = exp_params['dx_spec']
-        dk          = dk = 1/(dx*Npix)
+            # Print some derived values for sanity check
+            if self.verbose:
+                print("\nDerived values given input exp_params:")
+                print(f'kv          = {voltage} kV')    
+                print(f'wavelength  = {wavelength:.4f} Ang')
+                print(f'conv_angle  = {conv_angle} mrad')
+                print(f'Npix        = {Npix} px')
+                print(f'dk          = {dk:.4f} Ang^-1')
+                print(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
+                print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+                print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+                print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+                print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+
+        elif exp_params['illumination_type']  == 'xray':
+            energy      = exp_params['energy']
+            wavelength  = 1.23984193e-9 / energy
+            dx          = exp_params['dx_spec']
+            N_scan_slow = exp_params['N_scan_slow']
+            N_scan_fast = exp_params['N_scan_fast']
+            N_scans     = N_scan_slow * N_scan_fast
+            Npix        = exp_params['Npix']
+            dRn         = exp_params['dRn']
+            Rn          = exp_params['Rn']
+            D_H         = exp_params['D_H']
+            D_FZO       = exp_params['D_FZP']
+            Ls          = exp_params['Ls']
+            dk          = 1/(dx*Npix)
+            
+            if self.verbose:
+                print("\nDerived values given input exp_params:")
+                print(f'x-ray beam energy  = {energy} keV')    
+                print(f'wavelength         = {wavelength} m')
+                print(f'outmost zone width = {dRn} m')
+                print(f'Rn                 = {Rn} m')
+                print(f'D_H                = {D_H} m')
+                print(f'D_FZO              = {D_FZO} m')
+                print(f'Ls                 = {Ls} m')
+                print(f'Npix               = {Npix} px')
+                print(f'dx                 = {dx} m')
         
-        # Print some derived values for sanity check
-        if self.verbose:
-            print("\nDerived values given input exp_params:")
-            print(f'kv          = {voltage} kV')    
-            print(f'wavelength  = {wavelength:.4f} Ang')
-            print(f'conv_angle  = {conv_angle} mrad')
-            print(f'Npix        = {Npix} px')
-            print(f'dk          = {dk:.4f} Ang^-1')
-            print(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
-            print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
-            print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-            print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-            print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+        else:
+            raise KeyError(f"exp_params['illumination_type'] = {exp_params['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")
+        
+        # Save general values into init_variables        
         self.init_variables['Npix']        = Npix
         self.init_variables['N_scan_slow'] = N_scan_slow
         self.init_variables['N_scan_fast'] = N_scan_fast
@@ -262,12 +297,13 @@ class Initializer:
         meas = meas / (np.mean(meas, 0).max()) # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
         meas = meas.astype('float32')
         
-        # Get rbf related values
-        rbf = get_rbf(meas)
-        suggested_probe_mask_k_radius = 2*rbf/meas.shape[-1]
+        # Get rbf related values (for electron ptychography only)
+        if self.init_params['exp_params']['illumination_type'] == 'electron':
+            rbf = get_rbf(meas)
+            suggested_probe_mask_k_radius = 2*rbf/meas.shape[-1]
+            vprint(f"Radius of bright field disk             (rbf) = {rbf} px, suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
         
         # Print out some measurements statistics
-        vprint(f"Radius of bright field disk             (rbf) = {rbf} px, suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
         self.init_variables['measurements'] = meas
@@ -275,6 +311,7 @@ class Initializer:
     def init_probe(self):
         source = self.init_params['source_params']['probe_source']
         params = self.init_params['source_params']['probe_params']
+        illumination_type  = self.init_params['exp_params']['illumination_type']
         vprint(f"\n### Initializing probe from '{source}' ###", verbose=self.verbose)
 
         # Load file
@@ -302,11 +339,15 @@ class Initializer:
             probe_simu_params = params
             if probe_simu_params is None:
                 vprint("Use exp_params and default values instead for simulation", verbose=self.verbose)
-                probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'] )
-            probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
+                probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'])
+            if illumination_type == 'electron':
+                probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
+            elif illumination_type == 'xray':
+                probe = make_fzp_probe(probe_simu_params)[None,] # simulated probe for fresnel zone plate condition
+            else:
+                raise KeyError(f"exp_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
             if probe_simu_params['pmodes'] > 1:
                 probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'], verbose=self.verbose) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
-                                
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
         
@@ -369,6 +410,14 @@ class Initializer:
             pos = pos - (pos.max(0) - pos.min(0))/2 + pos.min(0) # Center scan around origin
             obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
+        elif source == 'foldslice_hdf5': # This preprocessing routine is equivalent to `p.src_positions='hdf5_pos';` in `fold_slice` that was used for many APS instruments
+            hdf5_path = params
+            ppY = load_hdf5(hdf5_path, dataset_key='ppY')
+            ppX = load_hdf5(hdf5_path, dataset_key='ppX')
+            pos = np.stack((-ppY, -ppX), axis=1) / dx_spec 
+            pos = np.flipud(pos) # (N,2) in (pos_y_px, pos_x_px)
+            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
+            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate      
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
         
@@ -427,6 +476,11 @@ class Initializer:
         elif source == 'PtyShv':
             mat_path = params
             obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
+            
+            if obj.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+                print(f"Loaded object.dtype = {obj.dtype}, cast it to 'complex128'")
+                obj = obj.view('complex128')
+                
             vprint("Expanding PtyShv object dimension", verbose=self.verbose)
             vprint(f"Input PtyShv obj has original shape {obj.shape}", verbose=self.verbose)
             if len(obj.shape) == 2: # Single-slice ptycho
@@ -473,6 +527,7 @@ class Initializer:
             omode_occu = np.ones(omode)/omode
         else:
             raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
+        
         omode_occu = omode_occu.astype('float32')
         vprint(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}", verbose=self.verbose)
         self.init_variables['omode_occu'] = omode_occu
@@ -481,10 +536,18 @@ class Initializer:
         vprint("\n### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
         probe_shape = np.array([self.init_params['exp_params']['Npix']]*2) 
         z_distance = self.init_params['exp_params']['z_distance']
-        lambd = kv2wavelength(self.init_params['exp_params']['kv'])
         dx_spec = self.init_params['exp_params']['dx_spec']
         extent = dx_spec * probe_shape
-        vprint(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance:.4f} Ang, lambd = {lambd:.4f} Ang, extent = {extent.round(4)} Ang", verbose=self.verbose)
+        
+        if self.init_params['exp_params']['illumination_type'] == 'electron':
+            lambd = kv2wavelength(self.init_params['exp_params']['kv'])
+            vprint(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance:.4f} Ang, lambd = {lambd:.4f} Ang, extent = {extent.round(4)} Ang", verbose=self.verbose)
+        elif self.init_params['exp_params']['illumination_type'] == 'xray':
+            lambd = 1.23984193e-9 / (self.init_params['exp_params']['energy'])
+            vprint(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance} m, lambd = {lambd} m, extent = {extent} m", verbose=self.verbose)
+        else:
+            raise KeyError(f"exp_params['illumination_type'] = {self.init_params['exp_params']['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")
+        
         H = near_field_evolution(probe_shape, z_distance, lambd, extent)
         H = H.astype('complex64')
         vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)

@@ -574,7 +574,6 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     obj_tilts = [obj_tilts] # Make it into [[tilt_y, tilt_x]]
     if obj_tilts != [[0,0]]:
         init.init_variables['obj_tilts'] = obj_tilts
-
    
     # Create the model and optimizer, prepare indices, batches, and output_path
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)

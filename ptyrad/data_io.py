@@ -32,22 +32,22 @@ def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
 def load_hdf5(file_path, dataset_key="ds"):
     """
     Load data from an HDF5 file.
-
+    
     Parameters:
+    
     file_path (str): The full path to the HDF5 data file.
     dataset_key (str, optional): The key of the dataset to load from the HDF5 file.
-
+    
     Returns:
     data (numpy.ndarray): The loaded data.
-
+    
     Raises:
     FileNotFoundError: If the specified file does not exist.
-
+    
     Example:
     file_path = 'data.h5'
     data, data_source = load_hdf5(file_path, dataset_key='ds')
     """
-
     # Check if the file exists
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")

@@ -3,7 +3,7 @@
 
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
 
-This package performs ptychographic reconstruction on 4D-STEM data using an automatic differation approach.
+This package performs ptychographic reconstruction using an automatic differation approach.
 
 ## Introduction
 
