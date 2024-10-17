@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.10.07
+# Updated by Chia-Hao Lee on 2024.10.17
 
 import argparse
 import sys

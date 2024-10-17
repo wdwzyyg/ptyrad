@@ -241,10 +241,10 @@ class Initializer:
         # Resample diffraction patterns along the ky, kx dimension
         if self.init_params['exp_params']['meas_resample']['mode'] is not None:
             mode = self.init_params['exp_params']['meas_resample']['mode']
-            scale_factors = np.array([1, *self.init_params['exp_params']['meas_resample']['scale_factors']]) 
+            scale_factors = self.init_params['exp_params']['meas_resample']['scale_factors']
             
             if mode == 'precompute':
-                meas = zoom(meas, scale_factors, order=1) # scipy.ndimage.zoom applies to all axes
+                meas = zoom(meas, np.array([1, *scale_factors]), order=1) # scipy.ndimage.zoom applies to all axes
                 Npix = meas.shape[-1]
                 self.init_variables['on_the_fly_meas_scale_factors'] = None
 

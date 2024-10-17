@@ -3,5 +3,5 @@
 
 from ptyrad.utils import vprint
 
-__version__ = "v0.1.0-beta2.8" # 2024.10.14
+__version__ = "v0.1.0-beta2.9" # 2024.10.17
 vprint(f"\nPtyRAD Version: {__version__}")

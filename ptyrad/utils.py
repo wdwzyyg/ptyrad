@@ -661,7 +661,7 @@ def save_results(output_path, model, params, optimizer, loss_iters, iter_times, 
         if 'probe' in save_result_list:
             imwrite(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
         if 'probe_prop' in save_result_list:
-            imwrite(os.path.join(output_path, f"probe_prop{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(prop_p_amp, bit))
+            imwrite(os.path.join(output_path, f"probe_prop_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(prop_p_amp, bit))
         for fov in result_modes['FOV']:
             if fov == 'crop':
                 fov_str = '_crop'

@@ -290,7 +290,7 @@ class PtychoAD(torch.nn.Module):
             measurements = self.measurements
         
         if self.meas_scale_factors is not None and any(factor != 1 for factor in scale_factor):
-            measurements = torch.nn.functional.interpolate(measurements[None,None], scale_factor=scale_factor, mode='area')[0,0] # interpolate requires 5D input (N, C, D, H, W)
+            measurements = torch.nn.functional.interpolate(measurements[None,], scale_factor=scale_factor, mode='bilinear')[0] # 2D interpolate requires 4D input (N, C, H, W)
             measurements = measurements / prod(scale_factor) # This ensures the intensity scale and the integrated intensity are unchanged
         
         return measurements
