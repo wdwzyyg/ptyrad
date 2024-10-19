@@ -1,6 +1,7 @@
 ## Define the ptycho reconstruction solver class and functions
 
 import copy
+import logging
 from random import shuffle
 
 import matplotlib.pyplot as plt
@@ -121,7 +122,8 @@ class PtyRADSolver(object):
             vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
             vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
 
-        logger.flush_to_file(log_dir = output_path)
+        if logger is not None:
+            logger.flush_to_file(log_dir=output_path) # Note that output_path can be None, and there's an internal flag of self.flush_file controls the actual file creation
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
         self.reconstruct_results = model
     
@@ -140,6 +142,17 @@ class PtyRADSolver(object):
         prefix      = self.params['recon_params']['prefix']
         postfix     = self.params['recon_params']['postfix']
 
+        # Retrieve Optuna's logger
+        optuna_logger = logging.getLogger("optuna")
+        optuna_logger.setLevel(logging.INFO)
+        # Remove any existing console handlers from Optuna's logger to avoid duplicate logs
+        for handler in optuna_logger.handlers:
+            if isinstance(handler, logging.StreamHandler):  # StreamHandler is the console handler
+                optuna_logger.removeHandler(handler)
+        # Redirect Optuna's logger to custom logger
+        optuna_logger.addHandler(logger.buffer_handler)
+        optuna_logger.addHandler(logger.console_handler)
+                
         # Create a study object and optimize the objective function
         sampler = optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True)
         study = optuna.create_study(
@@ -164,13 +177,20 @@ class PtyRADSolver(object):
         self.params['recon_params']['postfix'] = ''
         
         if copy_params:
-            copy_params_to_dir(self.params['params_path'], output_dir) #, verbose=model.verbose)
-        logger.flush_to_file(log_dir = output_dir)
+            copy_params_to_dir(self.params['params_path'], output_dir)
+
+        # Set output_dir to None if the user doesn't want to create the output_dir at all
+        if not copy_params and self.params['recon_params']['SAVE_ITERS'] is None and not hypertune_params['collate_results']:
+            output_dir = None
+            
+        if logger is not None:
+            logger.flush_to_file(log_dir=output_dir) # Note that there's an internal flag of self.flush_file controls the actual file creation
+            optuna_logger.addHandler(logger.file_handler)
         
         study.optimize(lambda trial: optuna_objective(trial, self.params, self.init, self.loss_fn, self.constraint_fn, self.device, self.verbose), n_trials=n_trials)
-        print("Best hypertune params:")
+        vprint("Best hypertune params:")
         for key, value in study.best_params.items():
-            print(f"\t{key}: {value}")
+            vprint(f"\t{key}: {value}")
         
     def run(self):
         start_t = time_sync()
@@ -266,14 +286,14 @@ def prepare_recon(model, init, params):
     if SAVE_ITERS is not None:
         output_path = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
         fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
-        if copy_params:
-            # Save params.yml to separate reconstruction folder for normal mode, and to the main output_dir for hypertune mode
-            copy_params_to_dir(params_path, output_dir if if_hypertune else output_path, verbose=verbose)
+        if copy_params and not if_hypertune:
+            # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
+            copy_params_to_dir(params_path, output_path, verbose=verbose)
     else:
         output_path = None
     
     plt.close(fig_grouping)
-    vprint(" ")
+    vprint(" ", verbose=verbose)
     return indices, batches, output_path
 
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
@@ -344,7 +364,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     ## Saving summary
                     plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.5g} sec ###", verbose=verbose)
-    vprint(" ")
+    vprint(" ", verbose=verbose)
     return loss_iters
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -462,7 +482,7 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
     vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, in {parse_sec_to_time_str(iter_t)}", verbose=verbose)
-    vprint(" ")
+    vprint(" ", verbose=verbose)
     loss_iter = sum(avg_losses.values())
     return loss_iter
 
@@ -602,7 +622,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             
                 # Save the current results of the pruned trials
                 collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
-                if collate_results is not None:
+                if collate_results:
                     save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
@@ -614,5 +634,5 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
     
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
-    vprint(" ")
+    vprint(" ", verbose=verbose)
     return loss_iter

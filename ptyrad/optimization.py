@@ -400,7 +400,7 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
     if pt_path is not None:
         optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
         vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
-    vprint(" ")
+    vprint(" ", verbose=verbose)
     return optimizer
 
 def kr_filter(obj, radius, width):

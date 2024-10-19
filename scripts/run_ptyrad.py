@@ -25,7 +25,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # Set up custom logger
-    logger = CustomLogger(log_file = 'output.log', show_timestamp=False)
+    logger = CustomLogger(log_file='ptyrad_log.txt', log_dir='auto', prefix_date=True, append_to_file=True, show_timestamp=True)
     
     # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
     accelerator = set_accelerator()

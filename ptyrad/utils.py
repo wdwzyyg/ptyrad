@@ -14,50 +14,84 @@ from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
 class CustomLogger:
-    def __init__(self, log_file='output.log', show_timestamp=True):
+    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, append_to_file=True, show_timestamp=True):
         self.logger = logging.getLogger('PtyRAD')
         self.logger.setLevel(logging.INFO)
         self.log_file       = log_file
+        self.log_dir        = log_dir
+        self.flush_file     = log_file is not None
+        self.prefix_date    = prefix_date
+        self.append_to_file = append_to_file
         self.show_timestamp = show_timestamp
 
         # Create console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        self.console_handler = logging.StreamHandler()
+        self.console_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(message)s' if show_timestamp else '%(message)s')
-        console_handler.setFormatter(formatter)
+        self.console_handler.setFormatter(formatter)
         
         # Create a buffer for file logs
         self.log_buffer = io.StringIO()
-        buffer_handler = logging.StreamHandler(self.log_buffer)
-        buffer_handler.setLevel(logging.INFO)
-        buffer_handler.setFormatter(formatter)
+        self.buffer_handler = logging.StreamHandler(self.log_buffer)
+        self.buffer_handler.setLevel(logging.INFO)
+        self.buffer_handler.setFormatter(formatter)
 
         # Add handlers to the logger
-        self.logger.addHandler(console_handler)
-        self.logger.addHandler(buffer_handler)
-
-    def flush_to_file(self, log_dir='logs'):
+        self.logger.addHandler(self.console_handler)
+        self.logger.addHandler(self.buffer_handler)
         
-        log_dir  = log_dir if log_dir is not None else 'logs'
-        log_file = self.log_file
+        # Print logger information
+        vprint("### PtyRAD Logger configuration ###")
+        vprint(f"log_file       = '{self.log_file}'. If log_file = None, no log file will be created.")
+        vprint(f"log_dir        = '{self.log_dir}'. If log_dir = 'auto', then log will be saved to `output_path` or 'logs/'.")
+        vprint(f"flush_file     = {self.flush_file}. Automatically set to True if `log_file is not None`")
+        vprint(f"prefix_date    = {self.prefix_date}. If true, a date str is prefixed to the `log_file`.")
+        vprint(f"append_to_file = {self.append_to_file}. If true, logs will be appended to the existing file. If false, the log file will be overwritten.")
+        vprint(f"show_timestamp = {self.show_timestamp}. If true, the printed information will contain a timestamp.")
+        vprint(' ')
+
+    def flush_to_file(self, log_dir=None, append_to_file=None):
+        """
+        Flushes buffered logs to a file based on user-defined file mode (append or write)
+        """
+        
+        # Set log_dir
+        if log_dir is None:
+            if self.log_dir == 'auto':
+                log_dir = 'logs'
+            else:
+                log_dir = self.log_dir
+
+        # Set file_mode
+        if append_to_file is None:
+            append_to_file = self.append_to_file
+        file_mode = 'a' if append_to_file else 'w'
+        
+        log_file       = get_date() + '_' + self.log_file if self.prefix_date else self.log_file
         show_timestamp = self.show_timestamp
         
-        # Ensure the log directory exists
-        os.makedirs(log_dir, exist_ok=True)
-        log_file_path = os.path.join(log_dir, log_file)
+        if self.flush_file:
+            # Ensure the log directory exists
+            os.makedirs(log_dir, exist_ok=True)
+            log_file_path = os.path.join(log_dir, log_file)
 
-        # Write the buffered logs to the specified file
-        with open(log_file_path, 'w') as f:
-            f.write(self.log_buffer.getvalue())
+            # Write the buffered logs to the specified file
+            with open(log_file_path, file_mode) as f:
+                f.write(self.log_buffer.getvalue())
 
-        # Clear the buffer
-        self.log_buffer.truncate(0)
-        self.log_buffer.seek(0)
+            # Clear the buffer
+            self.log_buffer.truncate(0)
+            self.log_buffer.seek(0)
 
-        # Set up a file handler for future logging to the file
-        self.file_handler = logging.FileHandler(log_file_path, mode='a')  # 'a' mode appends to the file
-        self.file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s' if show_timestamp else '%(message)s'))
-        self.logger.addHandler(self.file_handler)
+            # Set up a file handler for future logging to the file
+            self.file_handler = logging.FileHandler(log_file_path, mode='a')  # Always append after initial flush
+            self.file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s' if show_timestamp else '%(message)s'))
+            self.logger.addHandler(self.file_handler)
+            vprint(f"### Log file is flushed (created) as {log_file_path} ###")
+        else:
+            self.file_handler = None
+            vprint(f"### Log file is not flushed (created) because log_file is set to {self.log_file} ###")
+        vprint(' ')
         
     def close(self):
         """Closes the file handler if it exists."""
@@ -566,8 +600,9 @@ def copy_params_to_dir(params_path, output_dir, verbose=True):
     file_name = os.path.basename(params_path)
     output_path = os.path.join(output_dir, file_name)
     shutil.copy2(params_path, output_path)
-    vprint(f"Successfully copy '{file_name}' to '{output_dir}'", verbose=verbose)
-
+    vprint(" ")
+    vprint(f"### Successfully copy '{file_name}' to '{output_dir}' ###", verbose=verbose)
+    
 def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     ''' Make batches from input indices '''
     # Input:
