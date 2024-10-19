@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
+## [unrelease]
+### Changed
+- Fix the printing error when using `GROUP_MODE = 'sparse'` by making `sparse_batches` a list of arrays so we can do `batch.tolist()` for cleaner printing of the batch_t
+- Change the default update step size for `py4dstem` scripts to 0.1 for numerical stability, otherwise the default 0.5 would sasily give NaNs on my tBL-WSe2 dataset. Thanks the input from @sezelt
+
 ## [v0.1.0-beta2.9] - 2024-10-17
 ### Added
 - Add `py4DTEM` as a new source for object, probe, and positions in params file with inputs from @dsmagiya

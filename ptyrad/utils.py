@@ -594,6 +594,8 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             assert all(flatten_indices == indices), "Sorry, something went wrong with the sparse grouping, please try 'random' for now"
             vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
             
+            # Final process to make batches a list of arrays
+            sparse_batches = [np.array(batch) for batch in sparse_batches]
             return sparse_batches
 
 def parse_hypertune_params_to_str(hypertune_params):

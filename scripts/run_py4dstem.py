@@ -174,7 +174,7 @@ if __name__ == "__main__":
     num_iter = recon_params['NITER'],
     reconstruction_method = 'gradient-descent',
     max_batch_size = recon_params['BATCH_SIZE'],
-    step_size = 0.5, # Update step size, default is 0.5
+    step_size = 0.1, # Update step size, default is 0.5 but 0.1 is numerically more stable for multislice
     kz_regularization_gamma = 1,
     object_positivity = False,
     reset = True, # If True, previous reconstructions are ignored
