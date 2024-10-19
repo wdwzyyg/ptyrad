@@ -72,7 +72,7 @@ class Initializer:
         # With 2 file source posibilities, the self.cache_contents is either caching from 'PtyRAD' or 'PtyShv'
         # Even we add more file type supports in the future (py4dstem or ptypy), the cache would still be a single file type
         
-        vprint("\n### Initializing cache ###", verbose=self.verbose)
+        vprint("### Initializing cache ###", verbose=self.verbose)
         
         # Initialize flags for cached fields
         self.use_cached_obj = False
@@ -97,14 +97,16 @@ class Initializer:
         vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
         vprint(f"use_cached_probe = {self.use_cached_probe}", verbose=self.verbose)
         vprint(f"use_cached_pos   = {self.use_cached_pos}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
     
     def init_exp_params(self):
-        vprint("\n### Initializing exp_params ###", verbose=self.verbose)
+        vprint("### Initializing exp_params ###", verbose=self.verbose)
         exp_params = self.init_params['exp_params']   
         vprint("Input values are displayed below:", verbose=self.verbose)
         for key, value in exp_params.items():
             vprint(f"{key}: {value}", verbose=self.verbose)
-
+        vprint(" ", verbose=self.verbose)
+        
         if exp_params['illumination_type']  == 'electron':    
             voltage     = exp_params['kv']
             wavelength  = kv2wavelength(voltage)
@@ -118,7 +120,7 @@ class Initializer:
             
             # Print some derived values for sanity check
             if self.verbose:
-                vprint("\nDerived values given input exp_params:")
+                vprint("Derived values given input exp_params:")
                 vprint(f'kv          = {voltage} kV')    
                 vprint(f'wavelength  = {wavelength:.4f} Ang')
                 vprint(f'conv_angle  = {conv_angle} mrad')
@@ -146,7 +148,7 @@ class Initializer:
             dk          = 1/(dx*Npix)
             
             if self.verbose:
-                vprint("\nDerived values given input exp_params:")
+                vprint("Derived values given input exp_params:")
                 vprint(f'x-ray beam energy  = {energy} keV')    
                 vprint(f'wavelength         = {wavelength} m')
                 vprint(f'outmost zone width = {dRn} m')
@@ -167,11 +169,12 @@ class Initializer:
         self.init_variables['N_scans']     = N_scans
         self.init_variables['dx']          = dx #   Ang
         self.init_variables['dk']          = dk # 1/Ang
+        vprint(" ", verbose=self.verbose)
         
     def init_measurements(self):
         source = self.init_params['source_params']['measurements_source']
         params = self.init_params['source_params']['measurements_params']
-        vprint(f"\n### Initializing measurements from '{source}' ###", verbose=self.verbose)
+        vprint(f"### Initializing measurements from '{source}' ###", verbose=self.verbose)
         
         # Load file
         if source   == 'custom':
@@ -309,12 +312,13 @@ class Initializer:
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
         self.init_variables['measurements'] = meas
+        vprint(" ", verbose=self.verbose)
         
     def init_probe(self):
         source = self.init_params['source_params']['probe_source']
         params = self.init_params['source_params']['probe_params']
         illumination_type  = self.init_params['exp_params']['illumination_type']
-        vprint(f"\n### Initializing probe from '{source}' ###", verbose=self.verbose)
+        vprint(f"### Initializing probe from '{source}' ###", verbose=self.verbose)
 
         # Load file
         if source   == 'custom':
@@ -385,6 +389,7 @@ class Initializer:
         vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
         vprint(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while sum(meas)/len(meas) = {np.sum(meas)/len(meas):.2f}", verbose=self.verbose)
         self.init_variables['probe'] = probe
+        vprint(" ", verbose=self.verbose)
    
     def init_pos(self):
         source          = self.init_params['source_params']['pos_source']
@@ -395,7 +400,7 @@ class Initializer:
         N_scan_slow     = self.init_params['exp_params']['N_scan_slow']
         N_scan_fast     = self.init_params['exp_params']['N_scan_fast']
         probe_shape     = np.array([self.init_params['exp_params']['Npix']]*2)
-        vprint(f"\n### Initializing probe pos from '{source}' ###", verbose=self.verbose)
+        vprint(f"### Initializing probe pos from '{source}' ###", verbose=self.verbose)
 
         # Load file
         if source   == 'custom':
@@ -474,13 +479,14 @@ class Initializer:
         self.init_variables['crop_pos'] = crop_pos
         self.init_variables['probe_pos_shifts'] = probe_pos_shifts
         self.init_variables['scan_affine'] = self.init_params['exp_params']['scan_affine']
+        vprint(" ", verbose=self.verbose)
             
     def init_obj(self):
         source     = self.init_params['source_params']['obj_source']
         params     = self.init_params['source_params']['obj_params']
         dx_spec    = self.init_params['exp_params']['dx_spec']
         z_distance = self.init_params['exp_params']['z_distance']
-        vprint(f"\n### Initializing obj from '{source}' ###", verbose=self.verbose)
+        vprint(f"### Initializing obj from '{source}' ###", verbose=self.verbose)
         
         # Load file
         if source   == 'custom':
@@ -540,11 +546,12 @@ class Initializer:
         vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
         vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*z_distance, obj.shape[2]*dx_spec, obj.shape[3]*dx_spec),4)}", verbose=self.verbose)
         self.init_variables['obj'] = obj
+        vprint(" ", verbose=self.verbose)
                     
     def init_omode_occu(self):
         occu_type = self.init_params['exp_params']['omode_init_occu']['occu_type']
         init_occu = self.init_params['exp_params']['omode_init_occu']['init_occu']
-        vprint(f"\n### Initializing omode_occu from '{occu_type}' ###", verbose=self.verbose)
+        vprint(f"### Initializing omode_occu from '{occu_type}' ###", verbose=self.verbose)
 
         if occu_type   == 'custom':
             omode_occu = init_occu
@@ -557,9 +564,10 @@ class Initializer:
         omode_occu = omode_occu.astype('float32')
         vprint(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}", verbose=self.verbose)
         self.init_variables['omode_occu'] = omode_occu
+        vprint(" ", verbose=self.verbose)
         
     def init_H(self):
-        vprint("\n### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
+        vprint("### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
         probe_shape = np.array([self.init_params['exp_params']['Npix']]*2) 
         z_distance = self.init_params['exp_params']['z_distance']
         dx_spec = self.init_params['exp_params']['dx_spec']
@@ -579,11 +587,12 @@ class Initializer:
         vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
         self.init_variables['z_distance'] = z_distance
         self.init_variables['H'] = H
+        vprint(" ", verbose=self.verbose)
     
     def init_obj_tilts(self):
         source     = self.init_params['source_params']['tilt_source']
         params     = self.init_params['source_params']['tilt_params']
-        vprint(f"\n### Initializing obj tilts from = '{source}' ###", verbose=self.verbose)
+        vprint(f"### Initializing obj tilts from = '{source}' ###", verbose=self.verbose)
         
         if source == 'custom':
             obj_tilts = params
@@ -610,6 +619,7 @@ class Initializer:
         # Print summary
         self.init_variables['obj_tilts'] = obj_tilts
         vprint(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
     
     def init_check(self):
         # Although some of the input experimental parameters might not be used directly by the package
@@ -617,7 +627,7 @@ class Initializer:
         # While these check could be performed within the init methods and achieve early return
         # It's more readable to separate the initializaiton logic with the checking logic in this way
         
-        vprint("\n### Checking consistency between input params with the initialized variables ###", verbose=self.verbose)
+        vprint("### Checking consistency between input params with the initialized variables ###", verbose=self.verbose)
         
         # Check the consistency of input params with the initialized variables
         exp_params  = self.init_params['exp_params']

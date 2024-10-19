@@ -1,3 +1,5 @@
+import io
+import logging
 import os
 import warnings
 from math import ceil, floor
@@ -11,6 +13,60 @@ from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
+class CustomLogger:
+    def __init__(self, log_file='output.log', show_timestamp=True):
+        self.logger = logging.getLogger('PtyRAD')
+        self.logger.setLevel(logging.INFO)
+        self.log_file       = log_file
+        self.show_timestamp = show_timestamp
+
+        # Create console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter('%(asctime)s - %(message)s' if show_timestamp else '%(message)s')
+        console_handler.setFormatter(formatter)
+        
+        # Create a buffer for file logs
+        self.log_buffer = io.StringIO()
+        buffer_handler = logging.StreamHandler(self.log_buffer)
+        buffer_handler.setLevel(logging.INFO)
+        buffer_handler.setFormatter(formatter)
+
+        # Add handlers to the logger
+        self.logger.addHandler(console_handler)
+        self.logger.addHandler(buffer_handler)
+
+    def flush_to_file(self, log_dir='logs'):
+        
+        log_dir  = log_dir if log_dir is not None else 'logs'
+        log_file = self.log_file
+        show_timestamp = self.show_timestamp
+        
+        # Ensure the log directory exists
+        os.makedirs(log_dir, exist_ok=True)
+        log_file_path = os.path.join(log_dir, log_file)
+
+        # Write the buffered logs to the specified file
+        with open(log_file_path, 'w') as f:
+            f.write(self.log_buffer.getvalue())
+
+        # Clear the buffer
+        self.log_buffer.truncate(0)
+        self.log_buffer.seek(0)
+
+        # Set up a file handler for future logging to the file
+        self.file_handler = logging.FileHandler(log_file_path, mode='a')  # 'a' mode appends to the file
+        self.file_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s' if show_timestamp else '%(message)s'))
+        self.logger.addHandler(self.file_handler)
+        
+    def close(self):
+        """Closes the file handler if it exists."""
+        if self.file_handler is not None:
+            self.file_handler.flush()
+            self.file_handler.close()
+            self.logger.removeHandler(self.file_handler)
+            self.file_handler = None
+
 def set_accelerator():
 
     try:
@@ -18,15 +74,17 @@ def set_accelerator():
         dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
         kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
         accelerator        = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
-        vprint("\n### Initializing HuggingFace accelerator ###")
+        vprint("### Initializing HuggingFace accelerator ###")
         vprint(f"Accelerator.distributed_type = {accelerator.distributed_type}")
         vprint(f"Accelerator.num_process      = {accelerator.num_processes}")
         vprint(f"Accelerator.mixed_precision  = {accelerator.mixed_precision}")
-        return accelerator
-    
+        
     except ImportError:
-        vprint("\n### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
-        return None
+        vprint("### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
+        accelerator = None
+        
+    vprint(" ")
+    return accelerator
 
 def print_system_info():
     
@@ -36,7 +94,7 @@ def print_system_info():
     import numpy as np
     import torch
     
-    vprint("\n### System information ###")
+    vprint("### System information ###")
     
     # Operating system information
     vprint(f"Operating System: {platform.system()} {platform.release()}")
@@ -81,21 +139,34 @@ def print_system_info():
     vprint(f"Python Version: {sys.version}")
     vprint(f"NumPy Version: {np.__version__}")
     vprint(f"PyTorch Version: {torch.__version__}")
+    try:
+        import ptyrad
+        vprint(f"PtyRAD Version: {ptyrad.__version__}")
+    except ImportError:
+        vprint("Didn't find PtyRAD")
+    vprint(" ")
 
 def set_gpu_device(gpuid=0):
-    vprint("\n### Setting GPU ID ###")
+    vprint("### Setting GPU ID ###")
     if gpuid is not None:
         device = torch.device("cuda:" + str(gpuid))
+        torch.set_default_device(device)
         vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
     else:
         device = None
         vprint(f"Selected gpuid = {gpuid}")
+    vprint(" ")
     return device
 
+# Verbose print using global logger
 def vprint(*args, verbose=True, **kwargs):
-    """Verbose print with individual control, only for rank 0 in DDP."""
+    """Verbose print/logging with individual control, only for rank 0 in DDP."""
     if verbose and (not dist.is_available() or not dist.is_initialized() or dist.get_rank() == 0):
-        print(*args, **kwargs)
+        logger = logging.getLogger('PtyRAD')
+        if logger.hasHandlers():
+            logger.info(' '.join(map(str, args)), **kwargs)
+        else:
+            print(*args, **kwargs)
 
 def get_date(date_format = '%Y%m%d'):
     from datetime import date
@@ -1034,16 +1105,16 @@ def make_stem_probe(params_dict, verbose=True):
 
     if verbose:
         # Print some useful values
-        print(f'kv          = {voltage} kV')    
-        print(f'wavelength  = {wavelength:.4f} Ang')
-        print(f'conv_angle  = {conv_angle} mrad')
-        print(f'Npix        = {Npix} px')
-        print(f'dk          = {dk:.4f} Ang^-1')
-        print(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
-        print(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
-        print(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-        print(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-        print(f'Real space probe extent = {dx*Npix:.4f} Ang')
+        vprint(f'kv          = {voltage} kV')    
+        vprint(f'wavelength  = {wavelength:.4f} Ang')
+        vprint(f'conv_angle  = {conv_angle} mrad')
+        vprint(f'Npix        = {Npix} px')
+        vprint(f'dk          = {dk:.4f} Ang^-1')
+        vprint(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
+        vprint(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+        vprint(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+        vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+        vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
     
     return probe
 
@@ -1360,7 +1431,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
         raise KeyError(f"output ={output} not implemented!")
     
     if output not in ['radial_profile', 'radial_sum', 'fig'] and verbose:
-        print(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')
+        vprint(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')
     return out
 
 def make_sigmoid_mask(Npix, relative_radius=2/3, relative_width=0.2):

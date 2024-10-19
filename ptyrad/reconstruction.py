@@ -62,36 +62,42 @@ class PtyRADSolver(object):
             A wrapper method to run the solver in either reconstruction or hyperparameter 
             tuning mode based on the if_hypertune flag.
     """
-    def __init__(self, params, device=None, acc=None):
+    def __init__(self, params, device=None, acc=None, logger=None):
         self.params          = params
         self.if_hypertune    = self.params['hypertune_params']['if_hypertune']
         self.verbose         = not self.params['recon_params']['if_quiet']
         self.accelerator     = acc
         self.use_acc_device  = True if (device is None and acc is not None) else False
         self.device          = self.accelerator.device if self.use_acc_device else device
+        self.logger          = logger
         
         # model and optimizer are instantiate inside reconstruct() and hypertune()
         self.init_initializer()
         self.init_loss()
         self.init_constraint()
-        vprint("\n### Done initializing PtyRADSolver ###")
+        vprint("### Done initializing PtyRADSolver ###")
+        vprint(" ")
     
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
-        vprint("\n### Initializing Initializer ###")
+        vprint("### Initializing Initializer ###")
         self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
+        vprint(" ")
 
     def init_loss(self):
-        vprint("\n### Initializing loss function ###")
+        vprint("### Initializing loss function ###")
         self.loss_fn       = CombinedLoss(self.params['loss_params'], device=self.device)
+        vprint(" ")
 
     def init_constraint(self):
-        vprint("\n### Initializing constraint function ###")
+        vprint("### Initializing constraint function ###")
         self.constraint_fn = CombinedConstraint(self.params['constraint_params'], device=self.device, verbose=self.verbose)
-    
+        vprint(" ")
+        
     def reconstruct(self):
         params = self.params
         device = self.device
+        logger = self.logger
         
         # Create the model and optimizer, prepare indices, batches, and output_path
         model         = PtychoAD(self.init.init_variables, params['model_params'], device=device, verbose=self.verbose)
@@ -115,6 +121,7 @@ class PtyRADSolver(object):
             vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
             vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
 
+        logger.flush_to_file(log_dir = output_path)
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
         self.reconstruct_results = model
     
@@ -125,6 +132,7 @@ class PtyRADSolver(object):
         study_name       = hypertune_params.get('study_name')
         storage_path     = hypertune_params.get('storage_path')
         pruner           = optuna.pruners.HyperbandPruner(min_resource=5, reduction_factor=2) if hypertune_params.get('use_pruning') else None
+        logger           = self.logger
         
         copy_params = self.params['recon_params']['copy_params']
         output_dir  = self.params['recon_params']['output_dir'] # This will be later modified     
@@ -157,6 +165,7 @@ class PtyRADSolver(object):
         
         if copy_params:
             copy_params_to_dir(self.params['params_path'], output_dir) #, verbose=model.verbose)
+        logger.flush_to_file(log_dir = output_dir)
         
         study.optimize(lambda trial: optuna_objective(trial, self.params, self.init, self.loss_fn, self.constraint_fn, self.device, self.verbose), n_trials=n_trials)
         print("Best hypertune params:")
@@ -166,7 +175,10 @@ class PtyRADSolver(object):
     def run(self):
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
-        vprint(f"\n### Starting the PtyRADSolver in {solver_mode} mode ###")
+        
+        vprint(f"### Starting the PtyRADSolver in {solver_mode} mode ###")
+        vprint(" ")
+        
         if self.if_hypertune:
             self.hypertune()
         else:
@@ -174,8 +186,11 @@ class PtyRADSolver(object):
         end_t = time_sync()
         solver_t = end_t - start_t
         time_str = "" if solver_t < 60 else f", or {parse_sec_to_time_str(solver_t)}"
-        vprint(f"\n### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
-
+        
+        vprint(f"### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
+        vprint(" ")
+        self.logger.close()
+        
         # End the process properly when in DDP mode
         if dist.is_initialized():
             dist.destroy_process_group()
@@ -217,7 +232,7 @@ def prepare_recon(model, init, params):
               and figures will be saved.
     """
     verbose = not params['recon_params']['if_quiet']
-    vprint("\n### Generating indices, batches, and output_path ###", verbose=verbose)
+    vprint("### Generating indices, batches, and output_path ###", verbose=verbose)
     # Parse the variables
     init_variables = init.init_variables
     exp_params = init.init_params.get('exp_params') # These could be modified by Optuna, hence can be different from params['exp_params]
@@ -258,6 +273,7 @@ def prepare_recon(model, init, params):
         output_path = None
     
     plt.close(fig_grouping)
+    vprint(" ")
     return indices, batches, output_path
 
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
@@ -302,7 +318,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
     selected_figs     = recon_params['selected_figs']
     verbose           = not recon_params['if_quiet']
     
-    vprint("\n### Start the PtyRAD iterative ptycho reconstruction ###", verbose=verbose)
+    vprint("### Start the PtyRAD iterative ptycho reconstruction ###", verbose=verbose)
     
     # Optimization loop
     loss_iters = []
@@ -327,8 +343,8 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     
                     ## Saving summary
                     plot_summary(output_path, model_instance, loss_iters, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
-    vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.5g} sec ###", verbose=verbose)
-
+    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.5g} sec ###", verbose=verbose)
+    vprint(" ")
     return loss_iters
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -445,7 +461,8 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     """
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
     loss_str = ', '.join([f"{name}: {value:.4f}" for name, value in avg_losses.items()])
-    vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, in {parse_sec_to_time_str(iter_t)}\n", verbose=verbose)
+    vprint(f"Iter: {niter}, Total Loss: {sum(avg_losses.values()):.4f}, {loss_str}, in {parse_sec_to_time_str(iter_t)}", verbose=verbose)
+    vprint(" ")
     loss_iter = sum(avg_losses.values())
     return loss_iter
 
@@ -596,5 +613,6 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         save_results(output_dir, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, loss_iters, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
     
-    vprint(f"\n### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
+    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(iter_times):.3g} sec ###", verbose=verbose)
+    vprint(" ")
     return loss_iter

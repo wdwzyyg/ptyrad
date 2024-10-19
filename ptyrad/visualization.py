@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from numpy.fft import fft2, fftshift, ifftshift
 
-from ptyrad.utils import make_sigmoid_mask
+from ptyrad.utils import make_sigmoid_mask, vprint
 
 def plot_sigmoid_mask(Npix, relative_radius, relative_width, img=None, show_circles=False):
     """ Plot a sigmoid mask overlay on img with a line profile """
@@ -334,7 +334,7 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
         save_fig = True 
         
     if save_fig and verbose:
-        print(f"Saving summary figures for iter {niter}")
+        vprint(f"Saving summary figures for iter {niter}")
     
     iter_str = '_iter' + str(niter).zfill(4)
     

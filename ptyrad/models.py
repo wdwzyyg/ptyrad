@@ -187,23 +187,26 @@ class PtychoAD(torch.nn.Module):
         
     def print_model_summary(self):
         # Set all the print as vprint so that it'll only print once in DDP, the actual `if verbose` is set outside of the function
-        vprint('\n### PtychoAD optimizable variables ###')
+        vprint('### PtychoAD optimizable variables ###')
         for name, tensor in self.optimizable_tensors.items():
             vprint(f"{name.ljust(16)}: {str(tensor.shape).ljust(32)}, {str(tensor.dtype).ljust(16)}, device:{tensor.device}, grad:{str(tensor.requires_grad).ljust(5)}, lr:{self.lr_params[name]:.0e}")
         total_var = sum(tensor.numel() for _, tensor in self.optimizable_tensors.items() if tensor.requires_grad)
         # When you create a new model, make sure to pass the optimizer_params to optimizer using "optimizer = torch.optim.Adam(model.optimizer_params)"
+        vprint(" ")        
         
-        vprint('\n### Optimizable variables statitsics ###')
-        vprint(  f'Total measurement values:    {self.measurements.numel():,d}\
-                \nTotal optimizing variables:  {total_var:,d}\
-                \nOverdetermined ratio:        {self.measurements.numel()/total_var:.2f}')
+        vprint('### Optimizable variables statitsics ###')
+        vprint(f"Total measurement values  : {self.measurements.numel():,d}")
+        vprint(f"Total optimizing variables: {total_var:,d}")
+        vprint(f"Overdetermined ratio      : {self.measurements.numel()/total_var:.2f}")
+        vprint(" ")
         
-        vprint('\n### Model behavior ###')
-        vprint(f"Obj preblur             : {True if self.obj_preblur_std is not None else False}")
-        vprint(f"Tilt propagator         : {self.tilt_obj}")
-        vprint(f"Sub-px probe shift      : {self.shift_probes}")
-        vprint(f"Detector blur           : {True if self.detector_blur_std is not None else False}")
-        vprint(f"On-the-fly meas resample: {True if self.meas_scale_factors is not None else False}")
+        vprint('### Model behavior ###')
+        vprint(f"Obj preblur               : {True if self.obj_preblur_std is not None else False}")
+        vprint(f"Tilt propagator           : {self.tilt_obj}")
+        vprint(f"Sub-px probe shift        : {self.shift_probes}")
+        vprint(f"Detector blur             : {True if self.detector_blur_std is not None else False}")
+        vprint(f"On-the-fly meas resample  : {True if self.meas_scale_factors is not None else False}")
+        vprint(" ")
     
     def get_obj_ROI(self, indices):
         """ Get object ROI with integer coordinates """

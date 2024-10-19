@@ -95,15 +95,16 @@ def load_params(file_path):
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
-    vprint("\n### Loading params file ###")
-
+    vprint("### Loading params file ###")
     param_path, param_type = os.path.splitext(file_path)
     if param_type == ".yml":
-        return load_yml_params(file_path)
+        params_dict = load_yml_params(file_path)
     elif param_type == ".py":
-        return load_py_params(param_path)
+        params_dict =  load_py_params(param_path)
     else:
         raise ValueError("param_type needs to be either 'yml' or 'py'")
+    vprint(" ")
+    return params_dict
 
 def load_yml_params(file_path):
     import yaml
