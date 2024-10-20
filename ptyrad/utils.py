@@ -14,13 +14,14 @@ from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
 class CustomLogger:
-    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, append_to_file=True, show_timestamp=True):
+    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, prefix_jobid=None, append_to_file=True, show_timestamp=True):
         self.logger = logging.getLogger('PtyRAD')
         self.logger.setLevel(logging.INFO)
         self.log_file       = log_file
         self.log_dir        = log_dir
         self.flush_file     = log_file is not None
         self.prefix_date    = prefix_date
+        self.prefix_jobid   = prefix_jobid
         self.append_to_file = append_to_file
         self.show_timestamp = show_timestamp
 
@@ -45,7 +46,8 @@ class CustomLogger:
         vprint(f"log_file       = '{self.log_file}'. If log_file = None, no log file will be created.")
         vprint(f"log_dir        = '{self.log_dir}'. If log_dir = 'auto', then log will be saved to `output_path` or 'logs/'.")
         vprint(f"flush_file     = {self.flush_file}. Automatically set to True if `log_file is not None`")
-        vprint(f"prefix_date    = {self.prefix_date}. If true, a date str is prefixed to the `log_file`.")
+        vprint(f"prefix_date    = {self.prefix_date}. If true, a datetime str is prefixed to the `log_file`.")
+        vprint(f"prefix_jobid   = '{self.prefix_jobid}'. If not 0, it'll be prefixed to the log file. This is used for hypertune mode with multiple GPUs.")
         vprint(f"append_to_file = {self.append_to_file}. If true, logs will be appended to the existing file. If false, the log file will be overwritten.")
         vprint(f"show_timestamp = {self.show_timestamp}. If true, the printed information will contain a timestamp.")
         vprint(' ')
@@ -67,7 +69,13 @@ class CustomLogger:
             append_to_file = self.append_to_file
         file_mode = 'a' if append_to_file else 'w'
         
-        log_file       = get_date() + '_' + self.log_file if self.prefix_date else self.log_file
+        # Set file name
+        log_file = self.log_file
+        if self.prefix_jobid != 0:
+            log_file = str(self.prefix_jobid).zfill(2) + '_' + log_file
+        if self.prefix_date:
+            log_file = get_date() + '_' + log_file
+        
         show_timestamp = self.show_timestamp
         
         if self.flush_file:
@@ -202,11 +210,15 @@ def vprint(*args, verbose=True, **kwargs):
         else:
             print(*args, **kwargs)
 
-def get_date(date_format = '%Y%m%d'):
-    from datetime import date
-    date_format = date_format
-    date_str = date.today().strftime(date_format)
-    return date_str
+def get_date(date_format='%Y%m%d'):
+    from datetime import datetime, date
+    
+    # If the format includes time-specific placeholders, return full datetime
+    if any(fmt in date_format for fmt in ['%H', '%M', '%S']):
+        return datetime.now().strftime(date_format)
+    
+    # Otherwise, just return the date
+    return date.today().strftime(date_format)
 
 def has_nan_or_inf(tensor):
     """

@@ -22,10 +22,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--params_path", type=str, required=True)
     parser.add_argument("--gpuid",       type=int, required=False, default=None)
+    parser.add_argument("--jobid",       type=int, required=False, default=0)
     args = parser.parse_args()
     
     # Set up custom logger
-    logger = CustomLogger(log_file='ptyrad_log.txt', log_dir='auto', prefix_date=True, append_to_file=True, show_timestamp=True)
+    logger = CustomLogger(log_file='ptyrad_log.txt', log_dir='auto', prefix_date=True, prefix_jobid=args.jobid, append_to_file=True, show_timestamp=True)
     
     # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
     accelerator = set_accelerator()

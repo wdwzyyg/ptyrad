@@ -15,9 +15,10 @@ do
     esac
 done
 
-# Loop to submit the sbatch script N times
+# Loop to submit the sbatch script N times, passing the job number (i) as an environment variable
 for i in $(seq 1 $N); do
-    echo "Submitting $SUBDIR/$script"
+    echo "Submitting $SUBDIR/$script with jobid $i"
+    export JOBID=$i  # Export jobid as an environment variable
     sbatch "$SUBDIR/$script"
     if [ "$i" -eq 1 ]; then
         sleep 10
