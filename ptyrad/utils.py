@@ -14,7 +14,7 @@ from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
 class CustomLogger:
-    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, prefix_jobid=None, append_to_file=True, show_timestamp=True):
+    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, prefix_jobid=0, append_to_file=True, show_timestamp=True):
         self.logger = logging.getLogger('PtyRAD')
         self.logger.setLevel(logging.INFO)
         self.log_file       = log_file
