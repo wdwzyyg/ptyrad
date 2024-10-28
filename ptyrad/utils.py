@@ -9,7 +9,6 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from scipy.spatial.distance import cdist
-from sklearn.cluster import MiniBatchKMeans
 from tifffile import imwrite
 from torch.fft import fft2, fftfreq, ifft2
 
@@ -637,6 +636,13 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
     #   indices.sort()
     #   all(flatten_indices == indices)
 
+    try:
+        from sklearn.cluster import MiniBatchKMeans
+    except ImportError as e:
+        missing_package = str(e).split()[-1]
+        vprint(f"### {missing_package} is not available, group mode set to 'random'. 'scikit-learn' is needed for 'sparse' and 'compact' ###")
+        mode = 'random'
+        
     if len(indices) > len(pos):
         raise ValueError(f"len(indices) = '{len(indices)}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
     

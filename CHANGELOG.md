@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix the printing error when using `GROUP_MODE = 'sparse'` by making `sparse_batches` a list of arrays so we can do `batch.tolist()` for cleaner printing of the batch_t
 - Change the default update step size for `py4dstem` scripts to 0.1 for numerical stability, otherwise the default 0.5 would easily give NaNs on my tBL-WSe2 dataset. Thanks the input from @sezelt
 - Simplify `run_py4dstem.py` and `run_py4dstem_detailed_walkthrough.ipynb` by calling the v0.0.2 version of locally modified py4DSTEM repo 
+- Move `scikit-learn` as optional dependency because it's only used for compact/sparse grouping
 
 ## [v0.1.0-beta2.9] - 2024-10-17
 ### Added
