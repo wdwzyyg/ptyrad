@@ -185,7 +185,7 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             return mat_contents
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
-            print("Can't load .mat v7.3 with scipy. Switching to h5py.")
+            print("Can't load .mat v7.3 with 'scipy.io.loadmat'. Switching to h5py.")
             mat_contents = {}
             with h5py.File(file_path, "r") as hdf_file:
                 for key in hdf_file.keys():
