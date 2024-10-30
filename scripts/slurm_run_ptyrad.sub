@@ -15,7 +15,7 @@ module load cuda/11.8
 source activate ptyrad # Use ptyrad_acc if you want to use multi-GPU via `accelerate`
 
 ## Set the params_path variable
-PARAMS_PATH="params/demo/tBL_WSe2_reconstruct.yml"
+PARAMS_PATH="params/paper/ptyrad_tBL_WSe2.yml"
 echo params_path = ${PARAMS_PATH}
 
 ## Run the script via python or HuggingFace accelerate. Most often you'll do conventional python.
