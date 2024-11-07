@@ -122,10 +122,11 @@ class PtyRADSolver(object):
             vprint("The actual batch_size_per_process will be printed below for the reported batches from the main process", verbose=self.verbose) 
             vprint("For example, batch size = 512 with 2 GPUs (2 processes), the reported/observed batch size per GPU will be 512/2=256.", verbose=self.verbose) 
 
-        if logger is not None:
+        if logger is not None and logger.flush_file:
             logger.flush_to_file(log_dir=output_path) # Note that output_path can be None, and there's an internal flag of self.flush_file controls the actual file creation
         recon_loop(model, self.init, params, optimizer, self.loss_fn, self.constraint_fn, indices, batches, output_path, acc=self.accelerator)
         self.reconstruct_results = model
+        self.optimizer = optimizer
     
     def hypertune(self):
         import optuna
@@ -183,7 +184,7 @@ class PtyRADSolver(object):
         if not copy_params and self.params['recon_params']['SAVE_ITERS'] is None and not hypertune_params['collate_results']:
             output_dir = None
             
-        if logger is not None:
+        if logger is not None and logger.flush_file:
             logger.flush_to_file(log_dir=output_dir) # Note that there's an internal flag of self.flush_file controls the actual file creation
             optuna_logger.addHandler(logger.file_handler)
         
@@ -209,7 +210,8 @@ class PtyRADSolver(object):
         
         vprint(f"### The PtyRADSolver is finished in {solver_t:.3f} sec{time_str} ###")
         vprint(" ")
-        self.logger.close()
+        if self.logger is not None and self.logger.flush_file:
+            self.logger.close()
         
         # End the process properly when in DDP mode
         if dist.is_initialized():

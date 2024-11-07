@@ -16,6 +16,10 @@ class CustomLogger:
     def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, prefix_jobid=0, append_to_file=True, show_timestamp=True):
         self.logger = logging.getLogger('PtyRAD')
         self.logger.setLevel(logging.INFO)
+        
+        # Clear all existing handlers to re-instantiate the logger
+        if self.logger.hasHandlers():
+            self.logger.handlers.clear()
         self.log_file       = log_file
         self.log_dir        = log_dir
         self.flush_file     = log_file is not None
