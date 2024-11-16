@@ -407,23 +407,38 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     # Toggle the grad calculation to disable AD update on tensors before certain iteration
     toggle_grad_requires(model_instance, niter, verbose)
     
+    # Setup the lbfgs optimizer if it's chosen
+    use_lbfgs = isinstance(optimizer, torch.optim.LBFGS)
+    if use_lbfgs:
+        def closure():
+            optimizer.zero_grad()
+            model_DP, object_patches = model(batch)
+            measured_DP = model_instance.get_measurements(batch)
+            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+            loss_batch.backward()
+            return loss_batch, losses
+    
     # Start mini-batch optimization
     optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
     for batch_idx, batch in enumerate(batches):
         start_batch_t = time_sync()
         
-        # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
-        loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
-        
-        # Perform backward pass
-        acc.backward(loss_batch) if acc is not None else loss_batch.backward()
-        
-        # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
-        if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
-            if acc is not None:
-                acc.wait_for_everyone()
-            optimizer.step() # batch update
-            optimizer.zero_grad()
+        if use_lbfgs:
+            loss_batch, losses = closure()
+            optimizer.step(lambda: closure()[0])  # Only the first return value (loss) is used here
+        else:
+            # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
+            loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
+            
+            # Perform backward pass
+            acc.backward(loss_batch) if acc is not None else loss_batch.backward()
+            
+            # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
+            if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+                if acc is not None:
+                    acc.wait_for_everyone()
+                optimizer.step() # batch update
+                optimizer.zero_grad()
         batch_t = time_sync() - start_batch_t
         
         # Append losses and log batch progress

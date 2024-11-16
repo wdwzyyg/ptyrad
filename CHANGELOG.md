@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
+## [Unreleased]
+### Added
+- Add `LBFGS` as available optimizer option. LBFGS is a 1uasi-Newton 2nd order optimizer that was designed for full-batch update scheme and converges very fast on certain convex problems. While generally it required full-batch and ideally noise less gradients, it's included for completeness.
+
 ## [v0.1.0-beta2.10] - 2024-11-06
 ### Added
 - Add `CustomLogger` to notebooks/scripts to log the Python terminal stdout specifically to a log file under the reconstructed folder. If `SAVE_ITERS = None` and no output directory is generated, the log would be saved to `logs`.
