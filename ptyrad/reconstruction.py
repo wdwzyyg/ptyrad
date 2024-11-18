@@ -407,47 +407,76 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     # Toggle the grad calculation to disable AD update on tensors before certain iteration
     toggle_grad_requires(model_instance, niter, verbose)
     
-    # Setup the lbfgs optimizer if it's chosen
-    use_lbfgs = isinstance(optimizer, torch.optim.LBFGS)
-    if use_lbfgs:
+    # Run the iteration with closure for LBFGS optimizer
+    if isinstance(optimizer, torch.optim.LBFGS):
+
+        # Make nested list of batches for the closure with internal grad accumulation over mini-batches
+        num_batch = len(batches)
+        batch_indices = np.arange(num_batch)
+        np.random.shuffle(batch_indices)
+        accu_batch_indices = np.array_split(batch_indices,num_batch//grad_accumulation)
+        
         def closure():
             optimizer.zero_grad()
-            model_DP, object_patches = model(batch)
-            measured_DP = model_instance.get_measurements(batch)
-            loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
-            loss_batch.backward()
-            return loss_batch, losses
-    
-    # Start mini-batch optimization
-    optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
-    for batch_idx, batch in enumerate(batches):
-        start_batch_t = time_sync()
+            total_loss = 0
+            # Run grad accumulation inside the closure for LBFGS, note that each closure is ideally 1 full iter with grad_accu
+            for batch_idx in accu_batch_idx:
+                batch = batches[batch_idx]
+                model_DP, object_patches = model(batch)
+                measured_DP = model_instance.get_measurements(batch)
+                loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
+                total_loss += loss_batch # LBFGS uses the returned loss to perform the line-search so it's better to return the loss that's associated to all the batches
+            total_loss = total_loss / len(accu_batch_idx)
+            acc.backward(total_loss) if acc is not None else total_loss.backward()
+            return total_loss, losses
         
-        if use_lbfgs:
-            loss_batch, losses = closure()
-            optimizer.step(lambda: closure()[0])  # Only the first return value (loss) is used here
-        else:
-            # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
-            loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
+        # Iterate through all accumulated batches. accu_batches = [[batch1],[batch2],[batch3]...], batches = [[accu_batches1],[accu_batches2],[accu_batches3]...]
+        for accu_batch_idx in accu_batch_indices:
+            optimizer.step(lambda: closure()[0])
             
-            # Perform backward pass
-            acc.backward(loss_batch) if acc is not None else loss_batch.backward()
-            
-            # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
-            if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
-                if acc is not None:
-                    acc.wait_for_everyone()
-                optimizer.step() # batch update
-                optimizer.zero_grad()
-        batch_t = time_sync() - start_batch_t
+        # This extra evaluation on accumulated batches is just to get the `losses` for logging purpose
+        _, losses = closure()
+        optimizer.zero_grad()
         
         # Append losses and log batch progress
         if acc is not None:
             acc.wait_for_everyone()
         for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
             batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
-        if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
-            vprint(f"Done batch {batch_idx+1} with {len(batch)} indices ({batch[:5].tolist()}...) in {batch_t:.3f} sec", verbose=verbose)
+    
+    # Start mini-batch optimization for all other optimizers doesn't require a closure
+    else:
+        optimizer.zero_grad() # Since PyTorch 2.0 the default behavior is set_to_none=True for performance https://github.com/pytorch/pytorch/issues/92656
+        
+        for batch_idx, batch in enumerate(batches):
+            start_batch_t = time_sync()
+            
+            # Compute forward pass and loss (wrapped in autocast if accelerate is enabled)
+            loss_batch, losses = compute_loss(batch, model, model_instance, loss_fn, acc)
+            
+            # Normalize the `loss_batch`` before populating the gradients
+            # We only want to scale the `loss_batch` so the grad/update is scaled accordingly
+            # while keeping `losses` to be batch-size-independent for logging purpose 
+            loss_batch = loss_batch / grad_accumulation
+                        
+            # Perform backward pass
+            acc.backward(loss_batch) if acc is not None else loss_batch.backward()
+                
+            # Perform the optimizer step when batch_idx + 1 is divisible by grad_accumulation or it's the last batch
+            if (batch_idx + 1) % grad_accumulation == 0 or (batch_idx + 1) == len(batches):
+                if acc is not None:
+                    acc.wait_for_everyone()
+                optimizer.step() 
+                optimizer.zero_grad() 
+            batch_t = time_sync() - start_batch_t
+        
+            # Append losses and log batch progress
+            if acc is not None:
+                acc.wait_for_everyone()
+            for loss_name, loss_value in zip(loss_fn.loss_params.keys(), losses):
+                batch_losses[loss_name].append(loss_value.detach().cpu().numpy())
+            if batch_idx in np.linspace(0, len(batches)-1, num=6, dtype=int):
+                vprint(f"Done batch {batch_idx+1} with {len(batch)} indices ({batch[:5].tolist()}...) in {batch_t:.3f} sec", verbose=verbose)
     
     constraint_fn(model_instance, niter)
     

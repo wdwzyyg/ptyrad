@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Add `LBFGS` as available optimizer option. LBFGS is a 1uasi-Newton 2nd order optimizer that was designed for full-batch update scheme and converges very fast on certain convex problems. While generally it required full-batch and ideally noise less gradients, it's included for completeness.
+- Add `LBFGS` as available optimizer option. LBFGS is a Quasi-Newton 2nd order optimizer that was designed for full-batch update scheme and converges very fast on certain convex problems. While generally it requires full-batch update and ideally noiseless gradients, it's included for completeness and certain special cases.
 
 ## [v0.1.0-beta2.10] - 2024-11-06
 ### Added

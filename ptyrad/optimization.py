@@ -396,8 +396,8 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
     if optimizer_class is None:
         raise ValueError(f"Optimizer '{optimizer_name}' is not supported.")
     if optimizer_name == 'LBFGS':
-        vprint("Note: LBFGS optimizer is a quasi-Newton 2nd order optimizer that will run multiple forward passes for 1 update step,",
-               " which could increase the convergence speed, but each update step is computationally slower")
+        vprint("Note: LBFGS optimizer is a quasi-Newton 2nd order optimizer that will run multiple forward passes (default: 20) for 1 update step")
+        vprint("Note: LBFGS usually converges faster for convex problem with full-batch non-noisy gradients, but each update step is computationally slower")
         non_zero_lr = [p['lr'] for p in optimizable_params if p['lr'] != 0]
         optimizer_configs['lr'] = min(non_zero_lr)
         vprint(f"Note: LBFGS optimizer does not support per parameter learning rate so it'll be set to the minimal non-zero learning rate = {min(non_zero_lr)}")
