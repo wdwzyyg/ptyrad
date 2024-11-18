@@ -6,6 +6,23 @@ import scipy.io as sio
 
 from ptyrad.utils import vprint
 
+def yaml2json(input_filepath, output_filepath):
+    import yaml
+    import json
+    with open(input_filepath, 'r') as file:
+        try:
+            # Load as YAML
+            data = yaml.safe_load(file)
+            
+            # Save to JSON
+            with open(output_filepath, 'w') as json_file:
+                json.dump(data, json_file, indent=4)
+                
+            print(f"YAML {input_filepath} has been successfully converted and saved to JSON {output_filepath}")
+
+        except yaml.YAMLError as e:
+            print("Error parsing YAML file:", e)
+
 def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
     # shape = (N, height, width)
     # np.fromfile with custom dtype is faster than the np.read and np.frombuffer
@@ -99,11 +116,22 @@ def load_params(file_path):
     param_path, param_type = os.path.splitext(file_path)
     if param_type == ".yml":
         params_dict = load_yml_params(file_path)
+    elif param_type == ".json":
+        params_dict = load_json_params(file_path)
     elif param_type == ".py":
         params_dict =  load_py_params(param_path)
     else:
-        raise ValueError("param_type needs to be either 'yml' or 'py'")
+        raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
     vprint(" ")
+    return params_dict
+
+def load_json_params(file_path):
+    import json
+    
+    with open(file_path, "r") as file:
+        params_dict = json.load(file)
+    vprint("Success! Loaded .json file path =", file_path)
+    params_dict['params_path'] = file_path
     return params_dict
 
 def load_yml_params(file_path):

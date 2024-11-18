@@ -1,0 +1,322 @@
+{
+    "exp_params": {
+        "illumination_type": "electron",
+        "kv": 80,
+        "conv_angle": 24.9,
+        "Npix": 128,
+        "dx_spec": 0.1494,
+        "defocus": 0,
+        "c3": 0,
+        "c5": 0,
+        "z_distance": 12,
+        "Nlayer": 1,
+        "N_scans": 16384,
+        "N_scan_slow": 128,
+        "N_scan_fast": 128,
+        "scan_step_size": 0.429,
+        "scan_flipT": null,
+        "scan_affine": null,
+        "scan_rand_std": 0.15,
+        "omode_max": 1,
+        "omode_init_occu": {
+            "occu_type": "uniform",
+            "init_occu": null
+        },
+        "pmode_max": 6,
+        "pmode_init_pows": [
+            0.02
+        ],
+        "probe_permute": null,
+        "meas_permute": null,
+        "meas_reshape": null,
+        "meas_flipT": [
+            1,
+            0,
+            0
+        ],
+        "meas_crop": null,
+        "meas_resample": {
+            "mode": null,
+            "scale_factors": [
+                2,
+                2
+            ]
+        },
+        "meas_add_source_size": null,
+        "meas_add_detector_blur": null,
+        "meas_add_poisson_noise": null
+    },
+    "source_params": {
+        "measurements_source": "raw",
+        "measurements_params": {
+            "path": "data/demo/tBL_WSe2/Fig_1h_24.9mrad_Themis/scan_x128_y128.raw"
+        },
+        "obj_source": "simu",
+        "obj_params": null,
+        "probe_source": "simu",
+        "probe_params": null,
+        "pos_source": "simu",
+        "pos_params": null,
+        "tilt_source": "simu",
+        "tilt_params": {
+            "tilt_type": "all",
+            "init_tilts": [
+                [
+                    0,
+                    0
+                ]
+            ]
+        }
+    },
+    "hypertune_params": {
+        "if_hypertune": false,
+        "collate_results": true,
+        "n_trials": 200,
+        "use_pruning": true,
+        "storage_path": "sqlite:///hypertune.sqlite3",
+        "study_name": "tBL_WSe2",
+        "tune_params": {
+            "conv_angle": {
+                "state": false,
+                "min": 24,
+                "max": 26,
+                "step": 0.1
+            },
+            "defocus": {
+                "state": true,
+                "min": -50,
+                "max": 50,
+                "step": null
+            },
+            "c3": {
+                "state": true,
+                "min": 4000,
+                "max": 10000,
+                "step": null
+            },
+            "c5": {
+                "state": true,
+                "min": 50000,
+                "max": 100000,
+                "step": 5000
+            },
+            "z_distance": {
+                "state": false,
+                "min": 4,
+                "max": 8,
+                "step": 0.5
+            },
+            "scale": {
+                "state": false,
+                "min": 0.8,
+                "max": 1.2,
+                "step": 0.02
+            },
+            "asymmetry": {
+                "state": false,
+                "min": -0.2,
+                "max": 0.2,
+                "step": 0.05
+            },
+            "rotation": {
+                "state": false,
+                "min": -4,
+                "max": 4,
+                "step": 0.5
+            },
+            "shear": {
+                "state": false,
+                "min": -4,
+                "max": 4,
+                "step": 0.5
+            },
+            "tilt_y": {
+                "state": false,
+                "min": -5,
+                "max": 5,
+                "step": 0.5
+            },
+            "tilt_x": {
+                "state": false,
+                "min": -5,
+                "max": 5,
+                "step": 0.5
+            }
+        }
+    },
+    "model_params": {
+        "obj_preblur_std": null,
+        "detector_blur_std": null,
+        "optimizer_params": {
+            "name": "Adam",
+            "configs": {},
+            "load_state": null
+        },
+        "update_params": {
+            "obja": {
+                "start_iter": 1,
+                "lr": 0.01
+            },
+            "objp": {
+                "start_iter": 1,
+                "lr": 0.01
+            },
+            "obj_tilts": {
+                "start_iter": null,
+                "lr": 0
+            },
+            "probe": {
+                "start_iter": 1,
+                "lr": 0.01
+            },
+            "probe_pos_shifts": {
+                "start_iter": 1,
+                "lr": 0.01
+            }
+        }
+    },
+    "loss_params": {
+        "loss_single": {
+            "state": true,
+            "weight": 1.0,
+            "dp_pow": 0.5
+        },
+        "loss_poissn": {
+            "state": false,
+            "weight": 1.0,
+            "dp_pow": 1.0,
+            "eps": 1e-06
+        },
+        "loss_pacbed": {
+            "state": false,
+            "weight": 0.5,
+            "dp_pow": 0.2
+        },
+        "loss_sparse": {
+            "state": true,
+            "weight": 0.1,
+            "ln_order": 1
+        },
+        "loss_simlar": {
+            "state": false,
+            "weight": 0.1,
+            "obj_type": "both",
+            "scale_factor": [
+                1,
+                1,
+                1
+            ],
+            "blur_std": 1
+        }
+    },
+    "constraint_params": {
+        "ortho_pmode": {
+            "freq": 1
+        },
+        "probe_mask_k": {
+            "freq": null,
+            "radius": 0.22,
+            "width": 0.05,
+            "power_thresh": 0.95
+        },
+        "fix_probe_int": {
+            "freq": 1
+        },
+        "obj_rblur": {
+            "freq": 1,
+            "obj_type": "both",
+            "kernel_size": 5,
+            "std": 0.2
+        },
+        "obj_zblur": {
+            "freq": 1,
+            "obj_type": "both",
+            "kernel_size": 5,
+            "std": 1
+        },
+        "kr_filter": {
+            "freq": null,
+            "obj_type": "both",
+            "radius": 0.15,
+            "width": 0.05
+        },
+        "kz_filter": {
+            "freq": null,
+            "obj_type": "both",
+            "beta": 1,
+            "alpha": 1
+        },
+        "obja_thresh": {
+            "freq": 1,
+            "relax": 0,
+            "thresh": [
+                0.98,
+                1.02
+            ]
+        },
+        "objp_postiv": {
+            "freq": 1,
+            "relax": 0
+        },
+        "tilt_smooth": {
+            "freq": null,
+            "std": 2
+        }
+    },
+    "recon_params": {
+        "NITER": 100,
+        "INDICES_MODE": {
+            "mode": "full",
+            "subscan_slow": null,
+            "subscan_fast": null
+        },
+        "BATCH_SIZE": {
+            "size": 32,
+            "grad_accumulation": 1
+        },
+        "GROUP_MODE": "random",
+        "SAVE_ITERS": 20,
+        "output_dir": "output/tBL_WSe2/",
+        "recon_dir_affixes": [
+            "optimizer",
+            "start_iter",
+            "lr",
+            "model",
+            "constraint",
+            "loss"
+        ],
+        "prefix_date": true,
+        "prefix": "",
+        "postfix": "",
+        "save_result": [
+            "model",
+            "obja",
+            "objp",
+            "probe"
+        ],
+        "result_modes": {
+            "obj_dim": [
+                2,
+                3,
+                4
+            ],
+            "FOV": [
+                "crop"
+            ],
+            "bit": [
+                "raw",
+                "8"
+            ]
+        },
+        "selected_figs": [
+            "loss",
+            "forward",
+            "probe_r_amp",
+            "probe_k_amp",
+            "probe_k_phase",
+            "pos"
+        ],
+        "copy_params": true,
+        "if_quiet": false
+    }
+}
