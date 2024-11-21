@@ -1,12 +1,12 @@
 ## Defining PtychoAD class for the optimization object
 from math import prod
 import torch
-from torch.fft import fft2, ifft2
+from torch.fft import fft2, ifft2, fftfreq
 import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.forward import multislice_forward_model_vec_all
-from ptyrad.utils import add_tilts_to_propagator, imshift_batch, vprint
+from ptyrad.utils import imshift_batch, vprint
 
 # The obj_ROI_grid is modified from precalculation to on-the-fly generation for memory consumption
 # It has very little performance impact but saves lots of memory for large 4D-STEM data
@@ -45,7 +45,7 @@ class PtychoAD(torch.nn.Module):
         N_scan_slow (torch.Tensor): Number of scans in the slow direction.
         N_scan_fast (torch.Tensor): Number of scans in the fast direction.
         crop_pos (torch.Tensor): Cropping positions.
-        z_distance (torch.Tensor): Z distance parameter.
+        slice_thickness (torch.Tensor): slice thickness (dz) parameter.
         dx (torch.Tensor): Pixel size in the x direction.
         dk (torch.Tensor): K-space sampling interval.
         scan_affine (affine.Affine): Affine transformation for scan.
@@ -103,25 +103,31 @@ class PtychoAD(torch.nn.Module):
             self.opt_obja               = nn.Parameter(torch.abs(torch.tensor(init_variables['obj'],    device=device)).to(torch.float32))
             self.opt_objp               = nn.Parameter(torch.angle(torch.tensor(init_variables['obj'],  device=device)).to(torch.float32))
             self.opt_obj_tilts          = nn.Parameter(torch.tensor(init_variables['obj_tilts'],                dtype=torch.float32, device=device))
+            self.opt_slice_thickness    = nn.Parameter(torch.tensor(init_variables['slice_thickness'],          dtype=torch.float32, device=device))
             self.opt_probe              = nn.Parameter(torch.view_as_real(torch.tensor(init_variables['probe'], dtype=torch.complex64, device=device))) # The `torch.view_as_real` allows correct handling of DDP via NCCL even in PyTorch 2.4
             self.opt_probe_pos_shifts   = nn.Parameter(torch.tensor(init_variables['probe_pos_shifts'],         dtype=torch.float32, device=device))
             
             # Buffers are used during forward pass
-            self.register_buffer      ('omode_occu',   torch.tensor(init_variables['omode_occu'],       dtype=torch.float32, device=device))
-            self.register_buffer      ('H',            torch.tensor(init_variables['H'],                dtype=torch.complex64, device=device))
-            self.register_buffer      ('measurements', torch.tensor(init_variables['measurements'],     dtype=torch.float32, device=device))
-            self.register_buffer      ('N_scan_slow',  torch.tensor(init_variables['N_scan_slow'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.register_buffer      ('N_scan_fast',  torch.tensor(init_variables['N_scan_fast'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.register_buffer      ('crop_pos',     torch.tensor(init_variables['crop_pos'],         dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
-            self.register_buffer      ('z_distance',   torch.tensor(init_variables['z_distance'],       dtype=torch.float32, device=device))# Saving this for reference
-            self.register_buffer      ('dx',           torch.tensor(init_variables['dx'],               dtype=torch.float32, device=device))# Saving this for reference
-            self.register_buffer      ('dk',           torch.tensor(init_variables['dk'],               dtype=torch.float32, device=device))# Saving this for reference
-
-            self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
-            self.tilt_obj               = self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts)                # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
-            self.shift_probes           = self.lr_params['probe_pos_shifts'] != 0                                                 # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
-            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
+            self.register_buffer      ('omode_occu',      torch.tensor(init_variables['omode_occu'],       dtype=torch.float32, device=device))
+            self.register_buffer      ('H',               torch.tensor(init_variables['H'],                dtype=torch.complex64, device=device))
+            self.register_buffer      ('measurements',    torch.tensor(init_variables['measurements'],     dtype=torch.float32, device=device))
+            self.register_buffer      ('N_scan_slow',     torch.tensor(init_variables['N_scan_slow'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('N_scan_fast',     torch.tensor(init_variables['N_scan_fast'],      dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('crop_pos',        torch.tensor(init_variables['crop_pos'],         dtype=torch.int32, device=device))# Saving this for reference, the cropping is based on self.obj_ROI_grid.
+            self.register_buffer      ('slice_thickness', torch.tensor(init_variables['slice_thickness'],  dtype=torch.float32, device=device))# Saving this for reference
+            self.register_buffer      ('dx',              torch.tensor(init_variables['dx'],               dtype=torch.float32, device=device))# Saving this for reference
+            self.register_buffer      ('dk',              torch.tensor(init_variables['dk'],               dtype=torch.float32, device=device))# Saving this for reference
+            self.register_buffer      ('lambd',           torch.tensor(init_variables['lambd'],            dtype=torch.float32, device=device))
             
+            self.scan_affine            = init_variables['scan_affine']                                                           # Saving this for reference
+            self.tilt_obj               = bool(self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts))          # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
+            self.shift_probes           = bool(self.lr_params['probe_pos_shifts'] != 0)                                           # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
+            self.change_thickness       = bool(self.lr_params['slice_thickness']  != 0)
+            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
+            self.loss_iters             = []
+            self.iter_times             = []
+            self.dz_iters               = []
+
             # Create grids for shifting
             self.create_grids()
 
@@ -130,6 +136,7 @@ class PtychoAD(torch.nn.Module):
                 'obja'            : self.opt_obja,
                 'objp'            : self.opt_objp,
                 'obj_tilts'       : self.opt_obj_tilts,
+                'slice_thickness' : self.opt_slice_thickness,
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
@@ -143,12 +150,28 @@ class PtychoAD(torch.nn.Module):
         """ Create the grid for obj_ROI and shift_probes in a vectorized approach """
         # Note that the Noy, Nox, roy, rox, shift_object_grid are pre-generated for potential future usage of sub-px object shifts
         # Currently (2024.04.24) only the shift_probes_grid, rpy_grid, rpx_grid are used for sub-px shifts and obj_ROI selection
+        # 2024.11.18 added propagator_grid and propagator_tilt_grid for Fresnel propagator (optimizable slice thickness and tilts)
         
         device = self.device
         probe = self.get_complex_probe_view()
         Npy, Npx = probe.shape[-2:] # Number of probe pixels in y and x directions
         Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
         
+        # Grids for Fresnel propagator
+        ygrid = (torch.arange(-Npy // 2, Npy // 2, device=device) + 0.5) / Npy
+        xgrid = (torch.arange(-Npx // 2, Npx // 2, device=device) + 0.5) / Npx
+        ky = 2 * torch.pi * ygrid / self.dx
+        kx = 2 * torch.pi * xgrid / self.dx
+        Ky, Kx = torch.meshgrid(ky, kx, indexing="ij")
+        self.propagator_grid = torch.stack([Ky,Kx], dim=0) # (2,Ky,Kx), k-space grid for Fresnel propagator
+        
+        # Grids for propagator tilt (the units are different from the above grid)
+        ky = fftfreq(Npy, 1 / Npy, device=device) * self.dk # dk in 1/Ang
+        kx = fftfreq(Npx, 1 / Npx, device=device) * self.dk
+        Ky, Kx = torch.meshgrid(ky, kx, indexing='ij')
+        self.propagator_tilt_grid = torch.stack([Ky,Kx], dim=0) # (2,Ky,Kx), k-space grid for Fresnel propagator tilt
+
+        # Grids for shifting porbes and obj_ROI selection
         rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
                                   torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
         roy, rox = torch.meshgrid(torch.arange(Noy, dtype=torch.int32, device=device), 
@@ -203,6 +226,7 @@ class PtychoAD(torch.nn.Module):
         vprint('### Model behavior ###')
         vprint(f"Obj preblur               : {True if self.obj_preblur_std is not None else False}")
         vprint(f"Tilt propagator           : {self.tilt_obj}")
+        vprint(f"Change slice thickness    : {self.change_thickness}")
         vprint(f"Sub-px probe shift        : {self.shift_probes}")
         vprint(f"Detector blur             : {True if self.detector_blur_std is not None else False}")
         vprint(f"On-the-fly meas resample  : {True if self.meas_scale_factors is not None else False}")
@@ -255,16 +279,54 @@ class PtychoAD(torch.nn.Module):
         # 'probe_pos_shifts': 1e-4})
         # optimizer=torch.optim.Adam(model.optimizer_params)
         
-        if self.tilt_obj is False:
-            return self.H[None,:,:] # Make it into (1,Y,X)
+        dz  = self.opt_slice_thickness
         
-        if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.shape = (1,2)
-            obj_tilts = self.opt_obj_tilts
-        else:
-            obj_tilts = self.opt_obj_tilts[indices]
+        if self.tilt_obj is True:
+
+            # Setup obj_tilts and the tilt kernel
+            if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.shape = (1,2)
+                obj_tilts = self.opt_obj_tilts
+            else:
+                obj_tilts = self.opt_obj_tilts[indices]
+            tilts_y  = obj_tilts[:,0,None,None] / 1e3 #mrad, tilts_y = (N,Y,X)
+            tilts_x  = obj_tilts[:,1,None,None] / 1e3
+            Kyt, Kxt = self.propagator_tilt_grid
+            
+            # tilt is either non-zero or optimizing, thickness is optimizing as well. Have to calculate propagators for each batch
+            if self.change_thickness is True:
+                k           = 2 * torch.pi / self.lambd
+                Ky, Kx      = self.propagator_grid
+                H_opt_dz    = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
+                phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x)) # phase_shift is (N,Ky,Kx)
+                return H_opt_dz * torch.exp(1j*phase_shift)
+
+            else: # self.change_thickness is False
+
+                # Thickness is fixed, but obj_tilts is optimizing throughout the iterations
+                if self.lr_params['obj_tilts'] != 0:
+                    phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x))
+                    return self.H * torch.exp(1j*phase_shift)
+
+                # Thickness is fixed, but obj_tilts is a fixed non-zero value throughout the iterations, so it should only be calculated once
+                else:
+                    try:
+                        return self.H_fixed_tilts
+                    except AttributeError:
+                        phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x))
+                        self.H_fixed_tilts = self.H * torch.exp(1j*phase_shift)
+                    return self.H_fixed_tilts
         
-        propagators  = add_tilts_to_propagator(self.H, obj_tilts, dz=self.z_distance, dk=self.dk)
-        return propagators
+        else: # self.tilt is False
+
+            if self.change_thickness is True:
+                # Thickness can be optimized, but tilt is fixed at 0
+                k        = 2 * torch.pi / self.lambd
+                Ky, Kx   = self.propagator_grid
+                H_opt_dz = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
+                return H_opt_dz[None,]
+            
+            else: # self.change_thickness is False and self.tilt_obj is False:
+                return self.H[None,]
 
     def get_propagated_probe(self, index):
         probe = self.get_probes(index)[0].detach() # (pmode, Ny, Nx)

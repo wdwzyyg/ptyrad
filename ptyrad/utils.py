@@ -367,11 +367,11 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         
     return indices
 
-def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses):
+def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses):
     ''' Make a dict to save relevant paramerers '''
     
     avg_losses = {name: np.mean(values) for name, values in batch_losses.items()}
-    avg_iter_t = np.mean(iter_times)
+    avg_iter_t = np.mean(model.iter_times)
     
     # While it might seem redundant to save bothe `params` and lots of `model_attributes`,    
     # one should note that `params` only stores the initial value from params files,
@@ -401,7 +401,7 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times
                      'N_scan_slow'      : model.N_scan_slow,
                      'N_scan_fast'      : model.N_scan_fast,
                      'crop_pos'         : model.crop_pos,
-                     'z_distance'       : model.z_distance,
+                     'slice_thickness'  : model.slice_thickness,
                      'dx'               : model.dx,
                      'dk'               : model.dk,
                      'scan_affine'      : model.scan_affine,
@@ -409,8 +409,9 @@ def make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times
                      'shift_probes'     : model.shift_probes,
                      'probe_int_sum'    : model.probe_int_sum
                      },
-                'loss_iters'            : loss_iters,
-                'iter_times'            : iter_times,
+                'loss_iters'            : model.loss_iters,
+                'iter_times'            : model.iter_times,
+                'dz_iters'              : model.dz_iters,
                 'avg_iter_t'            : avg_iter_t,
                 'niter'                 : niter,
                 'indices'               : indices,
@@ -450,10 +451,11 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     pmode        = model.get_complex_probe_view().size(0)
     dp_size      = model.get_complex_probe_view().size(-1)
     obj_shape    = model.opt_objp.shape
-    probe_lr     = format(model.lr_params['probe'], '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
-    objp_lr      = format(model.lr_params['objp'], '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
-    obja_lr      = format(model.lr_params['obja'], '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
-    tilt_lr      = format(model.lr_params['obj_tilts'], '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
+    probe_lr     = format(model.lr_params['probe'],            '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
+    objp_lr      = format(model.lr_params['objp'],             '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
+    obja_lr      = format(model.lr_params['obja'],             '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
+    tilt_lr      = format(model.lr_params['obj_tilts'],        '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
+    dz_lr        = format(model.lr_params['slice_thickness'],  '.0e').replace("e-0", "e-") if model.lr_params['slice_thickness'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine if model.scan_affine is not None else None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
@@ -479,8 +481,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # Attach obj shape and dz
     output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
     if obj_shape[1] != 1:
-        z_distance = model.z_distance.detach().cpu().numpy().round(2)
-        output_path += f"_dz{z_distance:.3g}"
+        slice_thickness = model.slice_thickness.detach().cpu().numpy().round(2) # This is the initialized slice thickness
+        output_path += f"_dz{slice_thickness:.3g}"
     
     # Attach optimizer name (optional)
     if 'optimizer' in recon_dir_affixes:
@@ -498,6 +500,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_ss{start_iter_dict['probe_pos_shifts']}"
         if start_iter_dict['obj_tilts'] is not None and start_iter_dict['obj_tilts'] > 1:
             output_path += f"_ts{start_iter_dict['obj_tilts']}"
+        if start_iter_dict['slice_thickness'] is not None and start_iter_dict['slice_thickness'] > 1:
+            output_path += f"_dzs{start_iter_dict['slice_thickness']}"
     
     # Attach learning rate (optional)
     if 'lr' in recon_dir_affixes:
@@ -511,6 +515,8 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_slr{pos_lr}" 
         if tilt_lr != 0:
             output_path += f"_tlr{tilt_lr}"
+        if dz_lr != 0:
+            output_path += f"_dzlr{dz_lr}"
             
     # Attach model params (optional)
     if 'model' in recon_dir_affixes:    
@@ -754,14 +760,14 @@ def normalize_by_bit_depth(arr, bit_depth):
     
     return norm_arr_in_bit_depth
 
-def save_results(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses, collate_str=''):
+def save_results(output_path, model, params, optimizer, niter, indices, batch_losses, collate_str=''):
     
     save_result_list = params['recon_params'].get('save_result', ['model', 'obj', 'probe'])
     result_modes = params['recon_params'].get('result_modes')
     iter_str = '_iter' + str(niter).zfill(4)
     
     if 'model' in save_result_list:
-        save_dict = make_save_dict(output_path, model, params, optimizer, loss_iters, iter_times, niter, indices, batch_losses)
+        save_dict = make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses)
         torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
     probe      = model.get_complex_probe_view() 
     probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
@@ -954,32 +960,47 @@ def imshift_batch(img, shifts, grid):
     
     return shifted_img
 
-def near_field_evolution(u_0_shape, z, lambd, extent):
+def near_field_evolution(Npix_shape, dx, dz, lambd):
     """ Fresnel propagator """
-    #  FUNCTION  [u_1, H, h, dH] = near_field_evolution(u_0, z, lambda, extent)
     #  Translated and simplified from Yi's fold_slice Matlab implementation into numPy by Chia-Hao Lee
 
-    u_0    = np.ones(u_0_shape)
-    Npix   = np.array(u_0.shape)
-    z      = np.array(z)
-    lambd  = np.array(lambd)
-    extent = np.array(extent)
+    ygrid = (np.arange(-Npix_shape[0] // 2, Npix_shape[0] // 2) + 0.5) / Npix_shape[0]
+    xgrid = (np.arange(-Npix_shape[1] // 2, Npix_shape[1] // 2) + 0.5) / Npix_shape[1]
 
-    xgrid = np.linspace(0.5 + (-Npix[0] / 2), 0.5 + (Npix[0] / 2 - 1), Npix[0]) / Npix[0]
-    ygrid = np.linspace(0.5 + (-Npix[1] / 2), 0.5 + (Npix[1] / 2 - 1), Npix[1]) / Npix[1]
-
-    k = 2 * np.pi / lambd
-    
     # Standard ASM
-    kx = 2 * np.pi * xgrid / extent[0] * Npix[0]
-    ky = 2 * np.pi * ygrid / extent[1] * Npix[1]
-    Kx, Ky = np.meshgrid(kx, ky)
-    H = np.fft.ifftshift(np.exp(1j * z * np.sqrt(k ** 2 - Kx.T ** 2 - Ky.T ** 2))) # H has zero frequency at the corner in k-space
+    k  = 2 * np.pi / lambd
+    ky = 2 * np.pi * ygrid / dx
+    kx = 2 * np.pi * xgrid / dx
+    Ky, Kx = np.meshgrid(ky, kx, indexing="ij")
+    H = np.fft.ifftshift(np.exp(1j * dz * np.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
+
+    return H
+
+def near_field_evolution_torch(Npix_shape, dx, dz, lambd, device='cuda'):
+    """Fresnel propagator in PyTorch"""
+    # This is for testing and demonstration purpose and is never called in PtyRAD
+    # The actual optimizable Fresnel propagator is directly built inside "PtychoAD.get_propagators"
+    dx    = dx.to(device)
+    dz    = dz.to(device)
+    lambd = lambd.to(device)
+
+    ygrid = (torch.arange(-Npix_shape[0] // 2, Npix_shape[0] // 2, device=device) + 0.5) / Npix_shape[0]
+    xgrid = (torch.arange(-Npix_shape[1] // 2, Npix_shape[1] // 2, device=device) + 0.5) / Npix_shape[1]
+
+    # Standard ASM
+    k  = 2 * torch.pi / lambd
+    ky = 2 * torch.pi * ygrid / dx
+    kx = 2 * torch.pi * xgrid / dx
+    Ky, Kx = torch.meshgrid(ky, kx, indexing="ij")
+    H = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
 
     return H
 
 def add_tilts_to_propagator(propagator, tilts, dz, dk):
     """ Add small crystal tilts to a single propagator """
+    # After PtyRAD v0.1.0-beta3.0 this is not called anymore for efficiency
+    # The tilting is directly calculated in `PtychoAD.get_propagators`
+    
     # Ref: https://abtem.readthedocs.io/en/latest/user_guide/walkthrough/multislice.html
     # tilts angle should be less than 1 deg (17 mrad)
     # tilt-induced phase shift = exp(2pi*i*dz*(kx*tan(tx)+ky*tan(ty)), note that k in 1/Ang
@@ -1520,7 +1541,7 @@ def get_rbf(meas, thresh=0.5):
     rbf     = 0.5*(indices[-1]-indices[0]) # Return rbf in px
     return rbf
 
-def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, window_size=9):
+def get_local_obj_tilts(pos, objp, dx, slice_thickness, slice_indices, blob_params, window_size=9):
     """ Estimate the local obj tilts from relative atomic column shifts """
     # objp (Nz, Ny, Nx)
     # pos: probe position at integer px sites, (N,2)
@@ -1533,7 +1554,7 @@ def get_local_obj_tilts(pos, objp, dx, z_distance, slice_indices, blob_params, w
 
     # Choose the 2 slices from objp and detect blobs from the top slice
     slice_t, slice_b = slice_indices
-    height = (slice_b - slice_t)*z_distance
+    height = (slice_b - slice_t)*slice_thickness
     print(f"The height difference between slices {(slice_t, slice_b)} is {height:.2f} Ang")
 
     target_stack = objp[[slice_t,slice_b]]
@@ -1771,7 +1792,7 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         print(f"The object shape is interpolated to {complex_object_interp3d.shape}.")
         return complex_object_interp3d.astype(obj_dtype)
 
-def Fresnel_propagator(probe, z_distances, lambd, extent):
+def Fresnel_propagator(probe, dz_distances, lambd, extent):
     # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more
     
     # Example usage
@@ -1796,8 +1817,8 @@ def Fresnel_propagator(probe, z_distances, lambd, extent):
     
     from numpy.fft import fft2, fftshift, ifft2, ifftshift
     
-    prop_probes = np.zeros((len(z_distances), *probe.shape)).astype(probe.dtype)
-    for i, z_distance in enumerate(z_distances):
+    prop_probes = np.zeros((len(dz_distances), *probe.shape)).astype(probe.dtype)
+    for i, z_distance in enumerate(dz_distances):
         _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np') # H is corner-centered at k-space
         prop_probes[i] = fftshift(ifft2(H * fft2(ifftshift(probe, axes=(-2,-1)))), axes=(-2,-1))
     

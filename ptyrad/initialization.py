@@ -482,10 +482,10 @@ class Initializer:
         vprint(" ", verbose=self.verbose)
             
     def init_obj(self):
-        source     = self.init_params['source_params']['obj_source']
-        params     = self.init_params['source_params']['obj_params']
-        dx_spec    = self.init_params['exp_params']['dx_spec']
-        z_distance = self.init_params['exp_params']['z_distance']
+        source          = self.init_params['source_params']['obj_source']
+        params          = self.init_params['source_params']['obj_params']
+        dx_spec         = self.init_params['exp_params']['dx_spec']
+        slice_thickness = self.init_params['exp_params']['slice_thickness']
         vprint(f"### Initializing obj from '{source}' ###", verbose=self.verbose)
         
         # Load file
@@ -544,7 +544,7 @@ class Initializer:
         omode_max = self.init_params['exp_params']['omode_max']
         obj = obj[:omode_max].astype('complex64')
         vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
-        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*z_distance, obj.shape[2]*dx_spec, obj.shape[3]*dx_spec),4)}", verbose=self.verbose)
+        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*slice_thickness, obj.shape[2]*dx_spec, obj.shape[3]*dx_spec),4)}", verbose=self.verbose)
         self.init_variables['obj'] = obj
         vprint(" ", verbose=self.verbose)
                     
@@ -569,23 +569,23 @@ class Initializer:
     def init_H(self):
         vprint("### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
         probe_shape = np.array([self.init_params['exp_params']['Npix']]*2) 
-        z_distance = self.init_params['exp_params']['z_distance']
+        slice_thickness = self.init_params['exp_params']['slice_thickness']
         dx_spec = self.init_params['exp_params']['dx_spec']
-        extent = dx_spec * probe_shape
         
         if self.init_params['exp_params']['illumination_type'] == 'electron':
             lambd = kv2wavelength(self.init_params['exp_params']['kv'])
-            vprint(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance:.4f} Ang, lambd = {lambd:.4f} Ang, extent = {extent.round(4)} Ang", verbose=self.verbose)
+            vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec:.4f} Ang, slice_thickness = {slice_thickness:.4f} Ang, lambd = {lambd:.4f} Ang", verbose=self.verbose)
         elif self.init_params['exp_params']['illumination_type'] == 'xray':
             lambd = 1.23984193e-9 / (self.init_params['exp_params']['energy'])
-            vprint(f"Calculating H with probe_shape = {probe_shape}, z_distance = {z_distance} m, lambd = {lambd} m, extent = {extent} m", verbose=self.verbose)
+            vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec} m, slice_thickness = {slice_thickness} m, lambd = {lambd} m", verbose=self.verbose)
         else:
             raise KeyError(f"exp_params['illumination_type'] = {self.init_params['exp_params']['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")
         
-        H = near_field_evolution(probe_shape, z_distance, lambd, extent)
+        H = near_field_evolution(probe_shape, dx_spec, slice_thickness, lambd)
         H = H.astype('complex64')
         vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
-        self.init_variables['z_distance'] = z_distance
+        self.init_variables['lambd'] = lambd
+        self.init_variables['slice_thickness'] = slice_thickness
         self.init_variables['H'] = H
         vprint(" ", verbose=self.verbose)
     

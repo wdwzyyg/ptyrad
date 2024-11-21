@@ -264,6 +264,40 @@ def plot_loss_curves(loss_iters, last_n_iters=10, show_fig=True, pass_fig=False)
     if pass_fig:
         return fig
 
+def plot_slice_thickness(dz_iters, last_n_iters=10, show_fig=True, pass_fig=False):
+    last_n_iters = int(last_n_iters)
+    data = np.array(dz_iters)
+
+    plt.ioff() # Temporaily disable the interactive plotting mode
+    fig, axs = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
+
+    # Plot all loss values
+    axs.plot(data[:,0], data[:,1], marker='o')
+
+    # Plot the last n iters as an inset
+    if len(data) > 20 and last_n_iters is not None:
+        # Create inset subplot for zoomed-in plot
+        axins = axs.inset_axes([0.45, 0.3, 0.4, 0.5])
+        axins.plot(data[-last_n_iters:,0], data[-last_n_iters:,1], marker='o')
+        axins.set_xlabel('Iterations', fontsize=12)
+        axins.set_ylabel('Slice thickness (Ang)', fontsize=12)
+        axins.yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.5f}'))
+        axs.indicate_inset_zoom(axins, edgecolor="gray")
+        axins.set_title(f'Last {last_n_iters} iterations', fontsize=12, pad=10)
+
+    # Set labels and title for the main plot
+    axs.set_xlabel('Iterations', fontsize=16)
+    axs.set_ylabel('Slice thickness (Ang)', fontsize=16)
+    axs.set_title(f'Slice thickness (Ang): {data[-1,1]:.5f} at iter {int(data[-1,0])}', fontsize=16)
+    axs.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+    plt.yticks(fontsize=14)
+    plt.xticks(fontsize=14)
+    plt.tight_layout()
+    if show_fig:
+        plt.show()
+    if pass_fig:
+        return fig
+
 def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fourier='real', phase_cmap=None, amplitude_cmap=None, show_fig=True, pass_fig=False):
     # The input probes are expected to be numpy array
     # This is for visualization so each mode has its own colorbar.
@@ -324,7 +358,7 @@ def plot_probe_modes(init_probe, opt_probe, amp_or_phase='amplitude', real_or_fo
     if pass_fig:
         return fig
 
-def plot_summary(output_path, model, loss_iters, niter, indices, init_variables, selected_figs=['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'], collate_str='', show_fig=True, save_fig=False, verbose=True):
+def plot_summary(output_path, model, niter, indices, init_variables, selected_figs=['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'], collate_str='', show_fig=True, save_fig=False, verbose=True):
     """ Wrapper function for most visualization function """
     # selected_figs can take 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', or 'all'
     # Note: Set show_fig=False and save_fig=True if you just want to save the figure without showing
@@ -340,7 +374,7 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
     
     # loss curves
     if 'loss' in selected_figs or 'all' in selected_figs:
-        fig_loss = plot_loss_curves(loss_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
+        fig_loss = plot_loss_curves(model.loss_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
         if show_fig:
             fig_loss.show()
         if save_fig:
@@ -410,6 +444,14 @@ def plot_summary(output_path, model, loss_iters, niter, indices, init_variables,
             fig_obj_tilts.show()
         if save_fig:
             fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts{collate_str}{iter_str}.png")
-        
+    
+    # Slice thickness
+    if 'slice_thickness' in selected_figs or 'all' in selected_figs:
+        fig_slice_thickness = plot_slice_thickness(model.dz_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
+        if show_fig:
+            fig_slice_thickness.show()
+        if save_fig:
+            fig_slice_thickness.savefig(output_path + f"/summary_slice_thickness{collate_str}{iter_str}.png")
+    
     # Close figures after saving
     plt.close('all')
