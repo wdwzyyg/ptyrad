@@ -4,5 +4,6 @@ data/*
 logs/
 output/
 params/work/
+scripts/work/
 __pycache__
 *.sqlite3

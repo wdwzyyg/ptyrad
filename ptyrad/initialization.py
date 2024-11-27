@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif
+from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif, load_npy
 from ptyrad.utils import (
     compose_affine_matrix,
     get_default_probe_simu_params,
@@ -185,11 +185,13 @@ class Initializer:
             meas = load_fields_from_mat(params['path'], params['key'])[0]
         elif source == 'hdf5':
             meas = load_hdf5(params['path'], params['key']).astype('float32')
+        elif source == 'npy':
+            meas = load_npy(params['path']).astype('float32')
         elif source == 'raw':
             default_shape = (self.init_variables['N_scans'], self.init_variables['Npix'], self.init_variables['Npix'])
             meas = load_raw(params['path'], shape=params.get('shape', default_shape), offset=params.get('offset', 0), gap=params.get('gap', 1024))
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', or 'hdf5'!!")
+            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw' !!")
         vprint(f"Imported meausrements shape = {meas.shape}", verbose=self.verbose)
         vprint(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         

@@ -48,16 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
-## [Unreleased]
+## [v0.1.0-beta3.0] - 2024-11-26
 ### Added
 - Add `LBFGS` as available optimizer option. LBFGS is a Quasi-Newton 2nd order optimizer that was designed for full-batch update scheme and converges very fast on certain convex problems. While generally it requires full-batch update and ideally noiseless gradients, it's included for completeness and certain special cases.
 - Add `.json` as supported params file type in hope of better support for LLM-related interfaces
 - Add `slice_thickness` as an AD-optimizable parameter and rename most `z_distance` into `slice_thickness` for clarity.
 - Add `plot_slice_thickness` for visualization
+- Add `npy` as the new measurements data type into `data_io.py` and `initialization.py`
 ### Changed
 - Refine `near_field_evolution` (Fresnel propagator) for performance and simplify the function signature.
 - Refactor `recon_step` and `recon_loop` a bit by moving `iter_times`, `loss_iters`, and `dz_iters` all inside `recon_step` since they'll be stored in `model` for every iteration
 - Simplify the function signature of `save_results`, `make_save_dict`, and `plot_summary` by moving the iter-result-lists inside `model`
+- Fix the `model_instance` usage in `recon_step` for multiGPU mode (`model.module` is required due to DDP wrapping). Note that `start_iter` currently doesn't work properly in DDP mode.
 
 ## [v0.1.0-beta2.10] - 2024-11-06
 ### Added

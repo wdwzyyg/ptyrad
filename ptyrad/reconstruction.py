@@ -361,7 +361,9 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     
                     ## Saving summary
                     plot_summary(output_path, model_instance, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
-    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model.iter_times):.5g} sec ###", verbose=verbose)
+    
+    model_instance = model.module if hasattr(model, "module") else model
+    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model_instance.iter_times):.5g} sec ###", verbose=verbose)
     vprint(" ", verbose=verbose)
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):
@@ -476,15 +478,15 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     constraint_fn(model_instance, niter)
     
     iter_t = time_sync() - start_iter_t
-    model.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t)))
-    model.iter_times.append(iter_t)
-    model.dz_iters.append((niter, model.opt_slice_thickness.detach().cpu().numpy()))
+    model_instance.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t)))
+    model_instance.iter_times.append(iter_t)
+    model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
     return batch_losses
 
-def toggle_grad_requires(model_instance, niter, verbose):
+def toggle_grad_requires(model, niter, verbose):
     """Toggle requires_grad based on start iteration for each optimizable tensor."""
-    start_iter_dict = model_instance.start_iter
-    optimizable_tensors = model_instance.optimizable_tensors
+    start_iter_dict = model.start_iter
+    optimizable_tensors = model.optimizable_tensors
     for param_name, start_iter in start_iter_dict.items():
         requires_grad = start_iter is not None and niter >= start_iter
         optimizable_tensors[param_name].requires_grad = requires_grad

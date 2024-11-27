@@ -97,7 +97,7 @@ model_params : {
         'obja'            : {'start_iter': 1, 'lr': 5.0e-4}, # object amplitude
         'objp'            : {'start_iter': 1, 'lr': 5.0e-4}, # object phase
         'obj_tilts'       : {'start_iter': null, 'lr': 0}, # object tilts
-        'slice_thickness' : {'start_iter': 10, 'lr': 1.0e-4}, # object dz slice thickness 
+        'slice_thickness' : {'start_iter': null, 'lr': 0}, # object dz slice thickness 
         'probe'           : {'start_iter': 1, 'lr': 1.0e-4},  # probe
         'probe_pos_shifts': {'start_iter': 1, 'lr': 1.0e-4}, # sub-px probe positions
     }

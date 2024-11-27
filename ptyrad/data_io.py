@@ -95,6 +95,17 @@ def load_tif(file_path):
     print("Imported .tif data shape =", data.shape)
     return data
 
+def load_npy(file_path):
+
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
+    data = np.load(file_path)
+    print("Success! Loaded .npy file path =", file_path)
+    print("Imported .npy data shape =", data.shape)
+    return data
+
 def load_pt(file_path):
     import torch
 
