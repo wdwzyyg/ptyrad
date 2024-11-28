@@ -134,7 +134,10 @@ class PtyRADSolver(object):
         n_trials         = hypertune_params.get('n_trials')
         study_name       = hypertune_params.get('study_name')
         storage_path     = hypertune_params.get('storage_path')
-        pruner           = optuna.pruners.HyperbandPruner(min_resource=5, reduction_factor=2) if hypertune_params.get('use_pruning') else None
+        sampler_params   = hypertune_params['sampler_params']
+        pruner_params    = hypertune_params['pruner_params']
+        sampler          = create_optuna_sampler(sampler_params)
+        pruner           = create_optuna_pruner(pruner_params)
         logger           = self.logger
         
         copy_params = self.params['recon_params']['copy_params']
@@ -155,11 +158,10 @@ class PtyRADSolver(object):
         optuna_logger.addHandler(logger.console_handler)
                 
         # Create a study object and optimize the objective function
-        sampler = optuna.samplers.TPESampler(multivariate=True, group=True, constant_liar=True)
         study = optuna.create_study(
                     direction='minimize',
                     sampler=sampler,
-                    pruner=pruner,
+                    pruner=pruner, # In Optuna default, setting pruner=None will change to a MedianPruner which is a bit odd. In PtyRAD optuna_objective we will skip the pruning if pruner=None.
                     storage=storage_path,  # Specify the storage URL here.
                     study_name=study_name,
                     load_if_exists=True)
@@ -170,8 +172,10 @@ class PtyRADSolver(object):
         postfix = '_'+ postfix if postfix != '' else ''
         if prefix_date:
             prefix = get_date() + '_' + prefix 
+        sampler_str = sampler_params['name']
+        pruner_str = '_' + pruner_params['name'] if pruner_params is not None else ''
         
-        output_dir += f"/{prefix}hypertune{postfix}"
+        output_dir += f"/{prefix}hypertune_{sampler_str}{pruner_str}{postfix}"
         self.params['recon_params']['output_dir'] = output_dir 
         self.params['recon_params']['prefix_date'] = ''
         self.params['recon_params']['prefix'] = ''
@@ -478,7 +482,7 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     constraint_fn(model_instance, niter)
     
     iter_t = time_sync() - start_iter_t
-    model_instance.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t)))
+    model_instance.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
     model_instance.iter_times.append(iter_t)
     model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
     return batch_losses
@@ -531,6 +535,73 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     vprint(" ", verbose=verbose)
     loss_iter = sum(avg_losses.values())
     return loss_iter
+
+def create_optuna_sampler(sampler_params, verbose=True):
+    # Note that this function supports all Optuna samplers except "PartialFixedSampler" because it requires a sequential sampler setup
+    # Different samplers have different available configurations so please refer to https://optuna.readthedocs.io/en/stable/reference/samplers/index.html for more details
+    # For example, GridSampler would need to pass in the 'search_space' so you need to explicitly specify it in `sampler_params = {..., 'configs': {'search_space': }}`
+    # Also the GridSampler would only use the defined search_space and will ignore the range/step setup in 'tune_params'.
+    # A handy usage of GridSampler is to exhaust some combination of reconstruction parameters
+    # The recommmendation setup for PtyRAD is `sampler_params = {'name': 'TPESampler', 'configs': {'multivariate':True, 'group':True, 'constant_liar':True}}`
+
+    import optuna 
+    
+    # Extract the sampler name and configs
+    sampler_name = sampler_params['name']
+    sampler_configs = sampler_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
+    
+    vprint(f"### Creating Optuna '{sampler_name}' sampler with configs = {sampler_configs} ###", verbose=verbose)
+    
+    # Get the optimizer class from optuna.samplers
+    sampler_class = getattr(optuna.samplers, sampler_name, None)
+    
+    if sampler_class is None or sampler_name == 'ParitalFixedSampler':
+        raise ValueError(f"Optuna sampler '{sampler_name}' is not supported.")
+
+    sampler = sampler_class(**sampler_configs)
+
+    vprint(" ", verbose=verbose)
+    return sampler
+
+def create_optuna_pruner(pruner_params, verbose=True):
+    # Note that this function supports all Optuna pruners except "WilcoxonPruner" because it requires a nested evaluation setup
+    # Different pruners have different available configurations so please refer to https://optuna.readthedocs.io/en/stable/reference/pruners.html for more details
+    # PatientPruner and PercentilePruner have required fields that need to be passed in with 'configs'
+    # For PatientPruner that wraps around a base pruner, you need to specify the base pruner name and configs in a nested way
+    # pruner_params = {'name': 'PatientPruner', 
+    #              'configs': {'patience': 1, 
+    #                          'wrapped_pruner_configs':{'name': 'MedianPruner',
+    #                                                    'configs': {}}}}
+    # If you're testing pruner with some other objective function, note that the objective function must contain iterative steps for you to prune (early termination)
+    # The recommendation setup for PtyRAD is `pruner_params = {'name': 'HyperbandPruner', 'configs': {'min_resource': 5, 'reduction_factor': 2}}`
+    
+    import optuna 
+    
+    if pruner_params is None:
+        return None
+    else:
+        # Extract the pruner name and configs
+        pruner_name = pruner_params['name']
+        pruner_configs = pruner_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
+        
+        vprint(f"### Creating Optuna '{pruner_name}' pruner with configs = {pruner_configs} ###", verbose=verbose)
+        
+        # Get the pruner class from optuna.pruners
+        pruner_class = getattr(optuna.pruners, pruner_name, None)
+        
+        if pruner_class is None or pruner_name == 'WilcoxonPruner':
+            raise ValueError(f"Optuna pruner '{pruner_name}' is not supported.")
+        elif pruner_name == 'NopPruner':
+            raise ValueError("Optuna NopPruner is an empty pruner, please set pruner_params = None if you don't want to prune.")
+        elif pruner_name == 'PatientPruner':
+            wrapped_pruner = create_optuna_pruner(pruner_configs['wrapped_pruner_configs'], verbose=verbose)
+            pruner_configs.pop('wrapped_pruner_configs', None) # Delete the wrapped_pruner_configs
+            pruner = pruner_class(wrapped_pruner, **pruner_configs)
+        else:
+            pruner = pruner_class(**pruner_configs)
+
+        vprint(" ", verbose=verbose)
+        return pruner
 
 def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda', verbose=False):
     """
@@ -655,7 +726,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             plot_summary(output_path, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str='', show_fig=False, save_fig=True, verbose=verbose)
                
         ## Pruning logic for optuna
-        if hypertune_params['use_pruning']:
+        if hypertune_params['pruner_params'] is not None:
             trial.report(loss_iter, niter)
             
             # Handle pruning based on the intermediate value.
