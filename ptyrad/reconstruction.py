@@ -539,7 +539,7 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
 def create_optuna_sampler(sampler_params, verbose=True):
     # Note that this function supports all Optuna samplers except "PartialFixedSampler" because it requires a sequential sampler setup
     # Different samplers have different available configurations so please refer to https://optuna.readthedocs.io/en/stable/reference/samplers/index.html for more details
-    # For example, GridSampler would need to pass in the 'search_space' so you need to explicitly specify it in `sampler_params = {..., 'configs': {'search_space': }}`
+    # For example, GridSampler would need to pass in the 'search_space' so you need to explicitly specify every target variable range in 'sampler_params' : {'name': GridSampler, 'configs': {'search_space': {'optimizer': ['Adam', 'AdamW', 'RMSprop'], 'batch_size': [16,24,32,64,128,256,512], 'oalr': [1.0e-4, 1.0e-3, 1.0e-2], 'oplr': [1.0e-4, 1.0e-3, 1.0e-2]}}}
     # Also the GridSampler would only use the defined search_space and will ignore the range/step setup in 'tune_params'.
     # A handy usage of GridSampler is to exhaust some combination of reconstruction parameters
     # The recommmendation setup for PtyRAD is `sampler_params = {'name': 'TPESampler', 'configs': {'multivariate':True, 'group':True, 'constant_liar':True}}`
@@ -656,6 +656,28 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     ## Currently only re-initialize the required parts for performance, but once there're too many correlated params need to be re-initialized,
     ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
     ## For example, re-initialize `dx_spec` would require re-initializing everything including the 4D-STEM data.
+            
+    # Batch size
+    if tune_params['batch_size']['state']:
+        batch_size_params = tune_params['batch_size']
+        vmin, vmax = batch_size_params['min'], batch_size_params['max']
+        params['recon_params']['BATCH_SIZE']['size'] = trial.suggest_int('batch_size', vmin, vmax, log=True)
+        
+    # Optimizer
+    if tune_params['optimizer']['state']:
+        optimizer_params = tune_params['optimizer']
+        names = optimizer_params['names']
+        name = trial.suggest_categorical('optimizer', names)
+        params['model_params']['optimizer_params']['name'] = name
+        params['model_params']['optimizer_params']['configs'] = optimizer_params['configs'].get(name, {}) # Update optimizer_configs if the user has specified them for each optimizer
+    
+    # learning rates
+    lr_to_tensor = {'plr': 'probe', 'oalr': 'obja', 'oplr': 'objp', 'slr': 'probe_pos_shifts', 'tlr': 'obj_tilts', 'dzlr': 'slice_thickness'}
+    for vname in ['plr', 'oalr', 'oplr', 'slr', 'tlr', 'dzlr']:
+        if tune_params[vname]['state']:
+            vparams = tune_params[vname]
+            vmin, vmax, step, log = vparams['min'], vparams['max'], vparams['step'], vparams['log']
+            params['model_params']['update_params'][lr_to_tensor[vname]]['lr'] = trial.suggest_float(vname, vmin, vmax, step=step, log=log)
     
     # probe_params (conv_angle, defocus, c3, c5)
     remake_probe = False

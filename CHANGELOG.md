@@ -23,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - NMF and PCA for object modes? Given frozen phonon configurations, what is a good decomposition method?
 - Finish the weighted sum of `omode_occu` in `save_results`
 ## BO
-- Add options to select different optuna optimizers and pruners
 - Decouple the BO error from reconstruction loss so we can test different setup
+- Refactor or decouple the measurements initialization from Initializer so we can have more hypertunable parameters and cleaner optuna_objective by re-initializing everything except loading measurements
 ## Recon workflow
 - Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
 - Sequential reconstruction (asize_presolve) is also desired (might write a specific notebook to chain them together)
@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use DataLoader for measurements. This could be a bit slower than directly loading entire measurements into memory, but it allows dataset larger than memory, and also makes parallel on multiple GPUs possible
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
+
+## [Unrelease]
+### Added
+- Add `create_optuna_sampler` and `create_optuna_pruner` to allow flexible hyperameter tuning algorithm cofigurations in Optuna. The chosen sampler/pruner names will be affixed to the hypertune result folder.
+- Add new hypertunable parameters including PyTorch optimizers, learning rates, and batch sizes.
 
 ## [v0.1.0-beta3.0] - 2024-11-26
 ### Added

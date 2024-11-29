@@ -736,7 +736,12 @@ def parse_hypertune_params_to_str(hypertune_params):
     
     hypertune_str = ''
     for key, value in hypertune_params.items():
-        hypertune_str += f"_{str(key)}_{value:.3g}"
+        if key[-2:].lower() == "lr":
+            hypertune_str += f"_{key}_{value:.1e}"
+        elif isinstance(value, (int, float)):
+            hypertune_str += f"_{key}_{value:.3g}"
+        else:
+            hypertune_str += f"_{key}_{value}"
     
     return hypertune_str
 

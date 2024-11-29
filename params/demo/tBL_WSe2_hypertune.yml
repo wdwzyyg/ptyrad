@@ -10,8 +10,8 @@ exp_params : {
     'defocus'           : 0, # type: float, unit: Ang. Defocus (-C1) aberration coefficient for the probe. Positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'c3'                : 0, # type: float, unit: Ang. 3rd-order spherical aberration coefficient (C3) for the simulated probe
     'c5'                : 0, # type: float, unit: Ang. 5th-order spherical aberration coefficient (C5) for the simulated probe
-    'slice_thickness'   : 6, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
-    'Nlayer'            : 2, # type: int, unit: #. Number of slices for multislice object
+    'slice_thickness'   : 12, # type: float, unit: Ang. Slice thickness for multislice ptychography. Typical values are between 1 to 20 Ang
+    'Nlayer'            : 1, # type: int, unit: #. Number of slices for multislice object
     'N_scans'           : 16384, # type: int, unit: #. Number of probe positions (or equivalently diffraction patterns since 1 DP / position)
     'N_scan_slow'       : 128, # type: int, unit: #. Number of scan position along slow scan direction. Usually it's the vertical direction of acquisition GUI
     'N_scan_fast'       : 128, # type: int, unit: #. Number of scan position along fast scan direction. usually it's the horizontal direction of acquisition GUI
@@ -64,11 +64,19 @@ hypertune_params : {
     'storage_path'   : 'sqlite:///hypertune.sqlite3', # type: str. Path to the SQLite database file (i.e., sotrage) as 'sqlite:///<DATABASE_FILENAME>.sqlite3'.
     'study_name'     : 'tBL_WSe2', # type: str. Name of the hypertune record (i.e., study). Hypertune of different dataset or different search space (i.e., different optimizable parameters) are encouraged to use different study name or even separate database file
     'tune_params'    : {
+        'optimizer'  : {'state': true, 'names': ["Adam", "AdamW", "RMSprop"], 'configs': {}},
+        'batch_size' : {'state': true, 'min': 16, 'max': 512},
+        'plr'        : {'state': false, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true}, # can only set as (1) step != 1 and log=False or (2) step=None and log=True
+        'oalr'       : {'state': true, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true},
+        'oplr'       : {'state': true, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true},
+        'slr'        : {'state': false, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true},
+        'tlr'        : {'state': false, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true},
+        'dzlr'       : {'state': false, 'min': 1.0e-4, 'max': 1.0e-2, 'step': null, 'log': true},
         'conv_angle' : {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
-        'defocus'    : {'state': true, 'min': -50, 'max': 50, 'step': null},
+        'defocus'    : {'state': false, 'min': -50, 'max': 50, 'step': null},
         'c3'         : {'state': false, 'min': 4000, 'max': 10000, 'step': null},
         'c5'         : {'state': false, 'min': 50000, 'max': 100000, 'step': 5000},
-        'dz'         : {'state': true, 'min': 4, 'max': 8, 'step': 0.5},
+        'dz'         : {'state': false, 'min': 4, 'max': 8, 'step': 0.5},
         'scale'      : {'state': false, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
         'asymmetry'  : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
         'rotation'   : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
@@ -162,7 +170,7 @@ recon_params: {
     'postfix': '', # type: str. Postfix this string to the reconstruction folder name. Note that "_" will be automatically generated. In hypertune mode, the postfix string would be applied on the hypertune folder instead of the reconsstruction folder.  
     'save_result': ['objp', 'probe'], # type: list of strings. This list specifies the available results to save. Available options are 'model', 'obja', 'objp', and 'probe'. 'model' is the pytorch dict stored as hdf5 with '.pt' file extension. 'model' contains optimizable tensors and metadata so that you can always refine from it and load whatever optimizable tensors (object, probe, positions, tilts) if you want to continue the reconstruction. It's similar to the NiterXXX.mat from PtychoShelves. 'object' and 'probe' output the reconstructed object and probe as '.tif'. If you don't want to save anything, set 'SAVE_ITERS' to null. Suggested setting is to save everything (i.e., ['model', 'obja', 'objp', 'probe']). For hypertune mode, you can set 'collate_results' to true and set 'SAVE_ITERS' to null to disable result saving.
     'result_modes': {'obj_dim': [2, 3, 4], 'FOV': ['crop'], 'bit': ['8']}, # type: dict. This dict specifies which object output is saved by their final dimension ('obj_dim'), whether to save the full or cropped FOV ('FOV') of object, and whether to save the raw or normalized bit depth version of object and probe. A comprehensive (but probably redundant) saving option looks like {'obj_dim': [2,3,4], 'FOV': ['full', 'crop'], 'bit': ['raw', '32', '16', '8']}. 'obj_dim' takes a list of int, the int ranges between 2 to 4, corresponding to 2D to 4D object output. Set 'obj_dim': [2] if you only want the zsum from multislice ptychography. Suggested value is [2,3,4] to save all possible output. 'FOV' takes a list of strings, the available strings are either 'full' or 'crop'. Suggested value is 'crop' so the lateral padded region of object is not saved. 'bit' takes a list of strings, the available strings are 'raw', '32', '16', and '8'. 'raw' is the original value range, while '32' normalizes the value from 0 to 1. '16' and '8' will normalize the value from 0 to 65535 and 255 correspondingly. Defualt is '8' to save only the normalized 8bit result for quick visualization. You can set it to ['raw', '8'] if you want to keep the original float32 bit results with normalized 8bit results. These postprocessing would postfix corresponding labels to the result files.
-    'selected_figs': ['pos'], # type: list of strings. This list specified the selected figures that will be plotted/saved. The available strings are 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', and 'all'. The suggested value is ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'].
+    'selected_figs': ['forward'], # type: list of strings. This list specified the selected figures that will be plotted/saved. The available strings are 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', and 'all'. The suggested value is ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'].
     'copy_params': true, # type: boolean. Set to true if you want to copy the .yml params file to the hypertune folder (hypertune mode) or individual reconstruction folders (reconsturction mode). Suggested value is true for better record keeping, although most information is saved in model.pt and can be loaded by ckpt = torch.load('model.pt'), params = ckpt['params'].
     'if_quiet': true, # type: boolean. Set to true if you want to reduce the amount of printed information during PtyRAD reconstruction. Suggested value is false for more information, but if you're running hypertune mode you should consider setting it to true.
 }
