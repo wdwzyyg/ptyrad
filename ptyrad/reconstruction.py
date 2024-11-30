@@ -679,13 +679,14 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             vmin, vmax, step, log = vparams['min'], vparams['max'], vparams['step'], vparams['log']
             params['model_params']['update_params'][lr_to_tensor[vname]]['lr'] = trial.suggest_float(vname, vmin, vmax, step=step, log=log)
     
-    # probe_params (conv_angle, defocus, c3, c5)
+    # probe_params (pmode_max, conv_angle, defocus, c3, c5)
     remake_probe = False
-    for vname in ['conv_angle', 'defocus', 'c3', 'c5']:
+    for vname in ['pmode_max', 'conv_angle', 'defocus', 'c3', 'c5']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
             vmin, vmax, step = vparams['min'], vparams['max'], vparams['step'] if vparams['step'] else None
-            init.init_params['exp_params'][vname] = trial.suggest_float(vname, vmin, vmax, step=step)
+            vdict = {'name': vname, 'low': vmin, 'high': vmax, 'step': step}
+            init.init_params['exp_params'][vname] = trial.suggest_int(**vdict) if vname == 'pmode_max' else trial.suggest_float(**vdict)
             remake_probe = True
     if remake_probe:
         init.init_probe()

@@ -25,8 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## BO
 - Decouple the BO error from reconstruction loss so we can test different setup
 - Refactor or decouple the measurements initialization from Initializer so we can have more hypertunable parameters and cleaner optuna_objective by re-initializing everything except loading measurements
+- Should consider wrap around the 3 suggest_xxx method and let users choose whether they want 'int', 'float', or 'cat' for 'categorical'. This ensures flexible selection and cleaner code, although lengthier input params file. If we set everything to be 'categorical' then we have an alternative method to exhaust/explore a descrete space than specifying the search space with GridSampler
+- Might also be a good idea to unified the hypertune input as kwargs dict for maximal flexibility and compatibility, so we don't need to worry about the future funciton signature changes. Might looks like `'batch_size' : {'state': true, 'type': 'int', 'kwargs': {'low': 16, 'high': 512, 'step': null, 'log': true}}`
+
 ## Recon workflow
-- Decouple the reconstruction error with data error so that we can reconstruct with whatever target error, while having an independent data error metric 
+- Decouple the reconstruction error with data error so that we can reconstruct with whatever target loss, while having an independent data error metric 
 - Sequential reconstruction (asize_presolve) is also desired (might write a specific notebook to chain them together)
 ### Utils and plotting
 - Apparently plotting and saving matplotlib figure is incredibly slow, it's taking like 1sec/fig and we'll need some improvements
@@ -51,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unrelease]
 ### Added
 - Add `create_optuna_sampler` and `create_optuna_pruner` to allow flexible hyperameter tuning algorithm cofigurations in Optuna. The chosen sampler/pruner names will be affixed to the hypertune result folder.
-- Add new hypertunable parameters including PyTorch optimizers, learning rates, and batch sizes.
+- Add new hypertunable parameters including PyTorch optimizers, learning rates, batch sizes, and number of probe modes.
 
 ## [v0.1.0-beta3.0] - 2024-11-26
 ### Added
