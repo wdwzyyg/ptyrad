@@ -24,10 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Finish the weighted sum of `omode_occu` in `save_results`
 ## BO
 - Decouple the BO error from reconstruction loss so we can test different setup
+- We should really add a quality metrics selection so the BO can be optimized on something other than data error
+- A more reasonable multi-objective optimization is probably the speed vs. quality, because multi-objective is usually more concern about trade-offs. It's a bit tricky to discern data error with reconstruction quality because they often correlate very well until certain level. Although we can combine data error with a subjective quality metric into one overall ptycho metric, like our soft regularization term (data error + sparsity loss), it's still adding an extra weighting parameter. Another valuable dimension might be the dose budget, so we're constantly compromising between dose and quality, although that's something we can only do with simulations.
 - Refactor or decouple the measurements initialization from Initializer so we can have more hypertunable parameters and cleaner optuna_objective by re-initializing everything except loading measurements
-- Should consider wrap around the 3 suggest_xxx method and let users choose whether they want 'int', 'float', or 'cat' for 'categorical'. This ensures flexible selection and cleaner code, although lengthier input params file. If we set everything to be 'categorical' then we have an alternative method to exhaust/explore a descrete space than specifying the search space with GridSampler
-- Might also be a good idea to unified the hypertune input as kwargs dict for maximal flexibility and compatibility, so we don't need to worry about the future funciton signature changes. Might looks like `'batch_size' : {'state': true, 'type': 'int', 'kwargs': {'low': 16, 'high': 512, 'step': null, 'log': true}}`
-
 ## Recon workflow
 - Decouple the reconstruction error with data error so that we can reconstruct with whatever target loss, while having an independent data error metric 
 - Sequential reconstruction (asize_presolve) is also desired (might write a specific notebook to chain them together)
@@ -55,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Add `create_optuna_sampler` and `create_optuna_pruner` to allow flexible hyperameter tuning algorithm cofigurations in Optuna. The chosen sampler/pruner names will be affixed to the hypertune result folder.
 - Add new hypertunable parameters including PyTorch optimizers, learning rates, batch sizes, and number of probe modes.
+### Changed
+- Reformat the `'tune_params'` for hypertune mode so users can freely set the Optuna suggesting int, float, or categorical values and pass whatever keyword arguments (`kwargs`) for maximal flexibility and future compatibility. This allows users to use smart samplers to navigate a discrete search space defined arbitrarily if the users specify the 'choices' when using `'suggest': 'cat'` for categorical values. The alternative approach for discrete search space would be to use `GridSampler` but it's as inefficient as `BruteForceSampler`
+- Refine `optuna_objective` to take the updated `'tune_params'` format
+- Update the `hypertune_params` for demo params files
 
 ## [v0.1.0-beta3.0] - 2024-11-26
 ### Added
@@ -67,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Refine `near_field_evolution` (Fresnel propagator) for performance and simplify the function signature.
 - Refactor `recon_step` and `recon_loop` a bit by moving `iter_times`, `loss_iters`, and `dz_iters` all inside `recon_step` since they'll be stored in `model` for every iteration
 - Simplify the function signature of `save_results`, `make_save_dict`, and `plot_summary` by moving the iter-result-lists inside `model`
-- Fix the `model_instance` usage in `recon_step` for multiGPU mode (`model.module` is required due to DDP wrapping). Note that `start_iter` currently doesn't work properly in DDP mode.
+- Fix the `model_instance` usage in `recon_step` for multiGPU mode (`model.module` is required due to DDP wrapping). Note that `start_iter` currently doesn't work properly in DDP mode (multiGPU).
 
 ## [v0.1.0-beta2.10] - 2024-11-06
 ### Added

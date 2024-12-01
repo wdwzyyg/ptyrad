@@ -8,8 +8,8 @@
         "defocus": 0,
         "c3": 0,
         "c5": 0,
-        "z_distance": 12,
-        "Nlayer": 1,
+        "slice_thickness": 6,
+        "Nlayer": 2,
         "N_scans": 16384,
         "N_scan_slow": 128,
         "N_scan_fast": 128,
@@ -71,76 +71,227 @@
     "hypertune_params": {
         "if_hypertune": false,
         "collate_results": true,
-        "n_trials": 200,
-        "use_pruning": true,
+        "n_trials": 20,
+        "sampler_params": {
+            "name": "TPESampler",
+            "configs": {
+                "multivariate": true,
+                "group": true,
+                "constant_liar": true
+            }
+        },
+        "pruner_params": {
+            "name": "HyperbandPruner",
+            "configs": {
+                "min_resource": 5,
+                "reduction_factor": 2
+            }
+        },
         "storage_path": "sqlite:///hypertune.sqlite3",
         "study_name": "tBL_WSe2",
         "tune_params": {
+            "optimizer": {
+                "state": true,
+                "suggest": "cat",
+                "kwargs": {
+                    "choices": [
+                        "Adam",
+                        "AdamW",
+                        "RMSprop",
+                        "SGD"
+                    ]
+                },
+                "optim_configs": {}
+            },
+            "batch_size": {
+                "state": true,
+                "suggest": "int",
+                "kwargs": {
+                    "low": 16,
+                    "high": 512,
+                    "log": true
+                }
+            },
+            "plr": {
+                "state": false,
+                "suggest": "cat",
+                "kwargs": {
+                    "choices": [
+                        0.01,
+                        0.0001,
+                        0.0001
+                    ]
+                }
+            },
+            "oalr": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.0001,
+                    "high": 0.01,
+                    "step": null,
+                    "log": true
+                }
+            },
+            "oplr": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.0001,
+                    "high": 0.01,
+                    "step": null,
+                    "log": true
+                }
+            },
+            "slr": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.0001,
+                    "high": 0.01,
+                    "step": null,
+                    "log": true
+                }
+            },
+            "tlr": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.0001,
+                    "high": 0.01,
+                    "step": null,
+                    "log": true
+                }
+            },
+            "dzlr": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.0001,
+                    "high": 0.01,
+                    "step": null,
+                    "log": true
+                }
+            },
+            "pmode_max": {
+                "state": false,
+                "suggest": "int",
+                "kwargs": {
+                    "low": 1,
+                    "high": 8,
+                    "step": 1,
+                    "log": false
+                }
+            },
             "conv_angle": {
                 "state": false,
-                "min": 24,
-                "max": 26,
-                "step": 0.1
+                "suggest": "float",
+                "kwargs": {
+                    "low": 24,
+                    "high": 26,
+                    "step": 1,
+                    "log": false
+                }
             },
             "defocus": {
-                "state": true,
-                "min": -50,
-                "max": 50,
-                "step": null
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": -50,
+                    "high": 50,
+                    "step": 0.1,
+                    "log": false
+                }
             },
             "c3": {
-                "state": true,
-                "min": 4000,
-                "max": 10000,
-                "step": null
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 4000,
+                    "high": 10000,
+                    "step": null,
+                    "log": false
+                }
             },
             "c5": {
-                "state": true,
-                "min": 50000,
-                "max": 100000,
-                "step": 5000
-            },
-            "z_distance": {
                 "state": false,
-                "min": 4,
-                "max": 8,
-                "step": 0.5
+                "suggest": "float",
+                "kwargs": {
+                    "low": 50000,
+                    "high": 100000,
+                    "step": 5000,
+                    "log": false
+                }
+            },
+            "dz": {
+                "state": false,
+                "suggest": "float",
+                "kwargs": {
+                    "low": 4,
+                    "high": 8,
+                    "step": 0.5,
+                    "log": false
+                }
             },
             "scale": {
                 "state": false,
-                "min": 0.8,
-                "max": 1.2,
-                "step": 0.02
+                "suggest": "float",
+                "kwargs": {
+                    "low": 0.8,
+                    "high": 1.2,
+                    "step": 0.02,
+                    "log": false
+                }
             },
             "asymmetry": {
                 "state": false,
-                "min": -0.2,
-                "max": 0.2,
-                "step": 0.05
+                "suggest": "float",
+                "kwargs": {
+                    "low": -0.2,
+                    "high": 0.2,
+                    "step": 0.05,
+                    "log": false
+                }
             },
             "rotation": {
                 "state": false,
-                "min": -4,
-                "max": 4,
-                "step": 0.5
+                "suggest": "float",
+                "kwargs": {
+                    "low": -4,
+                    "high": 4,
+                    "step": 0.5,
+                    "log": false
+                }
             },
             "shear": {
                 "state": false,
-                "min": -4,
-                "max": 4,
-                "step": 0.5
+                "suggest": "float",
+                "kwargs": {
+                    "low": -4,
+                    "high": 4,
+                    "step": 0.5,
+                    "log": false
+                }
             },
             "tilt_y": {
                 "state": false,
-                "min": -5,
-                "max": 5,
-                "step": 0.5
+                "suggest": "float",
+                "kwargs": {
+                    "low": -5,
+                    "high": 5,
+                    "step": 0.5,
+                    "log": false
+                }
             },
             "tilt_x": {
                 "state": false,
-                "min": -5,
-                "max": 5,
-                "step": 0.5
+                "suggest": "float",
+                "kwargs": {
+                    "low": -5,
+                    "high": 5,
+                    "step": 0.5,
+                    "log": false
+                }
             }
         }
     },
@@ -155,23 +306,27 @@
         "update_params": {
             "obja": {
                 "start_iter": 1,
-                "lr": 0.01
+                "lr": 0.0005
             },
             "objp": {
                 "start_iter": 1,
-                "lr": 0.01
+                "lr": 0.0005
             },
             "obj_tilts": {
                 "start_iter": null,
                 "lr": 0
             },
+            "slice_thickness": {
+                "start_iter": null,
+                "lr": 0
+            },
             "probe": {
                 "start_iter": 1,
-                "lr": 0.01
+                "lr": 0.0001
             },
             "probe_pos_shifts": {
                 "start_iter": 1,
-                "lr": 0.01
+                "lr": 0.0001
             }
         }
     },
@@ -264,7 +419,7 @@
         }
     },
     "recon_params": {
-        "NITER": 100,
+        "NITER": 20,
         "INDICES_MODE": {
             "mode": "full",
             "subscan_slow": null,
@@ -275,7 +430,7 @@
             "grad_accumulation": 1
         },
         "GROUP_MODE": "random",
-        "SAVE_ITERS": 20,
+        "SAVE_ITERS": 5,
         "output_dir": "output/tBL_WSe2/",
         "recon_dir_affixes": [
             "optimizer",
@@ -292,7 +447,8 @@
             "model",
             "obja",
             "objp",
-            "probe"
+            "probe",
+            "probe_prop"
         ],
         "result_modes": {
             "obj_dim": [
@@ -314,7 +470,8 @@
             "probe_r_amp",
             "probe_k_amp",
             "probe_k_phase",
-            "pos"
+            "pos",
+            "slice_thickness"
         ],
         "copy_params": true,
         "if_quiet": false

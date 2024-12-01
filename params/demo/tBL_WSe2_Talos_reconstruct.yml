@@ -58,22 +58,32 @@ source_params : {
 hypertune_params : {
     'if_hypertune'   : false, # type: boolean. Default is false. Set to true to run PtyRAD in hypertune (hyperparameter optimization) mode. This is the main switch for hypertune mode so none of the settings in 'hypertune_params' would take effect if 'if_hypertune' is false.
     'collate_results': true, # type: boolean. Default is true. Set to true to collect results/figs specified under 'recon_params' from each hypertune trial to 'output_dir/<HYPERTUNE_FOLDER>' and name them by data error followed by trial parameters. This provides a convenient way to quickly examine the hypertune results inside the hypertune folder under the main output directory 'output_dir'. This is an independent control than 'SAVE_ITERS' and will save by the end of the 'NITER' or when the trial is pruned.
-    'n_trials'       : 200, # type: int. Number of hypertune trials. Each trial is a separate PtyRAD reconstruction with a set of optimizable parameter values (i.e., a configuration). Note that when the hypertune mode is run in parallel (i.e., multiple jobs on multiple GPU nodes accesing the same database/study), each job will run for 'n_trials' times. So submiting 5 jobs with 'n_trials': 200 will get you a total of 1000 trials in the database/study
-    'use_pruning'    : true, # type: boolean. Default is true. Set to true to prune (i.e., early termination) unpromising trials to save computation budget. The current prunner is using Hyperband algorithm, see Optuna document for more details
+    'n_trials'       : 20, # type: int. Number of hypertune trials. Each trial is a separate PtyRAD reconstruction with a set of optimizable parameter values (i.e., a configuration). Note that when the hypertune mode is run in parallel (i.e., multiple jobs on multiple GPU nodes accesing the same database/study), each job will run for 'n_trials' times. So submiting 5 jobs with 'n_trials': 200 will get you a total of 1000 trials in the database/study
+    'sampler_params' : {'name': 'TPESampler', 'configs': {'multivariate': true, 'group': true, 'constant_liar': true}}, # type: dict. Sampler is the optimization algorithm used for hyperparameter tuning. See https://optuna.readthedocs.io/en/stable/reference/samplers/index.html for more details.
+    'pruner_params'  : {'name': 'HyperbandPruner', 'configs': {'min_resource': 5, 'reduction_factor': 2}}, # type: null, dict. Pruning is early termination of unpromising trials to save computation budget. Set to False to disable pruning (i.e., no early termination). The recommended prunner is HyperbandPruner, see Optuna document for more details
     'storage_path'   : 'sqlite:///hypertune.sqlite3', # type: str. Path to the SQLite database file (i.e., sotrage) as 'sqlite:///<DATABASE_FILENAME>.sqlite3'.
     'study_name'     : 'tBL_WSe2', # type: str. Name of the hypertune record (i.e., study). Hypertune of different dataset or different search space (i.e., different optimizable parameters) are encouraged to use different study name or even separate database file
     'tune_params'    : {
-        'conv_angle' : {'state': false, 'min': 24, 'max': 26, 'step': 0.1},
-        'defocus'    : {'state': true, 'min': -50, 'max': 50, 'step': null},
-        'c3'         : {'state': true, 'min': 4000, 'max': 10000, 'step': null},
-        'c5'         : {'state': true, 'min': 50000, 'max': 100000, 'step': 5000},
-        'z_distance' : {'state': false, 'min': 4, 'max': 8, 'step': 0.5},
-        'scale'      : {'state': false, 'min': 0.8, 'max': 1.2, 'step': 0.02}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
-        'asymmetry'  : {'state': false, 'min': -0.2, 'max': 0.2, 'step': 0.05},
-        'rotation'   : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
-        'shear'      : {'state': false, 'min': -4, 'max': 4, 'step': 0.5},
-        'tilt_y'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}, # This refers to the 'init_tilts' under 'source_params['tilt_params']['init_tilts']'
-        'tilt_x'     : {'state': false, 'min': -5, 'max': 5, 'step': 0.5}
+        'optimizer'  : {'state': true, 'suggest': 'cat', 'kwargs': {'choices': ["Adam", "AdamW", "RMSprop", 'SGD']}, 'optim_configs': {}},
+        'batch_size' : {'state': true, 'suggest': 'int', 'kwargs': {'low': 16, 'high': 512, 'log': true}},
+        'plr'        : {'state': false, 'suggest': 'cat', 'kwargs': {'choices': [1.0e-2, 1.0e-4, 1.0e-4]}}, # can only set as (1) step != 1 and log=False or (2) step=None and log=True
+        'oalr'       : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'oplr'       : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'slr'        : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'tlr'        : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'dzlr'       : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'pmode_max'  : {'state': false, 'suggest': 'int', 'kwargs': {'low': 1, 'high': 8, 'step': 1, 'log': false}},
+        'conv_angle' : {'state': false, 'suggest': 'float', 'kwargs': {'low': 24, 'high': 26, 'step': 1, 'log': false}},
+        'defocus'    : {'state': false, 'suggest': 'float', 'kwargs': {'low': -50, 'high': 50, 'step': 0.1, 'log': false}},
+        'c3'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 4000, 'high': 10000, 'step': null, 'log': false}},
+        'c5'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 50000, 'high': 100000, 'step': 5000, 'log': false}},
+        'dz'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 4, 'high': 8, 'step': 0.5, 'log': false}},
+        'scale'      : {'state': false, 'suggest': 'float', 'kwargs': {'low': 0.8, 'high': 1.2, 'step': 0.02, 'log': false}}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
+        'asymmetry'  : {'state': false, 'suggest': 'float', 'kwargs': {'low': -0.2, 'high': 0.2, 'step': 0.05, 'log': false}},
+        'rotation'   : {'state': false, 'suggest': 'float', 'kwargs': {'low': -4, 'high': 4, 'step': 0.5, 'log': false}},
+        'shear'      : {'state': false, 'suggest': 'float', 'kwargs': {'low': -4, 'high': 4, 'step': 0.5, 'log': false}},
+        'tilt_y'     : {'state': false, 'suggest': 'float', 'kwargs': {'low': -5, 'high': 5, 'step': 0.5, 'log': false}}, # This refers to the 'init_tilts' under 'source_params['tilt_params']['init_tilts']'
+        'tilt_x'     : {'state': false, 'suggest': 'float', 'kwargs': {'low': -5, 'high': 5, 'step': 0.5, 'log': false}}
     }
 }
 
