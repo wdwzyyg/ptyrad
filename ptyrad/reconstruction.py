@@ -367,7 +367,7 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     plot_summary(output_path, model_instance, niter, indices, init_variables, selected_figs=selected_figs, show_fig=False, save_fig=True, verbose=verbose)
     
     model_instance = model.module if hasattr(model, "module") else model
-    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model_instance.iter_times):.5g} sec ###", verbose=verbose)
+    vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model_instance.iter_times):.5g} with std = {np.std(model_instance.iter_times):.3f} ###", verbose=verbose)
     vprint(" ", verbose=verbose)
 
 def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=True, acc=None):

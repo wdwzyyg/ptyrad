@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy.ndimage import gaussian_filter, zoom
+from scipy.io.matlab import matfile_version as get_matfile_version
 
 from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif, load_npy
 from ptyrad.utils import (
@@ -192,7 +193,7 @@ class Initializer:
             meas = load_raw(params['path'], shape=params.get('shape', default_shape), offset=params.get('offset', 0), gap=params.get('gap', 1024))
         else:
             raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw' !!")
-        vprint(f"Imported meausrements shape = {meas.shape}", verbose=self.verbose)
+        vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
         vprint(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         
         # Permute, reshape, and flip
@@ -331,8 +332,13 @@ class Initializer:
             probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
         elif source == 'PtyShv':
             mat_path = params
+            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
+            use_h5py = True if mat_version[0] == 2 else False
             probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0] # PtychoShelves probe generally has (Ny,Nx,pmode,vp) dimension. Usually people prefer pmode over vp.
             vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
+            if use_h5py:
+                probe = probe.transpose(range(probe.ndim)[::-1]) 
+                vprint(f"Reverse array axes because .mat (v7.3) is loaded with h5py, probe.shape = {probe.shape}", verbose=self.verbose)
             if probe.ndim == 4:
                 vprint("Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
                 probe = probe[...,0]
@@ -415,7 +421,12 @@ class Initializer:
             pos = crop_pos + probe_pos_shifts
         elif source == 'PtyShv':
             mat_path = params
+            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
+            use_h5py = True if mat_version[0] == 2 else False
             mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
+            if use_h5py:
+                mat_contents = [arr.transpose(range(arr.ndim)[::-1]) for arr in mat_contents]
+                vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
             probe_positions = mat_contents[2]
             probe_shape = mat_contents[1].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp)
             obj_shape   = mat_contents[0].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
@@ -500,12 +511,12 @@ class Initializer:
             obj = obja * np.exp(1j * objp)
         elif source == 'PtyShv':
             mat_path = params
+            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
+            use_h5py = True if mat_version[0] == 2 else False
             obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
-            
-            if obj.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                print(f"Loaded object.dtype = {obj.dtype}, cast it to 'complex128'")
-                obj = obj.view('complex128')
-                
+            if use_h5py:
+                obj = obj.transpose(range(obj.ndim)[::-1])
+                vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
             vprint("Expanding PtyShv object dimension", verbose=self.verbose)
             vprint(f"Input PtyShv obj has original shape {obj.shape}", verbose=self.verbose)
             if len(obj.shape) == 2: # Single-slice ptycho

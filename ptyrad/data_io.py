@@ -74,13 +74,22 @@ def load_hdf5(file_path, dataset_key="ds"):
             print("Imported entire .hdf5 as a dict:", file_path)
             f = dict()
             for key in hf.keys():
-                f[key] = np.array(hf[key])
+                data = np.array(hf[key])
+                if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+                    print(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                    data = data.view('complex128')
+                f[key] = data
+            print("Success! Loaded .hdf5 file path =", file_path)
             return f
             
         else:
             data = np.array(hf[dataset_key])
+            if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+                print(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                data = data.view('complex128')
             print("Success! Loaded .hdf5 file path =", file_path)
             print("Imported .hdf5 data shape =", data.shape)
+            print("Imported .hdf5 data type =", data.dtype)
             return data
 
 def load_tif(file_path):
@@ -267,7 +276,9 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
             print("Can't load .mat v7.3 with scipy. Switching to h5py.")
-            with h5py.File(file_path, "r") as hdf_file:
-                result_list.append(hdf_file[name][()])
+            if name == 'outputs.probe_positions': # Convert the scipy syntax to hdf5 syntax
+                name = 'outputs/probe_positions'
+            data = load_hdf5(file_path, name)
+            result_list.append(data)
     print("Success! Loaded .mat file path =", file_path)
     return result_list
