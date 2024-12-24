@@ -1,0 +1,1302 @@
+/home/fs01/cl2696/workspace/ptyrad
+c0001
+Sun Dec 15 14:21:28 EST 2024
+params_path = params/paper/ptyrad_multigpu_tBL_WSe2.yml
+2024-12-15 14:21:33,355 - ### PtyRAD Logger configuration ###
+2024-12-15 14:21:33,355 - log_file       = 'ptyrad_log.txt'. If log_file = None, no log file will be created.
+2024-12-15 14:21:33,355 - log_dir        = 'auto'. If log_dir = 'auto', then log will be saved to `output_path` or 'logs/'.
+2024-12-15 14:21:33,355 - flush_file     = True. Automatically set to True if `log_file is not None`
+2024-12-15 14:21:33,355 - prefix_date    = True. If true, a datetime str is prefixed to the `log_file`.
+2024-12-15 14:21:33,355 - prefix_jobid   = '0'. If not 0, it'll be prefixed to the log file. This is used for hypertune mode with multiple GPUs.
+2024-12-15 14:21:33,356 - append_to_file = True. If true, logs will be appended to the existing file. If false, the log file will be overwritten.
+2024-12-15 14:21:33,356 - show_timestamp = True. If true, the printed information will contain a timestamp.
+2024-12-15 14:21:33,356 -  
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+2024-12-15 14:21:33,720 - ### Initializing HuggingFace accelerator ###
+2024-12-15 14:21:33,720 - Accelerator.distributed_type = DistributedType.NO
+2024-12-15 14:21:33,720 - Accelerator.num_process      = 1
+2024-12-15 14:21:33,720 - Accelerator.mixed_precision  = no
+2024-12-15 14:21:33,720 -  
+2024-12-15 14:21:33,720 - ### System information ###
+2024-12-15 14:21:33,720 - Operating System: Linux 4.18.0-372.26.1.el8_6.x86_64
+2024-12-15 14:21:33,720 - OS Version: #1 SMP Tue Sep 13 18:09:48 UTC 2022
+2024-12-15 14:21:33,720 - Machine: x86_64
+2024-12-15 14:21:33,723 - Processor: x86_64
+2024-12-15 14:21:33,723 - Available CPU cores: 32
+2024-12-15 14:21:33,736 - Total Memory: 1007.45 GB
+2024-12-15 14:21:33,737 - Available Memory: 998.21 GB
+2024-12-15 14:21:33,737 - CUDA Available: True
+2024-12-15 14:21:33,737 - CUDA Version: 11.8
+2024-12-15 14:21:33,749 - GPU Device: ['NVIDIA A100-SXM4-80GB']
+2024-12-15 14:21:33,749 - Python Executable: /home/fs01/cl2696/anaconda3/envs/ptyrad_acc/bin/python
+2024-12-15 14:21:33,749 - Python Version: 3.12.5 | packaged by conda-forge | (main, Aug  8 2024, 18:36:51) [GCC 12.4.0]
+2024-12-15 14:21:33,749 - NumPy Version: 1.26.4
+2024-12-15 14:21:33,749 - PyTorch Version: 2.4.1
+2024-12-15 14:21:33,749 - PtyRAD Version: v0.1.0-beta3.0
+2024-12-15 14:21:33,749 -  
+2024-12-15 14:21:33,750 - ### Loading params file ###
+2024-12-15 14:21:33,781 - Success! Loaded .yml file path = params/paper/ptyrad_multigpu_tBL_WSe2.yml
+2024-12-15 14:21:33,782 -  
+2024-12-15 14:21:33,782 - ### Setting GPU ID ###
+2024-12-15 14:21:33,782 - Selected GPU device: cuda:0 (NVIDIA A100-SXM4-80GB)
+2024-12-15 14:21:33,782 -  
+2024-12-15 14:21:33,782 - ### Initializing Initializer ###
+2024-12-15 14:21:33,782 - ### Initializing cache ###
+2024-12-15 14:21:33,782 - use_cached_obj   = False
+2024-12-15 14:21:33,782 - use_cached_probe = False
+2024-12-15 14:21:33,782 - use_cached_pos   = False
+2024-12-15 14:21:33,782 -  
+2024-12-15 14:21:33,782 - ### Initializing exp_params ###
+2024-12-15 14:21:33,782 - Input values are displayed below:
+2024-12-15 14:21:33,782 - illumination_type: electron
+2024-12-15 14:21:33,782 - kv: 80
+2024-12-15 14:21:33,782 - conv_angle: 24.9
+2024-12-15 14:21:33,782 - Npix: 128
+2024-12-15 14:21:33,782 - dx_spec: 0.1494
+2024-12-15 14:21:33,782 - defocus: 0
+2024-12-15 14:21:33,782 - c3: 0
+2024-12-15 14:21:33,782 - c5: 0
+2024-12-15 14:21:33,782 - slice_thickness: 1
+2024-12-15 14:21:33,782 - Nlayer: 12
+2024-12-15 14:21:33,782 - N_scans: 16384
+2024-12-15 14:21:33,782 - N_scan_slow: 128
+2024-12-15 14:21:33,782 - N_scan_fast: 128
+2024-12-15 14:21:33,782 - scan_step_size: 0.429
+2024-12-15 14:21:33,782 - scan_flipT: None
+2024-12-15 14:21:33,782 - scan_affine: None
+2024-12-15 14:21:33,782 - scan_rand_std: 0.15
+2024-12-15 14:21:33,782 - omode_max: 1
+2024-12-15 14:21:33,782 - omode_init_occu: {'occu_type': 'uniform', 'init_occu': None}
+2024-12-15 14:21:33,782 - pmode_max: 6
+2024-12-15 14:21:33,782 - pmode_init_pows: [0.02]
+2024-12-15 14:21:33,782 - probe_permute: None
+2024-12-15 14:21:33,783 - meas_permute: None
+2024-12-15 14:21:33,783 - meas_reshape: None
+2024-12-15 14:21:33,783 - meas_flipT: [1, 0, 0]
+2024-12-15 14:21:33,783 - meas_crop: None
+2024-12-15 14:21:33,783 - meas_resample: {'mode': None, 'scale_factors': [2, 2]}
+2024-12-15 14:21:33,783 - meas_add_source_size: None
+2024-12-15 14:21:33,783 - meas_add_detector_blur: None
+2024-12-15 14:21:33,783 - meas_add_poisson_noise: None
+2024-12-15 14:21:33,783 -  
+2024-12-15 14:21:33,783 - Derived values given input exp_params:
+2024-12-15 14:21:33,783 - kv          = 80 kV
+2024-12-15 14:21:33,783 - wavelength  = 0.0418 Ang
+2024-12-15 14:21:33,783 - conv_angle  = 24.9 mrad
+2024-12-15 14:21:33,783 - Npix        = 128 px
+2024-12-15 14:21:33,783 - dk          = 0.0523 Ang^-1
+2024-12-15 14:21:33,783 - kMax        = 3.3467 Ang^-1
+2024-12-15 14:21:33,783 - alpha_max   = 139.7495 mrad
+2024-12-15 14:21:33,783 - dx          = 0.1494 Ang, Nyquist-limited dmin = 2*dx = 0.2988 Ang
+2024-12-15 14:21:33,783 - Rayleigh-limited resolution  = 1.0230 Ang (0.61*lambda/alpha for focused probe )
+2024-12-15 14:21:33,783 - Real space probe extent = 19.1232 Ang
+2024-12-15 14:21:33,783 -  
+2024-12-15 14:21:33,783 - ### Initializing measurements from 'raw' ###
+2024-12-15 14:21:34,591 - Imported meausrements shape / dtype = (16384, 128, 128), dtype = float32
+2024-12-15 14:21:34,732 - Imported meausrements int. statistics (min, mean, max) = (-30.8785, 1814.7064, 99441.8047)
+2024-12-15 14:21:34,733 - Flipping measurements with [flipup, fliplr, transpose] = [1, 0, 0]
+2024-12-15 14:21:35,009 - Minimum value of -30.8785 subtracted due to the positive px value constraint of measurements
+2024-12-15 14:21:35,010 - Normalizing measurements so the averaged measurement has max intensity at 1
+2024-12-15 14:21:35,836 - Radius of bright field disk             (rbf) = 11.0 px, suggested probe_mask_k radius (rbf*2/Npix) > 0.17
+2024-12-15 14:21:35,974 - meausrements int. statistics (min, mean, max) = (0.0000, 0.0275, 1.4818)
+2024-12-15 14:21:35,975 - measurements                      (N, Ky, Kx) = float32, (16384, 128, 128)
+2024-12-15 14:21:35,975 -  
+2024-12-15 14:21:35,975 - ### Initializing probe from 'simu' ###
+2024-12-15 14:21:35,975 - Use exp_params and default values instead for simulation
+2024-12-15 14:21:35,975 - Start simulating STEM probe
+2024-12-15 14:21:35,980 - kv          = 80.0 kV
+2024-12-15 14:21:35,980 - wavelength  = 0.0418 Ang
+2024-12-15 14:21:35,980 - conv_angle  = 24.9 mrad
+2024-12-15 14:21:35,980 - Npix        = 128 px
+2024-12-15 14:21:35,980 - dk          = 0.0523 Ang^-1
+2024-12-15 14:21:35,980 - kMax        = 3.3467 Ang^-1
+2024-12-15 14:21:35,980 - alpha_max   = 139.7447 mrad
+2024-12-15 14:21:35,980 - dx          = 0.1494 Ang, Nyquist-limited dmin = 2*dx = 0.2988 Ang
+2024-12-15 14:21:35,980 - Rayleigh-limited resolution  = 1.0229 Ang (0.61*lambda/alpha for focused probe )
+2024-12-15 14:21:35,980 - Real space probe extent = 19.1232 Ang
+2024-12-15 14:21:35,980 - Start making mixed-state STEM probe with 6 incoherent probe modes
+2024-12-15 14:21:35,993 - Relative power of probe modes = [0.9  0.02 0.02 0.02 0.02 0.02]
+2024-12-15 14:21:36,069 - probe                         (pmode, Ny, Nx) = complex64, (6, 128, 128)
+2024-12-15 14:21:36,135 - sum(|probe_data|**2) = 450.46, while sum(meas)/len(meas) = 450.46
+2024-12-15 14:21:36,135 -  
+2024-12-15 14:21:36,135 - ### Initializing probe pos from 'simu' ###
+2024-12-15 14:21:36,135 - Simulating probe positions with dx_spec = 0.1494, scan_step_size = 0.429, N_scan_fast = 128, N_scan_slow = 128
+2024-12-15 14:21:36,144 - Applying Gaussian distributed random displacement with std = 0.15 px to scan positions
+2024-12-15 14:21:36,146 - crop_pos                                (N,2) = int16, (16384, 2)
+2024-12-15 14:21:36,146 - crop_pos 1st and last px coords (y,x)         = ([50, 49], [414, 414])
+2024-12-15 14:21:36,148 - crop_pos extent (Ang)                         = [54.6804 54.6804]
+2024-12-15 14:21:36,148 - probe_pos_shifts                        (N,2) = float32, (16384, 2)
+2024-12-15 14:21:36,148 -  
+2024-12-15 14:21:36,148 - ### Initializing obj from 'simu' ###
+2024-12-15 14:21:36,148 - obj_shape is not provided, use exp_params, position range, and probe shape for estimated obj_shape (omode, Nz, Ny, Nx)
+2024-12-15 14:21:36,291 - object                    (omode, Nz, Ny, Nx) = complex64, (1, 12, 592, 592)
+2024-12-15 14:21:36,291 - object extent                 (Z, Y, X) (Ang) = [12.     88.4448 88.4448]
+2024-12-15 14:21:36,291 -  
+2024-12-15 14:21:36,291 - ### Initializing omode_occu from 'uniform' ###
+2024-12-15 14:21:36,291 - omode_occu                            (omode) = float32, (1,)
+2024-12-15 14:21:36,291 -  
+2024-12-15 14:21:36,291 - ### Initializing H (Fresnel propagator) ###
+2024-12-15 14:21:36,291 - Calculating H with probe_shape = [128 128], dx_spec = 0.1494 Ang, slice_thickness = 1.0000 Ang, lambd = 0.0418 Ang
+2024-12-15 14:21:36,292 - H                                    (Ky, Kx) = complex64, (128, 128)
+2024-12-15 14:21:36,292 -  
+2024-12-15 14:21:36,292 - ### Initializing obj tilts from = 'simu' ###
+2024-12-15 14:21:36,293 - Initialized obj_tilts with init_tilts = [[0, 0]] (theta_y, theta_x) mrad
+2024-12-15 14:21:36,293 - obj_tilts                              (N, 2) = float32, (1, 2)
+2024-12-15 14:21:36,293 -  
+2024-12-15 14:21:36,293 - ### Checking consistency between input params with the initialized variables ###
+2024-12-15 14:21:36,293 - Npix, DP measurements, probe, and H shapes are consistent as '128'
+2024-12-15 14:21:36,293 - N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '16384'
+2024-12-15 14:21:36,293 - obj.shape[0] is consistent with len(omode_occu) as '1'
+2024-12-15 14:21:36,293 - obj.shape[1] is consistent with Nlayer as '12'
+2024-12-15 14:21:36,293 - obj_tilts is consistent with either 1 or N_scans
+2024-12-15 14:21:36,293 - Pass the consistency check of initialized variables, initialization is done!
+2024-12-15 14:21:36,293 -  
+2024-12-15 14:21:36,293 - ### Initializing loss function ###
+2024-12-15 14:21:36,293 -  
+2024-12-15 14:21:36,293 - ### Initializing constraint function ###
+2024-12-15 14:21:36,293 -  
+2024-12-15 14:21:36,293 - ### Done initializing PtyRADSolver ###
+2024-12-15 14:21:36,293 -  
+2024-12-15 14:21:38,307 - ### Starting the PtyRADSolver in reconstruct mode ###
+2024-12-15 14:21:38,307 -  
+2024-12-15 14:21:38,513 - ### PtychoAD optimizable variables ###
+2024-12-15 14:21:38,513 - obja            : torch.Size([1, 12, 592, 592])   , torch.float32   , device:cuda:0, grad:True , lr:5e-04
+2024-12-15 14:21:38,513 - objp            : torch.Size([1, 12, 592, 592])   , torch.float32   , device:cuda:0, grad:True , lr:5e-04
+2024-12-15 14:21:38,513 - obj_tilts       : torch.Size([1, 2])              , torch.float32   , device:cuda:0, grad:False, lr:0e+00
+2024-12-15 14:21:38,513 - slice_thickness : torch.Size([])                  , torch.float32   , device:cuda:0, grad:False, lr:0e+00
+2024-12-15 14:21:38,513 - probe           : torch.Size([6, 128, 128, 2])    , torch.float32   , device:cuda:0, grad:True , lr:1e-04
+2024-12-15 14:21:38,513 - probe_pos_shifts: torch.Size([16384, 2])          , torch.float32   , device:cuda:0, grad:True , lr:5e-04
+2024-12-15 14:21:38,513 -  
+2024-12-15 14:21:38,513 - ### Optimizable variables statitsics ###
+2024-12-15 14:21:38,513 - Total measurement values  : 268,435,456
+2024-12-15 14:21:38,513 - Total optimizing variables: 8,640,512
+2024-12-15 14:21:38,513 - Overdetermined ratio      : 31.07
+2024-12-15 14:21:38,514 -  
+2024-12-15 14:21:38,514 - ### Model behavior ###
+2024-12-15 14:21:38,514 - Obj preblur               : False
+2024-12-15 14:21:38,514 - Tilt propagator           : False
+2024-12-15 14:21:38,514 - Change slice thickness    : False
+2024-12-15 14:21:38,514 - Sub-px probe shift        : True
+2024-12-15 14:21:38,514 - Detector blur             : False
+2024-12-15 14:21:38,514 - On-the-fly meas resample  : False
+2024-12-15 14:21:38,514 -  
+2024-12-15 14:21:38,514 - ### Creating PyTorch 'Adam' optimizer with configs = {} ###
+2024-12-15 14:21:38,514 -  
+2024-12-15 14:21:38,514 - ### Generating indices, batches, and output_path ###
+2024-12-15 14:21:38,517 - d90 = 23.000 px or 3.436 Ang
+2024-12-15 14:21:38,517 - Selecting indices with the 'full' mode 
+2024-12-15 14:21:39,131 - Generated 64 'random' groups of ~256 scan positions in 0.000 sec
+2024-12-15 14:21:39,300 - The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = 256 * 1 = 256
+2024-12-15 14:21:39,302 - output_path = 'output/tBL_WSe2//20241215_full_N16384_dp128_flipT100_random256_p6_1obj_12slice_dz1_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_orblur0.2_ozblur1_oathr0.98_opos_sng1.0_spr0.1_1gpu' is generated!
+2024-12-15 14:21:39,722 -  
+2024-12-15 14:21:39,722 - ### Successfully copy 'ptyrad_multigpu_tBL_WSe2.yml' to 'output/tBL_WSe2//20241215_full_N16384_dp128_flipT100_random256_p6_1obj_12slice_dz1_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_orblur0.2_ozblur1_oathr0.98_opos_sng1.0_spr0.1_1gpu' ###
+2024-12-15 14:21:39,722 -  
+2024-12-15 14:21:39,723 - ### Log file is flushed (created) as output/tBL_WSe2//20241215_full_N16384_dp128_flipT100_random256_p6_1obj_12slice_dz1_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr5e-4_orblur0.2_ozblur1_oathr0.98_opos_sng1.0_spr0.1_1gpu/20241215_ptyrad_log.txt ###
+2024-12-15 14:21:39,723 -  
+2024-12-15 14:21:39,723 - ### Start the PtyRAD iterative ptycho reconstruction ###
+2024-12-15 14:21:39,723 - Iter: 1, obja.requires_grad = True
+2024-12-15 14:21:39,723 - Iter: 1, objp.requires_grad = True
+2024-12-15 14:21:39,723 - Iter: 1, obj_tilts.requires_grad = False
+2024-12-15 14:21:39,723 - Iter: 1, slice_thickness.requires_grad = False
+2024-12-15 14:21:39,724 - Iter: 1, probe.requires_grad = True
+2024-12-15 14:21:39,724 - Iter: 1, probe_pos_shifts.requires_grad = True
+2024-12-15 14:21:39,915 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.191 sec
+2024-12-15 14:21:41,450 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:21:43,112 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:21:44,646 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:21:46,308 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:21:47,970 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:21:49,088 - Apply ortho pmode constraint at iter 1, relative pmode power = [0.891 0.023 0.022 0.022 0.021 0.021], probe int sum = 454.4338
+2024-12-15 14:21:49,089 - Apply fix probe int constraint at iter 1, probe int sum = 450.4552
+2024-12-15 14:21:49,093 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 1
+2024-12-15 14:21:49,093 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 1
+2024-12-15 14:21:50,427 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 1
+2024-12-15 14:21:50,428 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 1
+2024-12-15 14:21:50,430 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 1
+2024-12-15 14:21:50,430 - Apply hard positivity constraint on objp at iter 1
+2024-12-15 14:21:50,430 - Iter: 1, Total Loss: 0.5465, loss_single: 0.5460, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 10.707 sec
+2024-12-15 14:21:50,430 -  
+2024-12-15 14:21:50,431 - Iter: 2, obja.requires_grad = True
+2024-12-15 14:21:50,431 - Iter: 2, objp.requires_grad = True
+2024-12-15 14:21:50,431 - Iter: 2, obj_tilts.requires_grad = False
+2024-12-15 14:21:50,431 - Iter: 2, slice_thickness.requires_grad = False
+2024-12-15 14:21:50,431 - Iter: 2, probe.requires_grad = True
+2024-12-15 14:21:50,431 - Iter: 2, probe_pos_shifts.requires_grad = True
+2024-12-15 14:21:50,565 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.134 sec
+2024-12-15 14:21:52,101 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:21:53,765 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:21:55,300 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:21:56,963 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:21:58,626 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:21:58,628 - Apply ortho pmode constraint at iter 2, relative pmode power = [0.927 0.027 0.015 0.015 0.008 0.008], probe int sum = 432.6996
+2024-12-15 14:21:58,629 - Apply fix probe int constraint at iter 2, probe int sum = 450.4552
+2024-12-15 14:21:58,629 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 2
+2024-12-15 14:21:58,630 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 2
+2024-12-15 14:21:58,630 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 2
+2024-12-15 14:21:58,631 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 2
+2024-12-15 14:21:58,631 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 2
+2024-12-15 14:21:58,631 - Apply hard positivity constraint on objp at iter 2
+2024-12-15 14:21:58,632 - Iter: 2, Total Loss: 0.3776, loss_single: 0.3770, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.201 sec
+2024-12-15 14:21:58,632 -  
+2024-12-15 14:21:58,632 - Iter: 3, obja.requires_grad = True
+2024-12-15 14:21:58,632 - Iter: 3, objp.requires_grad = True
+2024-12-15 14:21:58,632 - Iter: 3, obj_tilts.requires_grad = False
+2024-12-15 14:21:58,632 - Iter: 3, slice_thickness.requires_grad = False
+2024-12-15 14:21:58,632 - Iter: 3, probe.requires_grad = True
+2024-12-15 14:21:58,632 - Iter: 3, probe_pos_shifts.requires_grad = True
+2024-12-15 14:21:58,760 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:00,296 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:01,958 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:03,494 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:05,157 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:06,820 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:06,821 - Apply ortho pmode constraint at iter 3, relative pmode power = [0.912 0.033 0.016 0.016 0.012 0.011], probe int sum = 455.1364
+2024-12-15 14:22:06,822 - Apply fix probe int constraint at iter 3, probe int sum = 450.4552
+2024-12-15 14:22:06,822 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 3
+2024-12-15 14:22:06,823 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 3
+2024-12-15 14:22:06,824 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 3
+2024-12-15 14:22:06,824 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 3
+2024-12-15 14:22:06,824 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 3
+2024-12-15 14:22:06,824 - Apply hard positivity constraint on objp at iter 3
+2024-12-15 14:22:06,825 - Iter: 3, Total Loss: 0.2855, loss_single: 0.2850, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:22:06,825 -  
+2024-12-15 14:22:06,825 - Iter: 4, obja.requires_grad = True
+2024-12-15 14:22:06,825 - Iter: 4, objp.requires_grad = True
+2024-12-15 14:22:06,825 - Iter: 4, obj_tilts.requires_grad = False
+2024-12-15 14:22:06,825 - Iter: 4, slice_thickness.requires_grad = False
+2024-12-15 14:22:06,825 - Iter: 4, probe.requires_grad = True
+2024-12-15 14:22:06,826 - Iter: 4, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:06,953 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:08,488 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:10,151 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:11,686 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:13,349 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:15,012 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:15,014 - Apply ortho pmode constraint at iter 4, relative pmode power = [0.902 0.035 0.018 0.018 0.014 0.014], probe int sum = 455.1626
+2024-12-15 14:22:15,014 - Apply fix probe int constraint at iter 4, probe int sum = 450.4553
+2024-12-15 14:22:15,014 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 4
+2024-12-15 14:22:15,015 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 4
+2024-12-15 14:22:15,016 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 4
+2024-12-15 14:22:15,016 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 4
+2024-12-15 14:22:15,016 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 4
+2024-12-15 14:22:15,016 - Apply hard positivity constraint on objp at iter 4
+2024-12-15 14:22:15,017 - Iter: 4, Total Loss: 0.2603, loss_single: 0.2598, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:22:15,017 -  
+2024-12-15 14:22:15,017 - Iter: 5, obja.requires_grad = True
+2024-12-15 14:22:15,017 - Iter: 5, objp.requires_grad = True
+2024-12-15 14:22:15,017 - Iter: 5, obj_tilts.requires_grad = False
+2024-12-15 14:22:15,017 - Iter: 5, slice_thickness.requires_grad = False
+2024-12-15 14:22:15,017 - Iter: 5, probe.requires_grad = True
+2024-12-15 14:22:15,018 - Iter: 5, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:15,145 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:16,680 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:18,343 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:19,879 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:21,542 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:23,205 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:23,206 - Apply ortho pmode constraint at iter 5, relative pmode power = [0.9   0.035 0.018 0.018 0.014 0.014], probe int sum = 451.6947
+2024-12-15 14:22:23,206 - Apply fix probe int constraint at iter 5, probe int sum = 450.4553
+2024-12-15 14:22:23,207 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 5
+2024-12-15 14:22:23,208 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 5
+2024-12-15 14:22:23,208 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 5
+2024-12-15 14:22:23,209 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 5
+2024-12-15 14:22:23,209 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 5
+2024-12-15 14:22:23,209 - Apply hard positivity constraint on objp at iter 5
+2024-12-15 14:22:23,209 - Iter: 5, Total Loss: 0.2544, loss_single: 0.2539, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:22:23,209 -  
+2024-12-15 14:22:23,210 - Iter: 6, obja.requires_grad = True
+2024-12-15 14:22:23,210 - Iter: 6, objp.requires_grad = True
+2024-12-15 14:22:23,210 - Iter: 6, obj_tilts.requires_grad = False
+2024-12-15 14:22:23,210 - Iter: 6, slice_thickness.requires_grad = False
+2024-12-15 14:22:23,210 - Iter: 6, probe.requires_grad = True
+2024-12-15 14:22:23,210 - Iter: 6, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:23,338 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:24,874 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:26,537 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:28,073 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:29,735 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:31,398 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:31,400 - Apply ortho pmode constraint at iter 6, relative pmode power = [0.898 0.036 0.019 0.018 0.015 0.015], probe int sum = 451.3381
+2024-12-15 14:22:31,401 - Apply fix probe int constraint at iter 6, probe int sum = 450.4553
+2024-12-15 14:22:31,401 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 6
+2024-12-15 14:22:31,402 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 6
+2024-12-15 14:22:31,403 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 6
+2024-12-15 14:22:31,403 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 6
+2024-12-15 14:22:31,403 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 6
+2024-12-15 14:22:31,404 - Apply hard positivity constraint on objp at iter 6
+2024-12-15 14:22:31,404 - Iter: 6, Total Loss: 0.2528, loss_single: 0.2522, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.194 sec
+2024-12-15 14:22:31,404 -  
+2024-12-15 14:22:31,404 - Iter: 7, obja.requires_grad = True
+2024-12-15 14:22:31,405 - Iter: 7, objp.requires_grad = True
+2024-12-15 14:22:31,405 - Iter: 7, obj_tilts.requires_grad = False
+2024-12-15 14:22:31,405 - Iter: 7, slice_thickness.requires_grad = False
+2024-12-15 14:22:31,405 - Iter: 7, probe.requires_grad = True
+2024-12-15 14:22:31,405 - Iter: 7, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:31,533 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:33,068 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:34,731 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:36,266 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:37,929 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:39,591 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:39,593 - Apply ortho pmode constraint at iter 7, relative pmode power = [0.898 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.5630
+2024-12-15 14:22:39,593 - Apply fix probe int constraint at iter 7, probe int sum = 450.4552
+2024-12-15 14:22:39,594 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 7
+2024-12-15 14:22:39,594 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 7
+2024-12-15 14:22:39,595 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 7
+2024-12-15 14:22:39,595 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 7
+2024-12-15 14:22:39,596 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 7
+2024-12-15 14:22:39,596 - Apply hard positivity constraint on objp at iter 7
+2024-12-15 14:22:39,596 - Iter: 7, Total Loss: 0.2521, loss_single: 0.2515, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:22:39,596 -  
+2024-12-15 14:22:39,597 - Iter: 8, obja.requires_grad = True
+2024-12-15 14:22:39,597 - Iter: 8, objp.requires_grad = True
+2024-12-15 14:22:39,597 - Iter: 8, obj_tilts.requires_grad = False
+2024-12-15 14:22:39,597 - Iter: 8, slice_thickness.requires_grad = False
+2024-12-15 14:22:39,597 - Iter: 8, probe.requires_grad = True
+2024-12-15 14:22:39,597 - Iter: 8, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:39,725 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:22:41,260 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:42,923 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:44,458 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:46,121 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:47,784 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:47,785 - Apply ortho pmode constraint at iter 8, relative pmode power = [0.897 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.6473
+2024-12-15 14:22:47,785 - Apply fix probe int constraint at iter 8, probe int sum = 450.4552
+2024-12-15 14:22:47,786 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 8
+2024-12-15 14:22:47,787 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 8
+2024-12-15 14:22:47,787 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 8
+2024-12-15 14:22:47,788 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 8
+2024-12-15 14:22:47,788 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 8
+2024-12-15 14:22:47,788 - Apply hard positivity constraint on objp at iter 8
+2024-12-15 14:22:47,788 - Iter: 8, Total Loss: 0.2516, loss_single: 0.2511, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:22:47,788 -  
+2024-12-15 14:22:47,789 - Iter: 9, obja.requires_grad = True
+2024-12-15 14:22:47,789 - Iter: 9, objp.requires_grad = True
+2024-12-15 14:22:47,789 - Iter: 9, obj_tilts.requires_grad = False
+2024-12-15 14:22:47,789 - Iter: 9, slice_thickness.requires_grad = False
+2024-12-15 14:22:47,789 - Iter: 9, probe.requires_grad = True
+2024-12-15 14:22:47,789 - Iter: 9, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:47,917 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:49,452 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:51,115 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:22:52,650 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:22:54,313 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:22:55,976 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:22:55,977 - Apply ortho pmode constraint at iter 9, relative pmode power = [0.897 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.3956
+2024-12-15 14:22:55,978 - Apply fix probe int constraint at iter 9, probe int sum = 450.4553
+2024-12-15 14:22:55,978 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 9
+2024-12-15 14:22:55,979 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 9
+2024-12-15 14:22:55,979 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 9
+2024-12-15 14:22:55,980 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 9
+2024-12-15 14:22:55,980 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 9
+2024-12-15 14:22:55,980 - Apply hard positivity constraint on objp at iter 9
+2024-12-15 14:22:55,981 - Iter: 9, Total Loss: 0.2513, loss_single: 0.2508, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:22:55,981 -  
+2024-12-15 14:22:55,981 - Iter: 10, obja.requires_grad = True
+2024-12-15 14:22:55,981 - Iter: 10, objp.requires_grad = True
+2024-12-15 14:22:55,981 - Iter: 10, obj_tilts.requires_grad = False
+2024-12-15 14:22:55,981 - Iter: 10, slice_thickness.requires_grad = False
+2024-12-15 14:22:55,981 - Iter: 10, probe.requires_grad = True
+2024-12-15 14:22:55,981 - Iter: 10, probe_pos_shifts.requires_grad = True
+2024-12-15 14:22:56,109 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:22:57,645 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:22:59,307 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:00,843 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:02,506 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:04,169 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:04,171 - Apply ortho pmode constraint at iter 10, relative pmode power = [0.897 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.5494
+2024-12-15 14:23:04,172 - Apply fix probe int constraint at iter 10, probe int sum = 450.4552
+2024-12-15 14:23:04,172 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 10
+2024-12-15 14:23:04,173 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 10
+2024-12-15 14:23:04,174 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 10
+2024-12-15 14:23:04,174 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 10
+2024-12-15 14:23:04,174 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 10
+2024-12-15 14:23:04,174 - Apply hard positivity constraint on objp at iter 10
+2024-12-15 14:23:04,175 - Iter: 10, Total Loss: 0.2510, loss_single: 0.2505, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:23:04,175 -  
+2024-12-15 14:23:04,175 - Iter: 11, obja.requires_grad = True
+2024-12-15 14:23:04,175 - Iter: 11, objp.requires_grad = True
+2024-12-15 14:23:04,175 - Iter: 11, obj_tilts.requires_grad = False
+2024-12-15 14:23:04,175 - Iter: 11, slice_thickness.requires_grad = False
+2024-12-15 14:23:04,176 - Iter: 11, probe.requires_grad = True
+2024-12-15 14:23:04,176 - Iter: 11, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:04,303 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:05,838 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:07,501 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:09,036 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:10,699 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:12,362 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:12,364 - Apply ortho pmode constraint at iter 11, relative pmode power = [0.898 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.3946
+2024-12-15 14:23:12,364 - Apply fix probe int constraint at iter 11, probe int sum = 450.4552
+2024-12-15 14:23:12,365 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 11
+2024-12-15 14:23:12,365 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 11
+2024-12-15 14:23:12,366 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 11
+2024-12-15 14:23:12,366 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 11
+2024-12-15 14:23:12,366 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 11
+2024-12-15 14:23:12,367 - Apply hard positivity constraint on objp at iter 11
+2024-12-15 14:23:12,367 - Iter: 11, Total Loss: 0.2508, loss_single: 0.2503, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:23:12,367 -  
+2024-12-15 14:23:12,367 - Iter: 12, obja.requires_grad = True
+2024-12-15 14:23:12,368 - Iter: 12, objp.requires_grad = True
+2024-12-15 14:23:12,368 - Iter: 12, obj_tilts.requires_grad = False
+2024-12-15 14:23:12,368 - Iter: 12, slice_thickness.requires_grad = False
+2024-12-15 14:23:12,368 - Iter: 12, probe.requires_grad = True
+2024-12-15 14:23:12,368 - Iter: 12, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:12,496 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:23:14,030 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:15,693 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:17,228 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:18,891 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:20,554 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:20,555 - Apply ortho pmode constraint at iter 12, relative pmode power = [0.897 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.5359
+2024-12-15 14:23:20,556 - Apply fix probe int constraint at iter 12, probe int sum = 450.4553
+2024-12-15 14:23:20,556 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 12
+2024-12-15 14:23:20,557 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 12
+2024-12-15 14:23:20,558 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 12
+2024-12-15 14:23:20,558 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 12
+2024-12-15 14:23:20,558 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 12
+2024-12-15 14:23:20,558 - Apply hard positivity constraint on objp at iter 12
+2024-12-15 14:23:20,559 - Iter: 12, Total Loss: 0.2506, loss_single: 0.2501, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:23:20,559 -  
+2024-12-15 14:23:20,559 - Iter: 13, obja.requires_grad = True
+2024-12-15 14:23:20,559 - Iter: 13, objp.requires_grad = True
+2024-12-15 14:23:20,559 - Iter: 13, obj_tilts.requires_grad = False
+2024-12-15 14:23:20,559 - Iter: 13, slice_thickness.requires_grad = False
+2024-12-15 14:23:20,559 - Iter: 13, probe.requires_grad = True
+2024-12-15 14:23:20,559 - Iter: 13, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:20,687 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:22,222 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:23,885 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:25,420 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:27,083 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:28,746 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:28,747 - Apply ortho pmode constraint at iter 13, relative pmode power = [0.898 0.036 0.019 0.019 0.015 0.015], probe int sum = 450.4099
+2024-12-15 14:23:28,748 - Apply fix probe int constraint at iter 13, probe int sum = 450.4552
+2024-12-15 14:23:28,748 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 13
+2024-12-15 14:23:28,749 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 13
+2024-12-15 14:23:28,749 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 13
+2024-12-15 14:23:28,750 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 13
+2024-12-15 14:23:28,750 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 13
+2024-12-15 14:23:28,750 - Apply hard positivity constraint on objp at iter 13
+2024-12-15 14:23:28,750 - Iter: 13, Total Loss: 0.2504, loss_single: 0.2499, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:23:28,751 -  
+2024-12-15 14:23:28,751 - Iter: 14, obja.requires_grad = True
+2024-12-15 14:23:28,751 - Iter: 14, objp.requires_grad = True
+2024-12-15 14:23:28,751 - Iter: 14, obj_tilts.requires_grad = False
+2024-12-15 14:23:28,751 - Iter: 14, slice_thickness.requires_grad = False
+2024-12-15 14:23:28,751 - Iter: 14, probe.requires_grad = True
+2024-12-15 14:23:28,751 - Iter: 14, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:28,879 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:30,414 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:32,077 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:33,612 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:35,275 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:36,938 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:36,940 - Apply ortho pmode constraint at iter 14, relative pmode power = [0.898 0.036 0.019 0.018 0.015 0.015], probe int sum = 450.5362
+2024-12-15 14:23:36,940 - Apply fix probe int constraint at iter 14, probe int sum = 450.4552
+2024-12-15 14:23:36,941 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 14
+2024-12-15 14:23:36,941 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 14
+2024-12-15 14:23:36,942 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 14
+2024-12-15 14:23:36,943 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 14
+2024-12-15 14:23:36,943 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 14
+2024-12-15 14:23:36,943 - Apply hard positivity constraint on objp at iter 14
+2024-12-15 14:23:36,943 - Iter: 14, Total Loss: 0.2502, loss_single: 0.2497, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:23:36,943 -  
+2024-12-15 14:23:36,944 - Iter: 15, obja.requires_grad = True
+2024-12-15 14:23:36,944 - Iter: 15, objp.requires_grad = True
+2024-12-15 14:23:36,944 - Iter: 15, obj_tilts.requires_grad = False
+2024-12-15 14:23:36,944 - Iter: 15, slice_thickness.requires_grad = False
+2024-12-15 14:23:36,944 - Iter: 15, probe.requires_grad = True
+2024-12-15 14:23:36,944 - Iter: 15, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:37,072 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:38,607 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:40,271 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:41,806 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:43,469 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:45,131 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:45,133 - Apply ortho pmode constraint at iter 15, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.4247
+2024-12-15 14:23:45,134 - Apply fix probe int constraint at iter 15, probe int sum = 450.4552
+2024-12-15 14:23:45,134 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 15
+2024-12-15 14:23:45,135 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 15
+2024-12-15 14:23:45,135 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 15
+2024-12-15 14:23:45,136 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 15
+2024-12-15 14:23:45,136 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 15
+2024-12-15 14:23:45,136 - Apply hard positivity constraint on objp at iter 15
+2024-12-15 14:23:45,137 - Iter: 15, Total Loss: 0.2501, loss_single: 0.2495, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0005, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:23:45,137 -  
+2024-12-15 14:23:45,137 - Iter: 16, obja.requires_grad = True
+2024-12-15 14:23:45,137 - Iter: 16, objp.requires_grad = True
+2024-12-15 14:23:45,137 - Iter: 16, obj_tilts.requires_grad = False
+2024-12-15 14:23:45,137 - Iter: 16, slice_thickness.requires_grad = False
+2024-12-15 14:23:45,137 - Iter: 16, probe.requires_grad = True
+2024-12-15 14:23:45,137 - Iter: 16, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:45,265 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:46,800 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:48,463 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:49,998 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:51,661 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:23:53,324 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:23:53,326 - Apply ortho pmode constraint at iter 16, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5388
+2024-12-15 14:23:53,326 - Apply fix probe int constraint at iter 16, probe int sum = 450.4552
+2024-12-15 14:23:53,327 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 16
+2024-12-15 14:23:53,327 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 16
+2024-12-15 14:23:53,328 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 16
+2024-12-15 14:23:53,328 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 16
+2024-12-15 14:23:53,329 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 16
+2024-12-15 14:23:53,329 - Apply hard positivity constraint on objp at iter 16
+2024-12-15 14:23:53,329 - Iter: 16, Total Loss: 0.2500, loss_single: 0.2494, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:23:53,329 -  
+2024-12-15 14:23:53,330 - Iter: 17, obja.requires_grad = True
+2024-12-15 14:23:53,330 - Iter: 17, objp.requires_grad = True
+2024-12-15 14:23:53,330 - Iter: 17, obj_tilts.requires_grad = False
+2024-12-15 14:23:53,330 - Iter: 17, slice_thickness.requires_grad = False
+2024-12-15 14:23:53,330 - Iter: 17, probe.requires_grad = True
+2024-12-15 14:23:53,330 - Iter: 17, probe_pos_shifts.requires_grad = True
+2024-12-15 14:23:53,458 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:23:54,993 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:23:56,656 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:23:58,191 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:23:59,853 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:01,516 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:01,518 - Apply ortho pmode constraint at iter 17, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.4394
+2024-12-15 14:24:01,518 - Apply fix probe int constraint at iter 17, probe int sum = 450.4552
+2024-12-15 14:24:01,519 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 17
+2024-12-15 14:24:01,520 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 17
+2024-12-15 14:24:01,520 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 17
+2024-12-15 14:24:01,521 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 17
+2024-12-15 14:24:01,521 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 17
+2024-12-15 14:24:01,521 - Apply hard positivity constraint on objp at iter 17
+2024-12-15 14:24:01,521 - Iter: 17, Total Loss: 0.2498, loss_single: 0.2493, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:24:01,521 -  
+2024-12-15 14:24:01,522 - Iter: 18, obja.requires_grad = True
+2024-12-15 14:24:01,522 - Iter: 18, objp.requires_grad = True
+2024-12-15 14:24:01,522 - Iter: 18, obj_tilts.requires_grad = False
+2024-12-15 14:24:01,522 - Iter: 18, slice_thickness.requires_grad = False
+2024-12-15 14:24:01,522 - Iter: 18, probe.requires_grad = True
+2024-12-15 14:24:01,522 - Iter: 18, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:01,650 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:03,185 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:04,848 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:06,383 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:08,046 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:09,709 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:09,710 - Apply ortho pmode constraint at iter 18, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5421
+2024-12-15 14:24:09,711 - Apply fix probe int constraint at iter 18, probe int sum = 450.4553
+2024-12-15 14:24:09,711 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 18
+2024-12-15 14:24:09,712 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 18
+2024-12-15 14:24:09,712 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 18
+2024-12-15 14:24:09,713 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 18
+2024-12-15 14:24:09,713 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 18
+2024-12-15 14:24:09,713 - Apply hard positivity constraint on objp at iter 18
+2024-12-15 14:24:09,713 - Iter: 18, Total Loss: 0.2497, loss_single: 0.2491, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:24:09,714 -  
+2024-12-15 14:24:09,714 - Iter: 19, obja.requires_grad = True
+2024-12-15 14:24:09,714 - Iter: 19, objp.requires_grad = True
+2024-12-15 14:24:09,714 - Iter: 19, obj_tilts.requires_grad = False
+2024-12-15 14:24:09,714 - Iter: 19, slice_thickness.requires_grad = False
+2024-12-15 14:24:09,714 - Iter: 19, probe.requires_grad = True
+2024-12-15 14:24:09,714 - Iter: 19, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:09,842 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:11,377 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:13,040 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:14,575 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:16,239 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:17,901 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:17,903 - Apply ortho pmode constraint at iter 19, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.4552
+2024-12-15 14:24:17,903 - Apply fix probe int constraint at iter 19, probe int sum = 450.4552
+2024-12-15 14:24:17,904 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 19
+2024-12-15 14:24:17,905 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 19
+2024-12-15 14:24:17,905 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 19
+2024-12-15 14:24:17,906 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 19
+2024-12-15 14:24:17,906 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 19
+2024-12-15 14:24:17,906 - Apply hard positivity constraint on objp at iter 19
+2024-12-15 14:24:17,906 - Iter: 19, Total Loss: 0.2496, loss_single: 0.2490, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:24:17,906 -  
+2024-12-15 14:24:17,907 - Iter: 20, obja.requires_grad = True
+2024-12-15 14:24:17,907 - Iter: 20, objp.requires_grad = True
+2024-12-15 14:24:17,907 - Iter: 20, obj_tilts.requires_grad = False
+2024-12-15 14:24:17,907 - Iter: 20, slice_thickness.requires_grad = False
+2024-12-15 14:24:17,907 - Iter: 20, probe.requires_grad = True
+2024-12-15 14:24:17,907 - Iter: 20, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:18,035 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:19,571 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:21,234 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:22,769 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:24,432 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:26,095 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:26,097 - Apply ortho pmode constraint at iter 20, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5458
+2024-12-15 14:24:26,097 - Apply fix probe int constraint at iter 20, probe int sum = 450.4552
+2024-12-15 14:24:26,098 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 20
+2024-12-15 14:24:26,098 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 20
+2024-12-15 14:24:26,099 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 20
+2024-12-15 14:24:26,099 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 20
+2024-12-15 14:24:26,100 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 20
+2024-12-15 14:24:26,100 - Apply hard positivity constraint on objp at iter 20
+2024-12-15 14:24:26,100 - Iter: 20, Total Loss: 0.2494, loss_single: 0.2489, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:24:26,100 -  
+2024-12-15 14:24:26,101 - Iter: 21, obja.requires_grad = True
+2024-12-15 14:24:26,101 - Iter: 21, objp.requires_grad = True
+2024-12-15 14:24:26,101 - Iter: 21, obj_tilts.requires_grad = False
+2024-12-15 14:24:26,101 - Iter: 21, slice_thickness.requires_grad = False
+2024-12-15 14:24:26,101 - Iter: 21, probe.requires_grad = True
+2024-12-15 14:24:26,101 - Iter: 21, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:26,229 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:27,764 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:29,427 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:30,962 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:32,624 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:34,287 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:34,289 - Apply ortho pmode constraint at iter 21, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.4733
+2024-12-15 14:24:34,289 - Apply fix probe int constraint at iter 21, probe int sum = 450.4552
+2024-12-15 14:24:34,290 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 21
+2024-12-15 14:24:34,290 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 21
+2024-12-15 14:24:34,291 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 21
+2024-12-15 14:24:34,291 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 21
+2024-12-15 14:24:34,292 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 21
+2024-12-15 14:24:34,292 - Apply hard positivity constraint on objp at iter 21
+2024-12-15 14:24:34,292 - Iter: 21, Total Loss: 0.2493, loss_single: 0.2487, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:24:34,292 -  
+2024-12-15 14:24:34,293 - Iter: 22, obja.requires_grad = True
+2024-12-15 14:24:34,293 - Iter: 22, objp.requires_grad = True
+2024-12-15 14:24:34,293 - Iter: 22, obj_tilts.requires_grad = False
+2024-12-15 14:24:34,293 - Iter: 22, slice_thickness.requires_grad = False
+2024-12-15 14:24:34,293 - Iter: 22, probe.requires_grad = True
+2024-12-15 14:24:34,293 - Iter: 22, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:34,421 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:35,956 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:37,618 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:39,153 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:40,816 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:42,479 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:42,480 - Apply ortho pmode constraint at iter 22, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5497
+2024-12-15 14:24:42,481 - Apply fix probe int constraint at iter 22, probe int sum = 450.4551
+2024-12-15 14:24:42,481 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 22
+2024-12-15 14:24:42,482 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 22
+2024-12-15 14:24:42,482 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 22
+2024-12-15 14:24:42,483 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 22
+2024-12-15 14:24:42,483 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 22
+2024-12-15 14:24:42,483 - Apply hard positivity constraint on objp at iter 22
+2024-12-15 14:24:42,484 - Iter: 22, Total Loss: 0.2492, loss_single: 0.2486, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:24:42,484 -  
+2024-12-15 14:24:42,484 - Iter: 23, obja.requires_grad = True
+2024-12-15 14:24:42,484 - Iter: 23, objp.requires_grad = True
+2024-12-15 14:24:42,484 - Iter: 23, obj_tilts.requires_grad = False
+2024-12-15 14:24:42,484 - Iter: 23, slice_thickness.requires_grad = False
+2024-12-15 14:24:42,484 - Iter: 23, probe.requires_grad = True
+2024-12-15 14:24:42,484 - Iter: 23, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:42,612 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:44,147 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:45,810 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:47,345 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:49,008 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:50,671 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:50,672 - Apply ortho pmode constraint at iter 23, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.4932
+2024-12-15 14:24:50,673 - Apply fix probe int constraint at iter 23, probe int sum = 450.4552
+2024-12-15 14:24:50,673 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 23
+2024-12-15 14:24:50,674 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 23
+2024-12-15 14:24:50,674 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 23
+2024-12-15 14:24:50,675 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 23
+2024-12-15 14:24:50,675 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 23
+2024-12-15 14:24:50,675 - Apply hard positivity constraint on objp at iter 23
+2024-12-15 14:24:50,675 - Iter: 23, Total Loss: 0.2491, loss_single: 0.2485, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:24:50,675 -  
+2024-12-15 14:24:50,676 - Iter: 24, obja.requires_grad = True
+2024-12-15 14:24:50,676 - Iter: 24, objp.requires_grad = True
+2024-12-15 14:24:50,676 - Iter: 24, obj_tilts.requires_grad = False
+2024-12-15 14:24:50,676 - Iter: 24, slice_thickness.requires_grad = False
+2024-12-15 14:24:50,676 - Iter: 24, probe.requires_grad = True
+2024-12-15 14:24:50,676 - Iter: 24, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:50,804 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:24:52,339 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:24:54,002 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:24:55,537 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:24:57,200 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:24:58,864 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:24:58,866 - Apply ortho pmode constraint at iter 24, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5535
+2024-12-15 14:24:58,866 - Apply fix probe int constraint at iter 24, probe int sum = 450.4552
+2024-12-15 14:24:58,867 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 24
+2024-12-15 14:24:58,867 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 24
+2024-12-15 14:24:58,868 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 24
+2024-12-15 14:24:58,869 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 24
+2024-12-15 14:24:58,869 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 24
+2024-12-15 14:24:58,869 - Apply hard positivity constraint on objp at iter 24
+2024-12-15 14:24:58,869 - Iter: 24, Total Loss: 0.2490, loss_single: 0.2484, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:24:58,869 -  
+2024-12-15 14:24:58,870 - Iter: 25, obja.requires_grad = True
+2024-12-15 14:24:58,870 - Iter: 25, objp.requires_grad = True
+2024-12-15 14:24:58,870 - Iter: 25, obj_tilts.requires_grad = False
+2024-12-15 14:24:58,870 - Iter: 25, slice_thickness.requires_grad = False
+2024-12-15 14:24:58,870 - Iter: 25, probe.requires_grad = True
+2024-12-15 14:24:58,870 - Iter: 25, probe_pos_shifts.requires_grad = True
+2024-12-15 14:24:58,998 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:25:00,533 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:02,196 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:03,731 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:05,394 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:07,057 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:07,058 - Apply ortho pmode constraint at iter 25, relative pmode power = [0.898 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5146
+2024-12-15 14:25:07,059 - Apply fix probe int constraint at iter 25, probe int sum = 450.4553
+2024-12-15 14:25:07,059 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 25
+2024-12-15 14:25:07,060 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 25
+2024-12-15 14:25:07,061 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 25
+2024-12-15 14:25:07,061 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 25
+2024-12-15 14:25:07,061 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 25
+2024-12-15 14:25:07,061 - Apply hard positivity constraint on objp at iter 25
+2024-12-15 14:25:07,062 - Iter: 25, Total Loss: 0.2489, loss_single: 0.2483, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:25:07,062 -  
+2024-12-15 14:25:07,062 - Iter: 26, obja.requires_grad = True
+2024-12-15 14:25:07,062 - Iter: 26, objp.requires_grad = True
+2024-12-15 14:25:07,062 - Iter: 26, obj_tilts.requires_grad = False
+2024-12-15 14:25:07,062 - Iter: 26, slice_thickness.requires_grad = False
+2024-12-15 14:25:07,062 - Iter: 26, probe.requires_grad = True
+2024-12-15 14:25:07,063 - Iter: 26, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:07,190 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:08,725 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:10,388 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:11,923 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:13,586 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:15,249 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:15,250 - Apply ortho pmode constraint at iter 26, relative pmode power = [0.897 0.035 0.019 0.018 0.015 0.015], probe int sum = 450.5578
+2024-12-15 14:25:15,251 - Apply fix probe int constraint at iter 26, probe int sum = 450.4551
+2024-12-15 14:25:15,251 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 26
+2024-12-15 14:25:15,252 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 26
+2024-12-15 14:25:15,252 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 26
+2024-12-15 14:25:15,253 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 26
+2024-12-15 14:25:15,253 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 26
+2024-12-15 14:25:15,253 - Apply hard positivity constraint on objp at iter 26
+2024-12-15 14:25:15,253 - Iter: 26, Total Loss: 0.2488, loss_single: 0.2482, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:25:15,253 -  
+2024-12-15 14:25:15,254 - Iter: 27, obja.requires_grad = True
+2024-12-15 14:25:15,254 - Iter: 27, objp.requires_grad = True
+2024-12-15 14:25:15,254 - Iter: 27, obj_tilts.requires_grad = False
+2024-12-15 14:25:15,254 - Iter: 27, slice_thickness.requires_grad = False
+2024-12-15 14:25:15,254 - Iter: 27, probe.requires_grad = True
+2024-12-15 14:25:15,254 - Iter: 27, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:15,382 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:16,917 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:18,580 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:20,115 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:21,778 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:23,441 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:23,442 - Apply ortho pmode constraint at iter 27, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.015], probe int sum = 450.5374
+2024-12-15 14:25:23,443 - Apply fix probe int constraint at iter 27, probe int sum = 450.4553
+2024-12-15 14:25:23,443 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 27
+2024-12-15 14:25:23,444 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 27
+2024-12-15 14:25:23,444 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 27
+2024-12-15 14:25:23,445 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 27
+2024-12-15 14:25:23,445 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 27
+2024-12-15 14:25:23,445 - Apply hard positivity constraint on objp at iter 27
+2024-12-15 14:25:23,445 - Iter: 27, Total Loss: 0.2487, loss_single: 0.2481, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:25:23,445 -  
+2024-12-15 14:25:23,446 - Iter: 28, obja.requires_grad = True
+2024-12-15 14:25:23,446 - Iter: 28, objp.requires_grad = True
+2024-12-15 14:25:23,446 - Iter: 28, obj_tilts.requires_grad = False
+2024-12-15 14:25:23,446 - Iter: 28, slice_thickness.requires_grad = False
+2024-12-15 14:25:23,446 - Iter: 28, probe.requires_grad = True
+2024-12-15 14:25:23,446 - Iter: 28, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:23,574 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:25,109 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:26,772 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:28,307 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:29,970 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:31,633 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:31,634 - Apply ortho pmode constraint at iter 28, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.015], probe int sum = 450.5651
+2024-12-15 14:25:31,635 - Apply fix probe int constraint at iter 28, probe int sum = 450.4553
+2024-12-15 14:25:31,635 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 28
+2024-12-15 14:25:31,636 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 28
+2024-12-15 14:25:31,636 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 28
+2024-12-15 14:25:31,637 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 28
+2024-12-15 14:25:31,637 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 28
+2024-12-15 14:25:31,637 - Apply hard positivity constraint on objp at iter 28
+2024-12-15 14:25:31,637 - Iter: 28, Total Loss: 0.2486, loss_single: 0.2480, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:25:31,637 -  
+2024-12-15 14:25:31,638 - Iter: 29, obja.requires_grad = True
+2024-12-15 14:25:31,638 - Iter: 29, objp.requires_grad = True
+2024-12-15 14:25:31,638 - Iter: 29, obj_tilts.requires_grad = False
+2024-12-15 14:25:31,638 - Iter: 29, slice_thickness.requires_grad = False
+2024-12-15 14:25:31,638 - Iter: 29, probe.requires_grad = True
+2024-12-15 14:25:31,638 - Iter: 29, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:31,766 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:25:33,301 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:34,964 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:36,499 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:38,163 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:39,826 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:39,828 - Apply ortho pmode constraint at iter 29, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.015], probe int sum = 450.5593
+2024-12-15 14:25:39,828 - Apply fix probe int constraint at iter 29, probe int sum = 450.4552
+2024-12-15 14:25:39,829 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 29
+2024-12-15 14:25:39,829 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 29
+2024-12-15 14:25:39,830 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 29
+2024-12-15 14:25:39,831 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 29
+2024-12-15 14:25:39,831 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 29
+2024-12-15 14:25:39,831 - Apply hard positivity constraint on objp at iter 29
+2024-12-15 14:25:39,831 - Iter: 29, Total Loss: 0.2485, loss_single: 0.2479, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:25:39,831 -  
+2024-12-15 14:25:39,832 - Iter: 30, obja.requires_grad = True
+2024-12-15 14:25:39,832 - Iter: 30, objp.requires_grad = True
+2024-12-15 14:25:39,832 - Iter: 30, obj_tilts.requires_grad = False
+2024-12-15 14:25:39,832 - Iter: 30, slice_thickness.requires_grad = False
+2024-12-15 14:25:39,832 - Iter: 30, probe.requires_grad = True
+2024-12-15 14:25:39,832 - Iter: 30, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:39,960 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:41,495 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:43,158 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:44,693 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:46,356 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:48,019 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:48,021 - Apply ortho pmode constraint at iter 30, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.015], probe int sum = 450.5758
+2024-12-15 14:25:48,021 - Apply fix probe int constraint at iter 30, probe int sum = 450.4553
+2024-12-15 14:25:48,022 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 30
+2024-12-15 14:25:48,022 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 30
+2024-12-15 14:25:48,023 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 30
+2024-12-15 14:25:48,023 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 30
+2024-12-15 14:25:48,024 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 30
+2024-12-15 14:25:48,024 - Apply hard positivity constraint on objp at iter 30
+2024-12-15 14:25:48,024 - Iter: 30, Total Loss: 0.2484, loss_single: 0.2477, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:25:48,024 -  
+2024-12-15 14:25:48,024 - Iter: 31, obja.requires_grad = True
+2024-12-15 14:25:48,025 - Iter: 31, objp.requires_grad = True
+2024-12-15 14:25:48,025 - Iter: 31, obj_tilts.requires_grad = False
+2024-12-15 14:25:48,025 - Iter: 31, slice_thickness.requires_grad = False
+2024-12-15 14:25:48,025 - Iter: 31, probe.requires_grad = True
+2024-12-15 14:25:48,025 - Iter: 31, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:48,153 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:49,688 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:51,351 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:25:52,886 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:25:54,548 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:25:56,211 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:25:56,213 - Apply ortho pmode constraint at iter 31, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.015], probe int sum = 450.5789
+2024-12-15 14:25:56,213 - Apply fix probe int constraint at iter 31, probe int sum = 450.4552
+2024-12-15 14:25:56,214 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 31
+2024-12-15 14:25:56,214 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 31
+2024-12-15 14:25:56,215 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 31
+2024-12-15 14:25:56,215 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 31
+2024-12-15 14:25:56,216 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 31
+2024-12-15 14:25:56,216 - Apply hard positivity constraint on objp at iter 31
+2024-12-15 14:25:56,216 - Iter: 31, Total Loss: 0.2483, loss_single: 0.2476, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:25:56,216 -  
+2024-12-15 14:25:56,216 - Iter: 32, obja.requires_grad = True
+2024-12-15 14:25:56,217 - Iter: 32, objp.requires_grad = True
+2024-12-15 14:25:56,217 - Iter: 32, obj_tilts.requires_grad = False
+2024-12-15 14:25:56,217 - Iter: 32, slice_thickness.requires_grad = False
+2024-12-15 14:25:56,217 - Iter: 32, probe.requires_grad = True
+2024-12-15 14:25:56,217 - Iter: 32, probe_pos_shifts.requires_grad = True
+2024-12-15 14:25:56,345 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:25:57,880 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:25:59,542 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:01,077 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:02,740 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:04,403 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:04,404 - Apply ortho pmode constraint at iter 32, relative pmode power = [0.897 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.5898
+2024-12-15 14:26:04,405 - Apply fix probe int constraint at iter 32, probe int sum = 450.4552
+2024-12-15 14:26:04,405 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 32
+2024-12-15 14:26:04,406 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 32
+2024-12-15 14:26:04,407 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 32
+2024-12-15 14:26:04,407 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 32
+2024-12-15 14:26:04,407 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 32
+2024-12-15 14:26:04,407 - Apply hard positivity constraint on objp at iter 32
+2024-12-15 14:26:04,408 - Iter: 32, Total Loss: 0.2482, loss_single: 0.2475, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:26:04,408 -  
+2024-12-15 14:26:04,408 - Iter: 33, obja.requires_grad = True
+2024-12-15 14:26:04,408 - Iter: 33, objp.requires_grad = True
+2024-12-15 14:26:04,408 - Iter: 33, obj_tilts.requires_grad = False
+2024-12-15 14:26:04,408 - Iter: 33, slice_thickness.requires_grad = False
+2024-12-15 14:26:04,408 - Iter: 33, probe.requires_grad = True
+2024-12-15 14:26:04,408 - Iter: 33, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:04,536 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:06,071 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:07,734 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:09,269 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:10,932 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:12,595 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:12,596 - Apply ortho pmode constraint at iter 33, relative pmode power = [0.896 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6004
+2024-12-15 14:26:12,597 - Apply fix probe int constraint at iter 33, probe int sum = 450.4552
+2024-12-15 14:26:12,597 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 33
+2024-12-15 14:26:12,598 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 33
+2024-12-15 14:26:12,598 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 33
+2024-12-15 14:26:12,599 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 33
+2024-12-15 14:26:12,599 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 33
+2024-12-15 14:26:12,599 - Apply hard positivity constraint on objp at iter 33
+2024-12-15 14:26:12,599 - Iter: 33, Total Loss: 0.2481, loss_single: 0.2474, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:26:12,600 -  
+2024-12-15 14:26:12,600 - Iter: 34, obja.requires_grad = True
+2024-12-15 14:26:12,600 - Iter: 34, objp.requires_grad = True
+2024-12-15 14:26:12,600 - Iter: 34, obj_tilts.requires_grad = False
+2024-12-15 14:26:12,600 - Iter: 34, slice_thickness.requires_grad = False
+2024-12-15 14:26:12,600 - Iter: 34, probe.requires_grad = True
+2024-12-15 14:26:12,600 - Iter: 34, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:12,728 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:14,263 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:15,926 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:17,462 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:19,125 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:20,788 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:20,790 - Apply ortho pmode constraint at iter 34, relative pmode power = [0.896 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6060
+2024-12-15 14:26:20,791 - Apply fix probe int constraint at iter 34, probe int sum = 450.4552
+2024-12-15 14:26:20,791 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 34
+2024-12-15 14:26:20,792 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 34
+2024-12-15 14:26:20,792 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 34
+2024-12-15 14:26:20,793 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 34
+2024-12-15 14:26:20,793 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 34
+2024-12-15 14:26:20,793 - Apply hard positivity constraint on objp at iter 34
+2024-12-15 14:26:20,794 - Iter: 34, Total Loss: 0.2480, loss_single: 0.2473, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0006, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:26:20,794 -  
+2024-12-15 14:26:20,794 - Iter: 35, obja.requires_grad = True
+2024-12-15 14:26:20,794 - Iter: 35, objp.requires_grad = True
+2024-12-15 14:26:20,794 - Iter: 35, obj_tilts.requires_grad = False
+2024-12-15 14:26:20,794 - Iter: 35, slice_thickness.requires_grad = False
+2024-12-15 14:26:20,794 - Iter: 35, probe.requires_grad = True
+2024-12-15 14:26:20,794 - Iter: 35, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:20,922 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:22,457 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:24,120 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:25,655 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:27,318 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:28,981 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:28,983 - Apply ortho pmode constraint at iter 35, relative pmode power = [0.896 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6253
+2024-12-15 14:26:28,983 - Apply fix probe int constraint at iter 35, probe int sum = 450.4552
+2024-12-15 14:26:28,983 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 35
+2024-12-15 14:26:28,984 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 35
+2024-12-15 14:26:28,985 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 35
+2024-12-15 14:26:28,985 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 35
+2024-12-15 14:26:28,985 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 35
+2024-12-15 14:26:28,985 - Apply hard positivity constraint on objp at iter 35
+2024-12-15 14:26:28,986 - Iter: 35, Total Loss: 0.2479, loss_single: 0.2472, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:26:28,986 -  
+2024-12-15 14:26:28,986 - Iter: 36, obja.requires_grad = True
+2024-12-15 14:26:28,986 - Iter: 36, objp.requires_grad = True
+2024-12-15 14:26:28,986 - Iter: 36, obj_tilts.requires_grad = False
+2024-12-15 14:26:28,986 - Iter: 36, slice_thickness.requires_grad = False
+2024-12-15 14:26:28,987 - Iter: 36, probe.requires_grad = True
+2024-12-15 14:26:28,987 - Iter: 36, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:29,114 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:30,649 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:32,312 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:33,847 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:35,510 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:37,173 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:37,175 - Apply ortho pmode constraint at iter 36, relative pmode power = [0.896 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6252
+2024-12-15 14:26:37,175 - Apply fix probe int constraint at iter 36, probe int sum = 450.4552
+2024-12-15 14:26:37,176 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 36
+2024-12-15 14:26:37,176 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 36
+2024-12-15 14:26:37,177 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 36
+2024-12-15 14:26:37,177 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 36
+2024-12-15 14:26:37,177 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 36
+2024-12-15 14:26:37,178 - Apply hard positivity constraint on objp at iter 36
+2024-12-15 14:26:37,178 - Iter: 36, Total Loss: 0.2478, loss_single: 0.2471, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:26:37,178 -  
+2024-12-15 14:26:37,178 - Iter: 37, obja.requires_grad = True
+2024-12-15 14:26:37,179 - Iter: 37, objp.requires_grad = True
+2024-12-15 14:26:37,179 - Iter: 37, obj_tilts.requires_grad = False
+2024-12-15 14:26:37,179 - Iter: 37, slice_thickness.requires_grad = False
+2024-12-15 14:26:37,179 - Iter: 37, probe.requires_grad = True
+2024-12-15 14:26:37,179 - Iter: 37, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:37,307 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:26:38,842 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:40,505 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:42,040 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:43,702 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:45,365 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:45,367 - Apply ortho pmode constraint at iter 37, relative pmode power = [0.895 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6523
+2024-12-15 14:26:45,367 - Apply fix probe int constraint at iter 37, probe int sum = 450.4552
+2024-12-15 14:26:45,368 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 37
+2024-12-15 14:26:45,368 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 37
+2024-12-15 14:26:45,369 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 37
+2024-12-15 14:26:45,370 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 37
+2024-12-15 14:26:45,370 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 37
+2024-12-15 14:26:45,370 - Apply hard positivity constraint on objp at iter 37
+2024-12-15 14:26:45,370 - Iter: 37, Total Loss: 0.2477, loss_single: 0.2470, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:26:45,370 -  
+2024-12-15 14:26:45,371 - Iter: 38, obja.requires_grad = True
+2024-12-15 14:26:45,371 - Iter: 38, objp.requires_grad = True
+2024-12-15 14:26:45,371 - Iter: 38, obj_tilts.requires_grad = False
+2024-12-15 14:26:45,371 - Iter: 38, slice_thickness.requires_grad = False
+2024-12-15 14:26:45,371 - Iter: 38, probe.requires_grad = True
+2024-12-15 14:26:45,371 - Iter: 38, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:45,499 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:47,034 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:48,697 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:50,232 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:26:51,895 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:26:53,558 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:26:53,560 - Apply ortho pmode constraint at iter 38, relative pmode power = [0.895 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6476
+2024-12-15 14:26:53,560 - Apply fix probe int constraint at iter 38, probe int sum = 450.4553
+2024-12-15 14:26:53,561 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 38
+2024-12-15 14:26:53,561 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 38
+2024-12-15 14:26:53,562 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 38
+2024-12-15 14:26:53,563 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 38
+2024-12-15 14:26:53,563 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 38
+2024-12-15 14:26:53,563 - Apply hard positivity constraint on objp at iter 38
+2024-12-15 14:26:53,563 - Iter: 38, Total Loss: 0.2476, loss_single: 0.2469, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:26:53,563 -  
+2024-12-15 14:26:53,564 - Iter: 39, obja.requires_grad = True
+2024-12-15 14:26:53,564 - Iter: 39, objp.requires_grad = True
+2024-12-15 14:26:53,564 - Iter: 39, obj_tilts.requires_grad = False
+2024-12-15 14:26:53,564 - Iter: 39, slice_thickness.requires_grad = False
+2024-12-15 14:26:53,564 - Iter: 39, probe.requires_grad = True
+2024-12-15 14:26:53,564 - Iter: 39, probe_pos_shifts.requires_grad = True
+2024-12-15 14:26:53,692 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:26:55,227 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:26:56,891 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:26:58,426 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:00,089 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:01,752 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:01,754 - Apply ortho pmode constraint at iter 39, relative pmode power = [0.895 0.035 0.019 0.018 0.016 0.016], probe int sum = 450.6815
+2024-12-15 14:27:01,754 - Apply fix probe int constraint at iter 39, probe int sum = 450.4552
+2024-12-15 14:27:01,755 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 39
+2024-12-15 14:27:01,755 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 39
+2024-12-15 14:27:01,756 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 39
+2024-12-15 14:27:01,757 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 39
+2024-12-15 14:27:01,757 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 39
+2024-12-15 14:27:01,757 - Apply hard positivity constraint on objp at iter 39
+2024-12-15 14:27:01,757 - Iter: 39, Total Loss: 0.2475, loss_single: 0.2468, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:27:01,757 -  
+2024-12-15 14:27:01,758 - Iter: 40, obja.requires_grad = True
+2024-12-15 14:27:01,758 - Iter: 40, objp.requires_grad = True
+2024-12-15 14:27:01,758 - Iter: 40, obj_tilts.requires_grad = False
+2024-12-15 14:27:01,758 - Iter: 40, slice_thickness.requires_grad = False
+2024-12-15 14:27:01,758 - Iter: 40, probe.requires_grad = True
+2024-12-15 14:27:01,758 - Iter: 40, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:01,886 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:03,421 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:05,084 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:06,619 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:08,282 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:09,945 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:09,946 - Apply ortho pmode constraint at iter 40, relative pmode power = [0.894 0.036 0.019 0.018 0.017 0.016], probe int sum = 450.6748
+2024-12-15 14:27:09,946 - Apply fix probe int constraint at iter 40, probe int sum = 450.4553
+2024-12-15 14:27:09,947 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 40
+2024-12-15 14:27:09,948 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 40
+2024-12-15 14:27:09,948 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 40
+2024-12-15 14:27:09,949 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 40
+2024-12-15 14:27:09,949 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 40
+2024-12-15 14:27:09,949 - Apply hard positivity constraint on objp at iter 40
+2024-12-15 14:27:09,949 - Iter: 40, Total Loss: 0.2474, loss_single: 0.2467, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:27:09,949 -  
+2024-12-15 14:27:09,950 - Iter: 41, obja.requires_grad = True
+2024-12-15 14:27:09,950 - Iter: 41, objp.requires_grad = True
+2024-12-15 14:27:09,950 - Iter: 41, obj_tilts.requires_grad = False
+2024-12-15 14:27:09,950 - Iter: 41, slice_thickness.requires_grad = False
+2024-12-15 14:27:09,950 - Iter: 41, probe.requires_grad = True
+2024-12-15 14:27:09,950 - Iter: 41, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:10,078 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:11,613 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:13,276 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:14,811 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:16,474 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:18,136 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:18,138 - Apply ortho pmode constraint at iter 41, relative pmode power = [0.894 0.036 0.019 0.018 0.017 0.016], probe int sum = 450.7139
+2024-12-15 14:27:18,138 - Apply fix probe int constraint at iter 41, probe int sum = 450.4552
+2024-12-15 14:27:18,139 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 41
+2024-12-15 14:27:18,139 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 41
+2024-12-15 14:27:18,140 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 41
+2024-12-15 14:27:18,141 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 41
+2024-12-15 14:27:18,141 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 41
+2024-12-15 14:27:18,141 - Apply hard positivity constraint on objp at iter 41
+2024-12-15 14:27:18,141 - Iter: 41, Total Loss: 0.2473, loss_single: 0.2466, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:27:18,141 -  
+2024-12-15 14:27:18,142 - Iter: 42, obja.requires_grad = True
+2024-12-15 14:27:18,142 - Iter: 42, objp.requires_grad = True
+2024-12-15 14:27:18,142 - Iter: 42, obj_tilts.requires_grad = False
+2024-12-15 14:27:18,142 - Iter: 42, slice_thickness.requires_grad = False
+2024-12-15 14:27:18,142 - Iter: 42, probe.requires_grad = True
+2024-12-15 14:27:18,142 - Iter: 42, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:18,270 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:19,805 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:21,468 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:23,003 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:24,666 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:26,328 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:26,330 - Apply ortho pmode constraint at iter 42, relative pmode power = [0.894 0.036 0.019 0.018 0.017 0.016], probe int sum = 450.7072
+2024-12-15 14:27:26,330 - Apply fix probe int constraint at iter 42, probe int sum = 450.4552
+2024-12-15 14:27:26,331 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 42
+2024-12-15 14:27:26,331 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 42
+2024-12-15 14:27:26,332 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 42
+2024-12-15 14:27:26,333 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 42
+2024-12-15 14:27:26,333 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 42
+2024-12-15 14:27:26,333 - Apply hard positivity constraint on objp at iter 42
+2024-12-15 14:27:26,333 - Iter: 42, Total Loss: 0.2472, loss_single: 0.2465, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:27:26,333 -  
+2024-12-15 14:27:26,334 - Iter: 43, obja.requires_grad = True
+2024-12-15 14:27:26,334 - Iter: 43, objp.requires_grad = True
+2024-12-15 14:27:26,334 - Iter: 43, obj_tilts.requires_grad = False
+2024-12-15 14:27:26,334 - Iter: 43, slice_thickness.requires_grad = False
+2024-12-15 14:27:26,334 - Iter: 43, probe.requires_grad = True
+2024-12-15 14:27:26,334 - Iter: 43, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:26,462 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:27,997 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:29,660 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:31,195 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:32,858 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:34,521 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:34,523 - Apply ortho pmode constraint at iter 43, relative pmode power = [0.893 0.036 0.019 0.019 0.017 0.016], probe int sum = 450.7484
+2024-12-15 14:27:34,524 - Apply fix probe int constraint at iter 43, probe int sum = 450.4553
+2024-12-15 14:27:34,524 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 43
+2024-12-15 14:27:34,525 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 43
+2024-12-15 14:27:34,526 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 43
+2024-12-15 14:27:34,526 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 43
+2024-12-15 14:27:34,526 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 43
+2024-12-15 14:27:34,526 - Apply hard positivity constraint on objp at iter 43
+2024-12-15 14:27:34,527 - Iter: 43, Total Loss: 0.2471, loss_single: 0.2464, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:27:34,527 -  
+2024-12-15 14:27:34,527 - Iter: 44, obja.requires_grad = True
+2024-12-15 14:27:34,527 - Iter: 44, objp.requires_grad = True
+2024-12-15 14:27:34,527 - Iter: 44, obj_tilts.requires_grad = False
+2024-12-15 14:27:34,527 - Iter: 44, slice_thickness.requires_grad = False
+2024-12-15 14:27:34,528 - Iter: 44, probe.requires_grad = True
+2024-12-15 14:27:34,528 - Iter: 44, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:34,656 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:27:36,191 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:37,853 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:39,388 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:41,051 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:42,714 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:42,715 - Apply ortho pmode constraint at iter 44, relative pmode power = [0.893 0.036 0.019 0.019 0.017 0.016], probe int sum = 450.7415
+2024-12-15 14:27:42,716 - Apply fix probe int constraint at iter 44, probe int sum = 450.4552
+2024-12-15 14:27:42,716 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 44
+2024-12-15 14:27:42,717 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 44
+2024-12-15 14:27:42,717 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 44
+2024-12-15 14:27:42,718 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 44
+2024-12-15 14:27:42,718 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 44
+2024-12-15 14:27:42,718 - Apply hard positivity constraint on objp at iter 44
+2024-12-15 14:27:42,718 - Iter: 44, Total Loss: 0.2470, loss_single: 0.2463, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:27:42,718 -  
+2024-12-15 14:27:42,719 - Iter: 45, obja.requires_grad = True
+2024-12-15 14:27:42,719 - Iter: 45, objp.requires_grad = True
+2024-12-15 14:27:42,719 - Iter: 45, obj_tilts.requires_grad = False
+2024-12-15 14:27:42,719 - Iter: 45, slice_thickness.requires_grad = False
+2024-12-15 14:27:42,719 - Iter: 45, probe.requires_grad = True
+2024-12-15 14:27:42,719 - Iter: 45, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:42,847 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:44,382 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:46,045 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:47,580 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:49,243 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:50,906 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:50,908 - Apply ortho pmode constraint at iter 45, relative pmode power = [0.892 0.036 0.019 0.019 0.017 0.016], probe int sum = 450.7807
+2024-12-15 14:27:50,908 - Apply fix probe int constraint at iter 45, probe int sum = 450.4553
+2024-12-15 14:27:50,909 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 45
+2024-12-15 14:27:50,909 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 45
+2024-12-15 14:27:50,910 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 45
+2024-12-15 14:27:50,910 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 45
+2024-12-15 14:27:50,911 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 45
+2024-12-15 14:27:50,911 - Apply hard positivity constraint on objp at iter 45
+2024-12-15 14:27:50,911 - Iter: 45, Total Loss: 0.2468, loss_single: 0.2462, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.192 sec
+2024-12-15 14:27:50,911 -  
+2024-12-15 14:27:50,911 - Iter: 46, obja.requires_grad = True
+2024-12-15 14:27:50,912 - Iter: 46, objp.requires_grad = True
+2024-12-15 14:27:50,912 - Iter: 46, obj_tilts.requires_grad = False
+2024-12-15 14:27:50,912 - Iter: 46, slice_thickness.requires_grad = False
+2024-12-15 14:27:50,912 - Iter: 46, probe.requires_grad = True
+2024-12-15 14:27:50,912 - Iter: 46, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:51,040 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:27:52,574 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:27:54,237 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:27:55,772 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:27:57,435 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:27:59,098 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:27:59,100 - Apply ortho pmode constraint at iter 46, relative pmode power = [0.892 0.037 0.019 0.019 0.017 0.017], probe int sum = 450.7772
+2024-12-15 14:27:59,100 - Apply fix probe int constraint at iter 46, probe int sum = 450.4553
+2024-12-15 14:27:59,101 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 46
+2024-12-15 14:27:59,101 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 46
+2024-12-15 14:27:59,102 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 46
+2024-12-15 14:27:59,102 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 46
+2024-12-15 14:27:59,102 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 46
+2024-12-15 14:27:59,103 - Apply hard positivity constraint on objp at iter 46
+2024-12-15 14:27:59,103 - Iter: 46, Total Loss: 0.2467, loss_single: 0.2461, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:27:59,103 -  
+2024-12-15 14:27:59,103 - Iter: 47, obja.requires_grad = True
+2024-12-15 14:27:59,103 - Iter: 47, objp.requires_grad = True
+2024-12-15 14:27:59,103 - Iter: 47, obj_tilts.requires_grad = False
+2024-12-15 14:27:59,104 - Iter: 47, slice_thickness.requires_grad = False
+2024-12-15 14:27:59,104 - Iter: 47, probe.requires_grad = True
+2024-12-15 14:27:59,104 - Iter: 47, probe_pos_shifts.requires_grad = True
+2024-12-15 14:27:59,231 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:28:00,766 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:28:02,429 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:28:03,964 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:28:05,627 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:28:07,290 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:28:07,291 - Apply ortho pmode constraint at iter 47, relative pmode power = [0.891 0.037 0.02  0.019 0.017 0.017], probe int sum = 450.8100
+2024-12-15 14:28:07,292 - Apply fix probe int constraint at iter 47, probe int sum = 450.4552
+2024-12-15 14:28:07,292 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 47
+2024-12-15 14:28:07,293 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 47
+2024-12-15 14:28:07,293 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 47
+2024-12-15 14:28:07,294 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 47
+2024-12-15 14:28:07,294 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 47
+2024-12-15 14:28:07,294 - Apply hard positivity constraint on objp at iter 47
+2024-12-15 14:28:07,294 - Iter: 47, Total Loss: 0.2466, loss_single: 0.2459, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:28:07,294 -  
+2024-12-15 14:28:07,295 - Iter: 48, obja.requires_grad = True
+2024-12-15 14:28:07,295 - Iter: 48, objp.requires_grad = True
+2024-12-15 14:28:07,295 - Iter: 48, obj_tilts.requires_grad = False
+2024-12-15 14:28:07,295 - Iter: 48, slice_thickness.requires_grad = False
+2024-12-15 14:28:07,295 - Iter: 48, probe.requires_grad = True
+2024-12-15 14:28:07,295 - Iter: 48, probe_pos_shifts.requires_grad = True
+2024-12-15 14:28:07,423 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:28:08,958 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:28:10,621 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:28:12,157 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:28:13,820 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:28:15,483 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:28:15,485 - Apply ortho pmode constraint at iter 48, relative pmode power = [0.89  0.037 0.02  0.019 0.017 0.017], probe int sum = 450.8099
+2024-12-15 14:28:15,486 - Apply fix probe int constraint at iter 48, probe int sum = 450.4552
+2024-12-15 14:28:15,486 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 48
+2024-12-15 14:28:15,487 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 48
+2024-12-15 14:28:15,487 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 48
+2024-12-15 14:28:15,488 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 48
+2024-12-15 14:28:15,488 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 48
+2024-12-15 14:28:15,488 - Apply hard positivity constraint on objp at iter 48
+2024-12-15 14:28:15,489 - Iter: 48, Total Loss: 0.2465, loss_single: 0.2458, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.193 sec
+2024-12-15 14:28:15,489 -  
+2024-12-15 14:28:15,489 - Iter: 49, obja.requires_grad = True
+2024-12-15 14:28:15,489 - Iter: 49, objp.requires_grad = True
+2024-12-15 14:28:15,489 - Iter: 49, obj_tilts.requires_grad = False
+2024-12-15 14:28:15,489 - Iter: 49, slice_thickness.requires_grad = False
+2024-12-15 14:28:15,489 - Iter: 49, probe.requires_grad = True
+2024-12-15 14:28:15,489 - Iter: 49, probe_pos_shifts.requires_grad = True
+2024-12-15 14:28:15,617 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.127 sec
+2024-12-15 14:28:17,152 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:28:18,815 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:28:20,350 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:28:22,013 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:28:23,675 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:28:23,677 - Apply ortho pmode constraint at iter 49, relative pmode power = [0.89  0.037 0.02  0.019 0.018 0.017], probe int sum = 450.8375
+2024-12-15 14:28:23,677 - Apply fix probe int constraint at iter 49, probe int sum = 450.4552
+2024-12-15 14:28:23,678 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 49
+2024-12-15 14:28:23,678 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 49
+2024-12-15 14:28:23,679 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 49
+2024-12-15 14:28:23,679 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 49
+2024-12-15 14:28:23,680 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 49
+2024-12-15 14:28:23,680 - Apply hard positivity constraint on objp at iter 49
+2024-12-15 14:28:23,680 - Iter: 49, Total Loss: 0.2464, loss_single: 0.2457, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:28:23,680 -  
+2024-12-15 14:28:23,681 - Iter: 50, obja.requires_grad = True
+2024-12-15 14:28:23,681 - Iter: 50, objp.requires_grad = True
+2024-12-15 14:28:23,681 - Iter: 50, obj_tilts.requires_grad = False
+2024-12-15 14:28:23,681 - Iter: 50, slice_thickness.requires_grad = False
+2024-12-15 14:28:23,681 - Iter: 50, probe.requires_grad = True
+2024-12-15 14:28:23,681 - Iter: 50, probe_pos_shifts.requires_grad = True
+2024-12-15 14:28:23,809 - Done batch 1 with 256 indices ([5617, 6912, 2099, 15101, 1075]...) in 0.128 sec
+2024-12-15 14:28:25,344 - Done batch 13 with 256 indices ([10680, 3253, 6797, 14715, 6352]...) in 0.128 sec
+2024-12-15 14:28:27,006 - Done batch 26 with 256 indices ([15390, 6617, 9888, 3429, 15993]...) in 0.128 sec
+2024-12-15 14:28:28,541 - Done batch 38 with 256 indices ([3061, 15003, 9246, 7228, 7124]...) in 0.128 sec
+2024-12-15 14:28:30,204 - Done batch 51 with 256 indices ([3643, 14451, 9324, 15325, 15723]...) in 0.128 sec
+2024-12-15 14:28:31,867 - Done batch 64 with 256 indices ([13311, 13361, 5559, 10971, 1296]...) in 0.128 sec
+2024-12-15 14:28:31,868 - Apply ortho pmode constraint at iter 50, relative pmode power = [0.889 0.038 0.02  0.019 0.018 0.017], probe int sum = 450.8344
+2024-12-15 14:28:31,869 - Apply fix probe int constraint at iter 50, probe int sum = 450.4552
+2024-12-15 14:28:31,869 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on obja at iter 50
+2024-12-15 14:28:31,870 - Apply lateral (y,x) Gaussian blur with std = 0.2 px on objp at iter 50
+2024-12-15 14:28:31,870 - Apply z-direction Gaussian blur with std = 1 px on obja at iter 50
+2024-12-15 14:28:31,871 - Apply z-direction Gaussian blur with std = 1 px on objp at iter 50
+2024-12-15 14:28:31,871 - Apply hard threshold constraint with thresh = [0.98, 1.02] on obja at iter 50
+2024-12-15 14:28:31,871 - Apply hard positivity constraint on objp at iter 50
+2024-12-15 14:28:31,871 - Iter: 50, Total Loss: 0.2463, loss_single: 0.2456, loss_poissn: 0.0000, loss_pacbed: 0.0000, loss_sparse: 0.0007, loss_simlar: 0.0000, in 8.191 sec
+2024-12-15 14:28:31,871 -  
+2024-12-15 14:28:32,285 - Saving summary figures for iter 50
+2024-12-15 14:28:37,444 - ### Finished 50 iterations, averaged iter_t = 8.2423 with std = 0.352 ###
+2024-12-15 14:28:37,445 -  
+2024-12-15 14:28:37,445 - ### The PtyRADSolver is finished in 419.138 sec, or 6 min 59.138 sec ###
+2024-12-15 14:28:37,445 -  
+Sun Dec 15 14:28:38 EST 2024

@@ -56,6 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add new hypertunable parameters including PyTorch optimizers, learning rates, batch sizes, and number of probe modes.
 - Add `params/paper` to keep the params files used in the paper
 - Add `docs/20241202_packages_iter_times/` for the package iteration time benchmarking
+- Add `docs/20241215_multiGPU/` for multiGPU benchmarking
+- Add `docs/20241219_GPU_comparison/` for GPU performance comparison
 - Add `scripts/paper/` to keep the scripts used in the paper
 ### Changed
 - Reformat the `'tune_params'` for hypertune mode so users can freely set the Optuna suggesting int, float, or categorical values and pass whatever keyword arguments (`kwargs`) for maximal flexibility and future compatibility. This allows users to use smart samplers to navigate a discrete search space defined arbitrarily if the users specify the 'choices' when using `'suggest': 'cat'` for categorical values. The alternative approach for discrete search space would be to use `GridSampler` but it's as inefficient as `BruteForceSampler`

@@ -30,7 +30,7 @@ Last update: 2024.10.02
 - Batch size from 32 to 4096, no gradient accumulation
 - 1 shot of 10 iterations, save figures every 5 iters (saving is slow so I'm only reporting the averaged iter time)
 
-![Iteration_time_vs_batch_size](./docs/20240924_multi-GPU/iteration_time_vs_batch_size.png)
+![Iteration_time_vs_batch_size](./iteration_time_vs_batch_size.png)
 
 ## Some multi-GPU todo
 - Update the environment requirement file
