@@ -24,29 +24,37 @@ if __name__ == "__main__":
     parser.add_argument("--gpuid",       type=int, required=False, default=None)
     parser.add_argument("--jobid",       type=int, required=False, default=0)
     args = parser.parse_args()
-    
-    for batch in [32,64,128,256,512,1024]:
-        for pmode in [1,3,6,12]:
-            try:
-                # Set up custom logger
-                logger = CustomLogger(log_file='ptyrad_log.txt', log_dir='auto', prefix_date=True, prefix_jobid=args.jobid, append_to_file=True, show_timestamp=True)
+    # for weight in [0.1, 0.06, 0.03, 0.01]:
+    #     for batch in [1024,256,64,16]:
+    #         for pmode in [6]:
+    for idx in range(40):
+        try:
+            # Set up custom logger
+            logger = CustomLogger(log_file='ptyrad_log.txt', log_dir='auto', prefix_date=True, prefix_jobid=args.jobid, append_to_file=True, show_timestamp=True)
+            
+            # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
+            accelerator = set_accelerator()
                 
-                # Set up accelerator for multiGPU/mixed-precision setting, note that thess has no effect when we launch it with just `python <script>`
-                accelerator = set_accelerator()
-                    
-                print_system_info()
-                params = load_params(args.params_path)
-                device = set_gpu_device(args.gpuid)
-                                
-                # Run ptyrad_ptycho_solver
-                print(f"Running batch = {batch}, pmode = {pmode}")
-                params['exp_params']['pmode_max'] = pmode
-                params['recon_params']['BATCH_SIZE']['size'] = batch
-                
-                ptycho_solver = PtyRADSolver(params, device=device, acc=accelerator, logger=logger)
+            print_system_info()
+            params = load_params(args.params_path)
+            device = set_gpu_device(args.gpuid)
+                            
+            # Run ptyrad_ptycho_solver
+            print(f"Running hypertune round {idx}")
+            # print(f"Running batch = {batch}, pmode = {pmode}, loss_sparse weight = {weight}")
+            # params['exp_params']['pmode_max'] = pmode
+            # params['recon_params']['BATCH_SIZE']['size'] = batch
+            # params['loss_params']['loss_sparse']['weight'] = weight
+            params['hypertune_params']['study_name'] += str(idx).zfill(2)
+            params['recon_params']['postfix'] += str(idx).zfill(2)
+            
+            ptycho_solver = PtyRADSolver(params, device=device, acc=accelerator, logger=logger)
+            
 
-                ptycho_solver.run()
-                
-            except Exception as e:
-                print(f"An error occurred for batch={batch}, pmode={pmode}: {e}")
+            ptycho_solver.run()
+            
+        except Exception as e:
+            # print(f"An error occurred for batch={batch}, pmode={pmode}: {e}")
+            print(f"An error occurred for hypertune round {idx}: {e}")
+
 

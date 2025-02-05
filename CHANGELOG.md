@@ -59,12 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `docs/20241215_multiGPU/` for multiGPU benchmarking
 - Add `docs/20241219_GPU_comparison/` for GPU performance comparison
 - Add `scripts/paper/` to keep the scripts used in the paper
+- Add `meas_remove_neg_values` option so that we can choose whether to clip the negative values or subtract the minimum. Original default behavior is subtracting the minimum value, while clipping negative values behaves better for low dose data.
 ### Changed
 - Reformat the `'tune_params'` for hypertune mode so users can freely set the Optuna suggesting int, float, or categorical values and pass whatever keyword arguments (`kwargs`) for maximal flexibility and future compatibility. This allows users to use smart samplers to navigate a discrete search space defined arbitrarily if the users specify the 'choices' when using `'suggest': 'cat'` for categorical values. The alternative approach for discrete search space would be to use `GridSampler` but it's as inefficient as `BruteForceSampler`
 - Refine `optuna_objective` to take the updated `'tune_params'` format
 - Update the `hypertune_params` for demo params files
 - Simplify `load_fields_from_mat` by calling the updated `load_hdf5` so matlab file version 7.3 can be loaded in a unified way with normal hdf5
 - Update `initialization.py` so `PtyShv` can be loaded correctly with either matlab file version 7.3 or older versions. Special handling is necessary because matlab file version 7.3 will be loaded by `load_hdf5` using  `h5py` and the array would be loaded using C-order, which is reversed from the normal matlab F-order. Complex array would also be loaded as nested array hence special casting is needed.
+- Refine `load_raw` by adding a file size check. If the specified shape gives a file size different from the actual file size, it will raise an error immediately
 
 ## [v0.1.0-beta3.0] - 2024-11-26
 ### Added

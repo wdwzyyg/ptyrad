@@ -29,11 +29,18 @@ def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
     # This implementaiton is also roughly 2x faster (10sec vs 20sec) than load_hdf5 with a 128x128x128x128 (1GB) EMPAD dataset
     # Note that for custom processed empad2 raw there might be no gap between the images
     N, height, width = shape
+
+    # Verify file size first
+    expected_size = offset + N * (height * width * dtype().itemsize + gap)
+    actual_size = os.path.getsize(path)
+
+    if actual_size != expected_size:
+        raise ValueError(f"Mismatch in expected ({expected_size} bytes = offset + N * (height * width * 4 + gap)) vs. actual ({actual_size} bytes) file size! Check your loading configurations!")
     
     # Define the custom dtype to include both data and gap
     custom_dtype = np.dtype([
         ('data', dtype, (height, width)),
-        ('gap', np.uint8, gap) # unit8 is equal to 1 byte, so the gap is determined by the length
+        ('gap', np.uint8, gap)  # uint8 means 1 byte per gap element
     ])
 
     # Read the entire file using the custom dtype
@@ -43,7 +50,7 @@ def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
 
     # Extract just the 'data' part (ignoring the gaps)
     data = raw_data['data']
-    
+
     return data
 
 def load_hdf5(file_path, dataset_key="ds"):

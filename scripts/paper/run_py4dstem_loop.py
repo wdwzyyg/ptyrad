@@ -17,18 +17,20 @@ if __name__ == "__main__":
     print_system_info()
     
     
-    for batch in [16,32,64,128,256,512,1024]:
-        for pmode in [1,3,6,12]:
-            try:
-                # Run py4DSTEM_ptycho_solver
-                params = load_yml_params(args.params_path)
-                
-                print(f"Running batch = {batch}, pmode = {pmode}")
-                params['exp_params']['pmode_max'] = pmode
-                params['recon_params']['BATCH_SIZE'] = batch
-                py4DSTEM_ptycho_solver(params)
-            except cp.cuda.memory.OutOfMemoryError as e:
-                print(f"Skipped batch={batch}, pmode={pmode} due to OOM.")
-                cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
-            except Exception as e:
-                print(f"An error occurred for batch={batch}, pmode={pmode}: {e}")
+    for batch in [1024,256,64,16]:#[16,32,64,128,256,512,1024]:
+        for pmode in [6]: #1,3,6,12
+            for update_step_size in [0.5]:
+                try:
+                    # Run py4DSTEM_ptycho_solver
+                    params = load_yml_params(args.params_path)
+                    
+                    print(f"Running batch = {batch}, pmode = {pmode}, update_step_size = {update_step_size}")
+                    params['exp_params']['pmode_max'] = pmode
+                    params['recon_params']['BATCH_SIZE'] = batch
+                    params['recon_params']['update_step_size'] = update_step_size
+                    py4DSTEM_ptycho_solver(params)
+                except cp.cuda.memory.OutOfMemoryError as e:
+                    print(f"Skipped batch={batch}, pmode={pmode}, update_step_size = {update_step_size} due to OOM.")
+                    cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
+                except Exception as e:
+                    print(f"An error occurred for batch={batch}, pmode={pmode}: {e}")

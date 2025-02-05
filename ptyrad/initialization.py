@@ -286,13 +286,40 @@ class Initializer:
             meas = gaussian_filter(meas, sigma=detector_blur_std, axes=(-2,-1)) # Detector blur is essentially the Gaussian blur along ky, kx
             vprint(f"Adding detector blur (point-spread function of the detector) of Gaussian blur std = {detector_blur_std:.4f} px to measurements along the ky, kx directions", verbose=self.verbose)
         
-        # Correct negative values if any
+        # Correct negative values if any. Note that for low dose data with a lot negative values, it's better to do clipping then subtraction.
         if (meas < 0).any():
-            min_value = meas.min()
-            meas -= min_value
-            # Subtraction is more general, but clipping might be more noise-robust due to the inherent denoising
-            vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
-        
+            if self.init_params['exp_params']['meas_remove_neg_values']['mode'] is not None:
+                mode = self.init_params['exp_params']['meas_remove_neg_values']['mode']
+                value = self.init_params['exp_params']['meas_remove_neg_values']['value']
+            else:
+                mode = 'subtract_min' # Added for backward compatibility of params files
+                value = None
+            vprint(f"Removing nagative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+            
+            if mode == 'clip_neg':
+                # This is faster than np.clip
+                vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas[meas<0] = 0
+                value = None
+            elif mode == 'clip_value':
+                vprint(f"Minimum value = {meas.min():.4f}, measurements value below {value} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas[meas<value] = 0
+            elif mode == 'subtract_value':
+                vprint(f"Minimum value = {meas.min():.4f}, measurements value is subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas -= value
+            else: # 'subtract_min'
+                # Fall back mode is subtracted by min so it's consistent with old behavior (before ptyrad-beta3.0) 
+                min_value = meas.min()
+                meas -= min_value
+                value = None
+                vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
+
+            # Final check in case the user specified value is not enough to remove all neg values
+            if (meas < 0).any():
+                vprint(f"User specified value = {value} is not enough to remove negative values, applying 0 clipping")
+                vprint(f"Minimum value of {meas.min():.4f} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas[meas<0] = 0
+                
         # Add Poisson noise given electron per Ang^2
         if self.init_params['exp_params']['meas_add_poisson_noise'] is not None:
             total_electron = self.init_params['exp_params']['meas_add_poisson_noise'] * self.init_params['exp_params']['scan_step_size'] **2 # Number of electron per diffraction pattern

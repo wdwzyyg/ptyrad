@@ -39,7 +39,7 @@ dScanX = 1; %scan downsample factor, 2 is to load every other scan position
 dScanY = 1; %scan downsample factor, 2 is to load every other scan position 
 Np_crop_pad = [128,128]; % size of diffraction patterns / probe used during reconstruction. can crop/pad to 64/256
 resample_factor = 1; %DP upsample factor
-scan_number = 13; %Ptychoshelves needs
+scan_number = 14; %Ptychoshelves needs
 final_scan = [N_scan_x/dScanX, N_scan_y/dScanY]; %Final number of scan positions
 final_dp_size = round(resample_factor * Np_crop_pad); %Final dimension of diffraction pattern
 scan_custom_flip = [1,1,0];
@@ -69,9 +69,9 @@ errmetric = 'L1';            % optimization likelihood - poisson, L1
 recon_time = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
 
 % Multislice setup
-Nlayers = 6; % # of slices for multi-slice, 1 for single-slice
+Nlayers = 12; % # of slices for multi-slice, 1 for single-slice
 %delta_z = thickness / Nlayers;
-delta_z = 2;
+delta_z = 1;
 regularize_layers = 0.5;
 layer4pos = [];
 
@@ -185,8 +185,8 @@ p.detector.binning = false;
 save(strcat(save_dir,sprintf('/init_probe_%i.mat', Ndpx)),'probe','p')
         
 %% Artificial for loop
-groupings = [16]; % Define the grouping values
-Nprobes = [12];
+groupings = [128]; % Define the grouping values
+Nprobes = [6];
 
 for grouping = groupings
     for Nprobe = Nprobes

@@ -39,7 +39,7 @@ dScanX = 1; %scan downsample factor, 2 is to load every other scan position
 dScanY = 1; %scan downsample factor, 2 is to load every other scan position 
 Np_crop_pad = [128,128]; % size of diffraction patterns / probe used during reconstruction. can crop/pad to 64/256
 resample_factor = 1; %DP upsample factor
-scan_number = 6; %Ptychoshelves needs
+scan_number = 11; %Ptychoshelves needs
 final_scan = [N_scan_x/dScanX, N_scan_y/dScanY]; %Final number of scan positions
 final_dp_size = round(resample_factor * Np_crop_pad); %Final dimension of diffraction pattern
 scan_custom_flip = [1,1,0];
@@ -51,13 +51,13 @@ ADU = 151; % Depends on kV, calibrated from the orignal EMPAD paper: doi:10.1017
 voltage = 80;
 alpha0 = 24.94; %convergence semi angle # 18->18.44, 25.2->24.92, 36->36.4, 54->55.45
 rbf = 11.42; %radius of central disk in px at given camera length. 16 - cl 230 mm; 
-rot_ang = 0; %angle between cbed and scan coord.
+rot_ang = 3; %angle between cbed and scan coord.
 scan_step_size = 0.429; % For 128x128 scan positions, 1.182 - 5.1 Mx; 0.839 - 7.2 Mx; 0.605 - 10 Mx; 0.429 - 14.5Mx; 0.297 - 20.5 Mx; 0.208 - 29 Mx; 0.147 - 41 Mx %angstrom
 
 % Reconstruction parameters
 data_descriptor = 'WSe2_'; %A short string that describe data when sending notifications
 Niter = 100;
-Niter_save_results = 100;
+Niter_save_results = 10;
 Niter_plot_results = 1000;
 % Nprobe = 1; % # of probe modes
 variable_probe_modes = 0; % 2 if possible # of modes for variable probe correction
@@ -180,8 +180,8 @@ p.detector.binning = false;
 save(strcat(save_dir,sprintf('/init_probe_%i.mat', Ndpx)),'probe','p')
         
 %% Artificial for loop
-groupings = [1024]; % Define the grouping values
-Nprobes = [1, 3, 6, 12];
+groupings = [1024,256,64,16]; % Define the grouping values
+Nprobes = [6];
 
 for grouping = groupings
     for Nprobe = Nprobes
