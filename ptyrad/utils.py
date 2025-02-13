@@ -389,7 +389,7 @@ def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_
     save_dict = {
                 'output_path'           : output_path,
                 'optimizable_tensors'   : optimizable_tensors,
-                'optim_state_dict'      : optimizer.state_dict(),
+                'optim_state_dict'      : optimizer.state_dict() if 'optim_state' in params['recon_params']['save_result'] else None,
                 'params'                : params, 
                 'model_attributes': # Have to do this explicit saving because I want specific fields but don't want the enitre model with grids and other redundant info
                     {'detector_blur_std': model.detector_blur_std,
@@ -549,6 +549,14 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             obj_type = constraint_params['obj_zblur']['obj_type']
             obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
             output_path += f"_{obj_str}zblur{constraint_params['obj_zblur']['std']}"
+        
+        if constraint_params['complex_ratio']['freq'] is not None:
+            obj_type = constraint_params['complex_ratio']['obj_type']
+            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
+            output_path += f"_{obj_str}cplx{round(constraint_params['complex_ratio']['alpha1'],2)}"
+        
+        if constraint_params['mirrored_amp']['freq'] is not None:
+            output_path += f"_mamp{round(constraint_params['mirrored_amp']['scale'],2)}_{round(constraint_params['mirrored_amp']['power'],2)}"
         
         if constraint_params['obja_thresh']['freq'] is not None:
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"

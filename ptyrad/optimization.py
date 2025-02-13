@@ -7,7 +7,7 @@ from torch.nn.functional import interpolate
 from torchvision.transforms.functional import gaussian_blur
 
 from ptyrad.data_io import load_pt
-from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint
+from ptyrad.utils import fftshift2, gaussian_blur_1d, ifftshift2, make_sigmoid_mask, vprint, normalize_from_zero_to_one
 
 # The CombinedLoss takes a user-defined dict of loss_params, which specifies the state, weight, and param of each loss term
 # The DP related loss takes a parameter of dp_pow which raise the DP with certain power, 
@@ -328,6 +328,40 @@ class CombinedConstraint(torch.nn.Module):
                 model.opt_objp.data = kz_filter(model.opt_objp, beta_regularize_layers, alpha_gaussian, obj_type='phase')
                 vprint(f"Apply kz_filter constraint with beta = {beta_regularize_layers} on objp at iter {niter}", verbose=self.verbose)
     
+    def apply_complex_ratio(self, model, niter):
+        ''' Apply complex constraint on object '''
+        # Original paper seems to apply this constraint at each position. I'll try an iteration-wise constraint first
+        complex_ratio_freq = self.constraint_params['complex_ratio']['freq']
+        obj_type           = self.constraint_params['complex_ratio']['obj_type']
+        alpha1             = self.constraint_params['complex_ratio']['alpha1']
+        alpha2             = self.constraint_params['complex_ratio']['alpha2']
+        if complex_ratio_freq is not None and niter % complex_ratio_freq == 0:
+            objac, objpc, Cbar = complex_ratio_constraint(model, alpha1, alpha2)
+            if obj_type in ['amplitude', 'both']:
+                model.opt_obja.data = objac
+                amin, amax = model.opt_obja.min().item(), model.opt_obja.max().item()
+                vprint(f"Apply complex ratio constraint with alpha1: {alpha1}, alpha2: {alpha2}, amd Cbar: {Cbar.item():.3f} on obja at iter {niter}. obja range becomes ({amin:.3f}, {amax:.3f})", verbose=self.verbose)
+            if obj_type in ['phase', 'both']:
+                model.opt_objp.data = objpc
+                pmin, pmax = model.opt_objp.min().item(), model.opt_objp.max().item()
+                vprint(f"Apply complex ratio constraint with alpha1: {alpha1}, alpha2: {alpha2}, and Cbar: {Cbar.item():.3f} on objp at iter {niter}. objp range becomes ({pmin:.3f}, {pmax:.3f})", verbose=self.verbose)  
+    
+    def apply_mirrored_amp(self, model, niter):
+        '''Apply mirrored amplitude constraint on obja at voxel level'''
+        # The idea is to replace the amplitude with Amp' = exp(-scale*phase^2), because the absorptive potential should scale with V^2
+        mirrored_amp_freq = self.constraint_params['mirrored_amp']['freq']
+        relax            = self.constraint_params['mirrored_amp']['relax']
+        scale           = self.constraint_params['mirrored_amp']['scale']
+        power           = self.constraint_params['mirrored_amp']['power']
+        if mirrored_amp_freq is not None and niter % mirrored_amp_freq == 0:
+            v_power = model.opt_objp.clamp(min=0).pow(power)
+            # amp_new = torch.exp(-scale*v_power)
+            amp_new = 1-scale*v_power
+            model.opt_obja.data = relax * model.opt_obja + (1-relax) * amp_new
+            amin, amax = model.opt_obja.min().item(), model.opt_obja.max().item()
+            relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_new))' if relax != 0 else 'hard'
+            vprint(f"Apply {relax_str} mirrored amplitude constraint with scale = {scale} and power = {power} on obja at iter {niter}. obja range becomes ({amin:.3f}, {amax:.3f})", verbose=self.verbose)
+    
     def apply_obja_thresh(self, model, niter):
         ''' Apply thresholding on obja at voxel level '''
         # Although there's a lot of code repitition with `apply_postiv`, phase positivity itself is important enough as an individual operation
@@ -349,7 +383,7 @@ class CombinedConstraint(torch.nn.Module):
             model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_postiv))' if relax != 0 else 'hard'
             vprint(f"Apply {relax_str} positivity constraint on objp at iter {niter}", verbose=self.verbose)           
-        
+
     def apply_tilt_smooth(self, model, niter):
         ''' Apply Gaussian blur to object tilts '''
         # Note that the smoothing is applied along the last 2 axes, which are scan dimensions, so the unit of std is "scan positions"
@@ -377,10 +411,32 @@ class CombinedConstraint(torch.nn.Module):
             self.apply_obj_zblur    (model, niter)
             self.apply_kr_filter    (model, niter)
             self.apply_kz_filter    (model, niter)
+            self.apply_complex_ratio(model, niter)
+            self.apply_mirrored_amp (model, niter)
             self.apply_obja_thresh  (model, niter)
             self.apply_objp_postiv  (model, niter)
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
+
+def get_objp_contrast(model, indices):
+    """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
+    with torch.no_grad():
+        probe = model.get_complex_probe_view()
+        objp = model.opt_objp.detach().sum(1).squeeze() # Sum along z and squeeze the omode dimension
+        
+        # Get crop positions and compute bounds
+        crop_pos = model.crop_pos[indices].detach() + torch.tensor(probe.shape[-2:], device=model.crop_pos.device) // 2
+        y_min, y_max = crop_pos[:, 0].min().item(), crop_pos[:, 0].max().item()
+        x_min, x_max = crop_pos[:, 1].min().item(), crop_pos[:, 1].max().item()
+
+        # Crop object phase tensor
+        objp_crop = objp[y_min-1:y_max, x_min-1:x_max]
+
+        objp_crop = normalize_from_zero_to_one(objp_crop) # In case the background is very negative for reconstructions without positivity constraint. Normalization doesn't change the contrast.
+        
+        contrast = torch.std(objp_crop) / (torch.mean(objp_crop) + 1e-8)  # Avoid division by zero
+
+    return -contrast  # Negative for minimization
 
 def create_optimizer(optimizer_params, optimizable_params, verbose=True):
     # Extract the optimizer name and configs
@@ -450,6 +506,34 @@ def kz_filter(obj, beta_regularize_layers=1, alpha_gaussian=1, obj_type='phase')
         fobj = 1+0.9*(fobj-1) # This is essentially a soft obja threshold constraint built into the kz_filter routine for obja
         
     return fobj
+
+def complex_ratio_constraint(model, alpha1, alpha2):
+    # https://doi.org/10.1016/j.ultramic.2024.114068
+    # https://doi.org/10.1364/OE.18.001981
+    # Suggested values for alpha1, alpha2 are 1 and 0
+    # For alpha1 = 1, alpha2 = 0, it's suggesting a phase object and phase would not be updated.
+    # Namely, objac = exp(-alpha1*Cbar*objp); objpc = objp
+    # NOTE that my implementaiton is slightly different from the papers
+    # Because for electron ptychography we usually defines a positive phase shift in the transmission function, obj(r) = T(r) = exp(i*sigma*V(r))
+    # Hence the object phase = angle(obj) = i*sigma*V(r)
+    # So when electron being scattered by the nuclei, it accumulates positive phase shift and slightly less than 1 amplitude
+    # Hence the constraint foumula is slightly modified accordingly, so we have positive phase associated with slightly less than 1 amplitude
+    
+    obja = model.opt_obja
+    objp = model.opt_objp
+    
+    log_obja = torch.log(obja)
+    
+    # Compute Cbar for the entire object across (omode, z, y, x)
+    # Although we can consider repeat this across z slices or omode
+    Cbar = (log_obja.abs().sum()) / (objp.abs().sum() + 1e-8)  # Avoid division by zero
+
+    # Compute updated amplitude, note the negative sign for the second term!
+    objac = torch.exp((1 - alpha1) * log_obja - alpha1 * Cbar * objp)
+
+    # Compute updated phase, note the negative sign for the second term!
+    objpc = (1 - alpha2) * objp - alpha2 / (Cbar + 1e-8) * log_obja # Avoid division by zero
+    return objac, objpc, Cbar
 
 def sort_by_mode_int(modes):
     modes_int =  modes.abs().pow(2).sum(tuple(range(1,modes.ndim))) # Sum every but 1st dimension

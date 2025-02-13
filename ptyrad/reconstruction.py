@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
-from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer
+from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer, get_objp_contrast
 from ptyrad.utils import (
     copy_params_to_dir,
     get_blob_size,
@@ -87,12 +87,28 @@ class PtyRADSolver(object):
 
     def init_loss(self):
         vprint("### Initializing loss function ###")
-        self.loss_fn       = CombinedLoss(self.params['loss_params'], device=self.device)
+        loss_params = self.params['loss_params']
+        
+        # Print loss params
+        vprint("Active loss types:")
+        for key, value in loss_params.items():
+            if value.get('state', False):
+                vprint(f"  {key.ljust(12)}: {value}")
+                
+        self.loss_fn       = CombinedLoss(loss_params, device=self.device)
         vprint(" ")
 
     def init_constraint(self):
         vprint("### Initializing constraint function ###")
-        self.constraint_fn = CombinedConstraint(self.params['constraint_params'], device=self.device, verbose=self.verbose)
+        constraint_params = self.params['constraint_params']
+
+        # Print constraint params
+        vprint("Active constraint types:")
+        for key, value in constraint_params.items():
+            if value.get('freq', None) is not None:
+                vprint(f"  {key.ljust(12)}: {value}")
+                
+        self.constraint_fn = CombinedConstraint(constraint_params, device=self.device, verbose=self.verbose)
         vprint(" ")
         
     def reconstruct(self):
@@ -132,13 +148,33 @@ class PtyRADSolver(object):
         import optuna
         hypertune_params = self.params['hypertune_params']
         n_trials         = hypertune_params.get('n_trials')
+        timeout          = hypertune_params.get('timeout')
         study_name       = hypertune_params.get('study_name')
         storage_path     = hypertune_params.get('storage_path')
         sampler_params   = hypertune_params['sampler_params']
         pruner_params    = hypertune_params['pruner_params']
+        error_metric     = hypertune_params['error_metric']
         sampler          = create_optuna_sampler(sampler_params)
         pruner           = create_optuna_pruner(pruner_params)
         logger           = self.logger
+        
+        # Print hypertune params
+        vprint("### Hypertune params ###")
+        for key, value in hypertune_params.items():
+
+            if key == 'tune_params':  # Check if 'tune_params' exists
+                vprint("Active tune_params:")
+                for param, param_config in value.items():
+                    if param_config.get('state', False):  # Print only if 'state' is True
+                        vprint(f"    {param.ljust(12)}: {param_config}")
+            else:
+                vprint(f"{key.ljust(16)}: {value}")
+        vprint(" ")
+        
+        # Check error metric validity
+        valid_metrics = {"contrast", "loss"}
+        if error_metric not in valid_metrics:
+            raise ValueError(f"Invalid error metric: '{error_metric}'. Expected one of {valid_metrics}.")
         
         copy_params = self.params['recon_params']['copy_params']
         output_dir  = self.params['recon_params']['output_dir'] # This will be later modified     
@@ -175,7 +211,7 @@ class PtyRADSolver(object):
         sampler_str = sampler_params['name']
         pruner_str = '_' + pruner_params['name'] if pruner_params is not None else ''
         
-        output_dir += f"/{prefix}hypertune_{sampler_str}{pruner_str}{postfix}"
+        output_dir += f"/{prefix}hypertune_{sampler_str}{pruner_str}_{error_metric}{postfix}"
         self.params['recon_params']['output_dir'] = output_dir 
         self.params['recon_params']['prefix_date'] = ''
         self.params['recon_params']['prefix'] = ''
@@ -192,7 +228,10 @@ class PtyRADSolver(object):
             logger.flush_to_file(log_dir=output_dir) # Note that there's an internal flag of self.flush_file controls the actual file creation
             optuna_logger.addHandler(logger.file_handler)
         
-        study.optimize(lambda trial: optuna_objective(trial, self.params, self.init, self.loss_fn, self.constraint_fn, self.device, self.verbose), n_trials=n_trials)
+        study.optimize(lambda trial: optuna_objective(trial, self.params, self.init, self.loss_fn, self.constraint_fn, self.device, self.verbose), 
+                       n_trials=n_trials,
+                       timeout=timeout)
+        vprint(f"Hypertune study is finished due to either (1) n_trials = {n_trials} or (2) study timeout = {timeout} sec has reached")
         vprint("Best hypertune params:")
         for key, value in study.best_params.items():
             vprint(f"\t{key}: {value}")
@@ -484,7 +523,10 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     iter_t = time_sync() - start_iter_t
     model_instance.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
     model_instance.iter_times.append(iter_t)
-    model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
+    if model_instance.change_thickness:
+        model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
+    if model_instance.tilt_obj:
+        model_instance.avg_tilt_iters.append((niter, model_instance.opt_obj_tilts.detach().mean(0).cpu().numpy()))
     return batch_losses
 
 def toggle_grad_requires(model, niter, verbose):
@@ -660,6 +702,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     # Parse the hypertune_params
     hypertune_params  = params['hypertune_params']
     collate_results   = hypertune_params['collate_results']
+    error_metric      = hypertune_params['error_metric']
     tune_params       = hypertune_params['tune_params']
     trial_id = 't' + str(trial.number).zfill(4)
     params['recon_params']['prefix'] += trial_id
@@ -746,9 +789,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     for niter in range(1, NITER+1):
         
         shuffle(batches)
-        batch_losses = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose) 
-        loss_iter    = model.loss_iters[-1][-1]
-        
+        batch_losses = recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint_fn, niter, verbose=verbose)
+
         ## Saving intermediate results
         if SAVE_ITERS is not None and niter % SAVE_ITERS == 0:
             save_results(output_path, model, params, optimizer, niter, indices, batch_losses, collate_str='')
@@ -756,24 +798,41 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                
         ## Pruning logic for optuna
         if hypertune_params['pruner_params'] is not None:
-            trial.report(loss_iter, niter)
+            # Only compute these none-standard error if we're pruning
+            if error_metric == 'contrast':
+                optuna_error = get_objp_contrast(model, indices) 
+            elif error_metric == 'loss':
+                optuna_error = model.loss_iters[-1][-1]
+            else:
+                raise ValueError(f"Unsupported hypertune error metric: '{error_metric}'. Expected 'contrast' or 'loss'.")
+            
+            trial.report(optuna_error, niter)
             
             # Handle pruning based on the intermediate value.
             if trial.should_prune():
             
                 # Save the current results of the pruned trials
-                collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
+                collate_str = f"_error_{optuna_error:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
                 if collate_results:
                     save_results(output_dir, model, params, optimizer, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
+    ## Calculate the optuna_error of the finished trials. This block is skipped if it's been calculated for finsished trials with pruner.
+    if optuna_error is None:
+        if error_metric == 'contrast':
+            optuna_error = get_objp_contrast(model, indices) 
+        elif error_metric == 'loss':
+            optuna_error = model.loss_iters[-1][-1]
+        else:
+            raise ValueError(f"Unsupported hypertune error metric: '{error_metric}'. Expected 'contrast' or 'loss'.")
+    
     ## Saving collate results and figs of the finished trials
-    collate_str = f"_error_{loss_iter:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
+    collate_str = f"_error_{optuna_error:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
     if collate_results:
         save_results(output_dir, model, params, optimizer, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
     
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model.iter_times):.3g} sec ###", verbose=verbose)
     vprint(" ", verbose=verbose)
-    return loss_iter
+    return optuna_error

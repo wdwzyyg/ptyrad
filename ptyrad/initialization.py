@@ -288,31 +288,35 @@ class Initializer:
         
         # Correct negative values if any. Note that for low dose data with a lot negative values, it's better to do clipping then subtraction.
         if (meas < 0).any():
-            if self.init_params['exp_params']['meas_remove_neg_values']['mode'] is not None:
-                mode = self.init_params['exp_params']['meas_remove_neg_values']['mode']
-                value = self.init_params['exp_params']['meas_remove_neg_values']['value']
-            else:
-                mode = 'subtract_min' # Added for backward compatibility of params files
-                value = None
-            vprint(f"Removing nagative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-            
-            if mode == 'clip_neg':
-                # This is faster than np.clip
-                vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas[meas<0] = 0
-                value = None
-            elif mode == 'clip_value':
-                vprint(f"Minimum value = {meas.min():.4f}, measurements value below {value} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas[meas<value] = 0
-            elif mode == 'subtract_value':
-                vprint(f"Minimum value = {meas.min():.4f}, measurements value is subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas -= value
-            else: # 'subtract_min'
-                # Fall back mode is subtracted by min so it's consistent with old behavior (before ptyrad-beta3.0) 
+            neg_params = self.init_params['exp_params'].get('meas_remove_neg_values', {})
+
+            mode = neg_params.get('mode', 'clip_neg')  # Default to 'clip_neg' for better performance on low dose. The default was subtract_min until ptyrad-beta3.1
+            value = neg_params.get('value', None)  # Could be None if not provided
+
+            vprint(f"Removing negative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+
+            if mode == 'subtract_min':
                 min_value = meas.min()
                 meas -= min_value
-                value = None
+                value = None  # Not relevant for this mode
                 vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
+
+            elif mode == 'clip_value':
+                if value is None:
+                    raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
+                vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas[meas < value] = 0
+
+            elif mode == 'subtract_value':
+                if value is None:
+                    raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
+                vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas -= value
+
+            else:  # Default: 'clip_neg'
+                vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+                meas[meas < 0] = 0
+                value = None  # Not relevant for clipping
 
             # Final check in case the user specified value is not enough to remove all neg values
             if (meas < 0).any():
@@ -322,15 +326,30 @@ class Initializer:
                 
         # Add Poisson noise given electron per Ang^2
         if self.init_params['exp_params']['meas_add_poisson_noise'] is not None:
-            total_electron = self.init_params['exp_params']['meas_add_poisson_noise'] * self.init_params['exp_params']['scan_step_size'] **2 # Number of electron per diffraction pattern
-            meas = meas / meas.sum((-2,-1))[:,None,None]
+            poisson_params = self.init_params['exp_params']['meas_add_poisson_noise']
+            unit = poisson_params['unit']
+            value = poisson_params['value']
+            scan_step_size = self.init_params['exp_params']['scan_step_size']
+            
+            if unit == 'total_e_per_pattern':
+                total_electron = value
+                dose = total_electron / scan_step_size **2
+            elif unit == 'e_per_Ang2':
+                dose = value
+                total_electron =  dose * scan_step_size **2 # Number of electron per diffraction pattern
+            else:
+                raise ValueError(f"Unsupported unit: '{unit}' for Poisson noise. Expected 'total_e_per_pattern' or 'e_per_Ang2'.")
+            
+            vprint(f"total electron per measurement = dose x scan_step_size^2 = {dose:.3f}(e-/Ang^2) x {scan_step_size:.3f}(Ang)^2 = {total_electron:.3f}", verbose=self.verbose)
+            meas = meas / meas.sum((-2,-1))[:,None,None] # Make each slice of the meas to sum to 1
             meas = np.random.poisson(meas * total_electron)
             vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
             
-        # Normalizing meas
-        vprint("Normalizing measurements so the averaged measurement has max intensity at 1", verbose=self.verbose)
-        meas = meas / (np.mean(meas, 0).max()) # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
+        # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
+        normalization_const = (np.mean(meas, 0).max())
+        meas = meas / normalization_const 
         meas = meas.astype('float32')
+        vprint(f"Normalizing measurements by {normalization_const:.8g} so the averaged measurement has max intensity at 1 for ease of display/comparison", verbose=self.verbose)
         
         # Get rbf related values (for electron ptychography only)
         if self.init_params['exp_params']['illumination_type'] == 'electron':

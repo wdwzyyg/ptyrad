@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
-## [Unrelease]
+## [v0.1.0-beta3.1] - 2025-02-13
 ### Added
 - Add `create_optuna_sampler` and `create_optuna_pruner` to allow flexible hyperameter tuning algorithm cofigurations in Optuna. The chosen sampler/pruner names will be affixed to the hypertune result folder.
 - Add new hypertunable parameters including PyTorch optimizers, learning rates, batch sizes, and number of probe modes.
@@ -59,7 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add `docs/20241215_multiGPU/` for multiGPU benchmarking
 - Add `docs/20241219_GPU_comparison/` for GPU performance comparison
 - Add `scripts/paper/` to keep the scripts used in the paper
-- Add `meas_remove_neg_values` option so that we can choose whether to clip the negative values or subtract the minimum. Original default behavior is subtracting the minimum value, while clipping negative values behaves better for low dose data.
+- Add `meas_remove_neg_values` option so that we can choose whether to clip the negative values or subtract the minimum. Original default behavior is subtracting the minimum value, while clipping negative values behaves better for low dose data. NOTE that the default behavior of PtyRAD has changed from `subtract_min` to `clip_neg` to support better convergence.
+- Add `timeout` to `hypertune_params` so that we can limit the overall time for a hypertune study
+- Add `optim_state` as a new saving option to `save_result`. This changes the default saving behavior of `model` so if `optim_state` is not specified, the saved `model.pt` is roughly 40% of the file size comparing to the model with an Adam state dict using the default history setting.
+- Add `tilt_avg` to `selected_figs` in `recon_params` so we can visualize how averaged tilt_y, tilt_x evolve with iterations when optimized with AD.
+- Add a new unit in `meas_add_poisson_noise` so we can apply Poisson noise with either `total_e_per_pattern` or `e_per_Ang2`
+- Add `complex_ratio` and `mirrored_amp` into `constraint_params` as initial attempts to constrain object amplitude based on object phase, which should help the doughnut issues in thick samples or samples with heavy atoms
 ### Changed
 - Reformat the `'tune_params'` for hypertune mode so users can freely set the Optuna suggesting int, float, or categorical values and pass whatever keyword arguments (`kwargs`) for maximal flexibility and future compatibility. This allows users to use smart samplers to navigate a discrete search space defined arbitrarily if the users specify the 'choices' when using `'suggest': 'cat'` for categorical values. The alternative approach for discrete search space would be to use `GridSampler` but it's as inefficient as `BruteForceSampler`
 - Refine `optuna_objective` to take the updated `'tune_params'` format
@@ -67,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simplify `load_fields_from_mat` by calling the updated `load_hdf5` so matlab file version 7.3 can be loaded in a unified way with normal hdf5
 - Update `initialization.py` so `PtyShv` can be loaded correctly with either matlab file version 7.3 or older versions. Special handling is necessary because matlab file version 7.3 will be loaded by `load_hdf5` using  `h5py` and the array would be loaded using C-order, which is reversed from the normal matlab F-order. Complex array would also be loaded as nested array hence special casting is needed.
 - Refine `load_raw` by adding a file size check. If the specified shape gives a file size different from the actual file size, it will raise an error immediately
+- Improve information logging in hypertune mode by printing relevant configurations
+- Improve information logging of `init_measurements` in the Poisson noise simulation and normalization parts
+- Improve information logging of `loss_params` and `constraint_params` by printing relevant configurations
 
 ## [v0.1.0-beta3.0] - 2024-11-26
 ### Added

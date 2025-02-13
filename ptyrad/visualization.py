@@ -89,6 +89,54 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     if pass_fig:
         return fig
 
+def plot_obj_tilts_avg(avg_tilt_iters, last_n_iters=2, show_fig=True, pass_fig=False):
+    last_n_iters = int(last_n_iters)
+    
+    # Unpack iteration numbers and tilt values
+    iters, tilts = zip(*avg_tilt_iters)  # Separates into two tuples
+    tilts = np.vstack(tilts)  # Converts list of (1,2) arrays to (N,2) array
+    iters = np.array(iters)  # Convert iteration numbers to a NumPy array
+
+    plt.ioff()  # Temporarily disable interactive mode
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(8, 10), sharex=True)
+
+    # Plot first component (tilt_y)
+    axes[0].plot(iters, tilts[:, 0], marker='o', color='C0')
+    axes[0].set_ylabel('Avg Obj tilt_y (mrad)', fontsize=16)
+    axes[0].set_title(f'Avg Obj tilt_y (mrad): {tilts[-1,0]:.3f} at iter {iters[-1]}', fontsize=16)
+    axes[0].grid(True)
+
+    # Plot second component (tilt_x)
+    axes[1].plot(iters, tilts[:, 1], marker='o', color='C1')
+    axes[1].set_xlabel('Iterations', fontsize=16)
+    axes[1].set_ylabel('Avg Obj tilt_x (mrad)', fontsize=16)
+    axes[1].set_title(f'Avg Obj tilt_x (mrad): {tilts[-1,1]:.3f} at iter {iters[-1]}', fontsize=16)
+    axes[1].grid(True)
+
+    for i, ax in enumerate(axes):
+        # Plot the last n iters as an inset
+        if len(iters) > 20 and last_n_iters is not None:
+            axins = ax.inset_axes([0.45, 0.3, 0.4, 0.5])
+
+            # Correctly match inset plots to main plots
+            axins.plot(iters[-last_n_iters:], tilts[-last_n_iters:, i], marker='o', color = f'{"C0" if i == 0 else "C1"}')
+
+            axins.set_xlabel('Iterations', fontsize=12)
+            axins.set_ylabel(f'Avg Obj tilt_{"y" if i == 0 else "x"} (mrad)', fontsize=12)
+            axins.yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.3f}'))
+            ax.indicate_inset_zoom(axins, edgecolor="gray")
+            axins.set_title(f'Last {last_n_iters} iterations', fontsize=12, pad=10)
+            axins.grid(True)
+
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.tight_layout()
+
+    if show_fig:
+        plt.show()
+    if pass_fig:
+        return fig
+
 def plot_obj_tilts(pos, tilts, figsize=(16,16), show_fig=True, pass_fig=False):
     """ Plot the obj tilts given the probe position and pos-dependent tilts """
     
@@ -273,6 +321,7 @@ def plot_slice_thickness(dz_iters, last_n_iters=10, show_fig=True, pass_fig=Fals
 
     # Plot all loss values
     axs.plot(data[:,0], data[:,1], marker='o')
+    axs.grid(True)
 
     # Plot the last n iters as an inset
     if len(data) > 20 and last_n_iters is not None:
@@ -444,6 +493,13 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
             fig_obj_tilts.show()
         if save_fig:
             fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts{collate_str}{iter_str}.png")
+            
+    if 'tilt_avg' in selected_figs or 'all' in selected_figs:
+        fig_avg_obj_tilts = plot_obj_tilts_avg(model.avg_tilt_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
+        if show_fig:
+            fig_avg_obj_tilts.show()
+        if save_fig:
+            fig_avg_obj_tilts.savefig(output_path + f"/summary_obj_tilts_avg{collate_str}{iter_str}.png")
     
     # Slice thickness
     if 'slice_thickness' in selected_figs or 'all' in selected_figs:
