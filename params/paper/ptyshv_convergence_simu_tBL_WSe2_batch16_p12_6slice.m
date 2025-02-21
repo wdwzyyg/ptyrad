@@ -25,33 +25,37 @@ gpuDevice
        
 %% Step 1: Setup parameters
 % Data import and probe generation
-exp_dir = '/home/fs01/cl2696/workspace/ptyrad/data/paper/tBL_WSe2/'; %change this for different experiment
+exp_dir = '/home/fs01/cl2696/workspace/ptyrad/data/paper/simu_tBL_WSe2/'; %change this for different experiment
+% exp_dir = 'H:/workspace/ptyrad/data/paper/simu_tBL_WSe2/'; %change this for different experiment
+
 % exp_dir = 'H:/workspace/ptyrad/data/paper/tBL_WSe2/'; %change this for different experiment
 
-scan_dir = 'Panel_g-h_Themis'; % change this for different scans
+scan_dir = ''; % change this for different scans
+file_name = 'phonon_temporal_spatial_N16384_dp128.hdf5';
+dataset_name = '/dp_1e+06';
 base_path = strcat(exp_dir, scan_dir, '/'); 
 jobID = strcat('WSe2_', scan_dir); %This will be used for the filename of param.m
 dim_x = 128; %EMPAD pixel number
-dim_y = 130; %Extra rows of EMPAD, will crop later
+dim_y = 128; %Extra rows of EMPAD, will crop later
 N_scan_x = 128; %Real space scan positions
 N_scan_y = 128;
 dScanX = 1; %scan downsample factor, 2 is to load every other scan position
 dScanY = 1; %scan downsample factor, 2 is to load every other scan position 
 Np_crop_pad = [128,128]; % size of diffraction patterns / probe used during reconstruction. can crop/pad to 64/256
 resample_factor = 1; %DP upsample factor
-scan_number = 15; %Ptychoshelves needs
+scan_number = 8; %Ptychoshelves needs
 final_scan = [N_scan_x/dScanX, N_scan_y/dScanY]; %Final number of scan positions
 final_dp_size = round(resample_factor * Np_crop_pad); %Final dimension of diffraction pattern
 scan_custom_flip = [1,1,0];
-custom_data_flip = [0,1,1];
+custom_data_flip = [0,0,0];
 
 % Microscope and acquisition parameters
-df = 0*10*-1*1.43; %defocus in angstrom, the sign is oppisite to UI defocus, and there's a 1.43 factor for actual defocus at 80kV for Themis
-ADU = 151; % Depends on kV, calibrated from the orignal EMPAD paper: doi:10.1017/S1431927615015664, 80kV: 151, 200kV: 393
+df = 0; %defocus in angstrom, the sign is oppisite to UI defocus, and there's a 1.43 factor for actual defocus at 80kV for Themis
+% ADU = 151; % Depends on kV, calibrated from the orignal EMPAD paper: doi:10.1017/S1431927615015664, 80kV: 151, 200kV: 393
 voltage = 80;
-alpha0 = 24.94; %convergence semi angle # 18->18.44, 25.2->24.92, 36->36.4, 54->55.45
+alpha0 = 24.9; %convergence semi angle # 18->18.44, 25.2->24.92, 36->36.4, 54->55.45
 rbf = 11.42; %radius of central disk in px at given camera length. 16 - cl 230 mm; 
-rot_ang = 3; %angle between cbed and scan coord.
+rot_ang = 0; %angle between cbed and scan coord.
 scan_step_size = 0.429; % For 128x128 scan positions, 1.182 - 5.1 Mx; 0.839 - 7.2 Mx; 0.605 - 10 Mx; 0.429 - 14.5Mx; 0.297 - 20.5 Mx; 0.208 - 29 Mx; 0.147 - 41 Mx %angstrom
 
 % Reconstruction parameters
@@ -62,7 +66,7 @@ Niter_plot_results = 1000;
 % Nprobe = 12; % # of probe modes
 variable_probe_modes = 0; % 2 if possible # of modes for variable probe correction
 % grouping = 16; % group size. small -> better convergence but longer time/iteration
-N_pos_corr = 0; % iteration number to start position correction. inf means no position correction
+N_pos_corr = 1; % iteration number to start position correction. inf means no position correction
 diff_pattern_blur = 0;
 GPU_solver = 'MLs'; % choose GPU solver: DM, ePIE, hPIE, MLc, Mls, -- recommended are MLc and MLs
 errmetric = 'L1';            % optimization likelihood - poisson, L1
@@ -105,8 +109,19 @@ disp(sprintf('Started at %s', recon_time))
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Step 2: load data
-scan_name = sprintf('scan_x%i_y%i.raw', N_scan_x, N_scan_y);
-fin = fread(fopen(strcat(base_path, scan_name),'r'), dim_x * dim_y * N_scan_x * N_scan_y,'float32=>float32'); % Load as 1-D vector with float32 and save as float32
+
+% Read the dataset '/dp' from the input HDF5 file
+% dataset_name = '/dp';
+try
+    fin = h5read(strcat(exp_dir, file_name), dataset_name);
+catch ME
+    fprintf('Error reading dataset "%s" from file "%s": %s\n', ...
+        dataset_name, file_name, ME.message);
+    return;
+end
+
+% scan_name = sprintf('scan_x%i_y%i.raw', N_scan_x, N_scan_y);
+% fin = fread(fopen(strcat(base_path, scan_name),'r'), dim_x * dim_y * N_scan_x * N_scan_y,'float32=>float32'); % Load as 1-D vector with float32 and save as float32
 fin_reshape = reshape(fin, dim_x, dim_y, N_scan_x, N_scan_y); %Matlab fill its column first, so the DP and scan pattern would be automatically transposed
 cbed = single(fin_reshape(1:128,1:128,1:dScanX:end,1:dScanY:end)); % crop the CBED into 128x128
 
@@ -214,9 +229,9 @@ for grouping = groupings
         p.   energy = voltage;                                           % Energy (in keV), leave empty to use spec entry mokev
         
         %p.   affine_angle = 0;                                     % Not used by ptycho_recons at all. This allows you to define a variable for the affine matrix below and keep it in p for future record. This is used later by the affine_matrix_search.m script
-        %p.   affine_matrix = [1 , 0; 0, 1] ; % Applies affine transformation (e.g. rotation, stretching) to the positions (ignore by = []). Convention [yn;xn] = M*[y;x].
-        affine_mat  = compose_affine_matrix(1, 0, rot_ang, 0);
-        p.   affine_matrix = affine_mat ; % Applies affine transformation (e.g. rotation, stretching) to the positions (ignore by = []). Convention [yn;xn] = M*[y;x].
+        p.   affine_matrix = [1 , 0; rot_ang, 1] ; % Applies affine transformation (e.g. rotation, stretching) to the positions (ignore by = []). Convention [yn;xn] = M*[y;x].
+        % affine_mat  = compose_affine_matrix(1.005, 0.03, -1.5, -1.2);
+        % p.   affine_matrix = affine_mat ; % Applies affine transformation (e.g. rotation, stretching) to the positions (ignore by = []). Convention [yn;xn] = M*[y;x].
         
         % Scan meta data
         p.   src_metadata = 'none';                                 % source of the meta data, following options are supported: 'spec', 'none' , 'artificial' - or add new to +scan/+meta/
@@ -450,7 +465,7 @@ for grouping = groupings
         %eng. probe_geometry_model = {};  % list of free parameters in the geometry model, choose from: {'scale', 'asymmetry', 'rotation', 'shear'}
         eng. probe_position_error_max = inf; % maximal expected random position errors, probe prositions are confined in a circle with radius defined by probe_position_error_max and with center defined by original positions scaled by probe_geometry_model
         eng. apply_relaxed_position_constraint = false; % added by YJ. Apply a relaxed constraint to probe positions. default = true. Set to false if there are big jumps in positions.
-        eng. update_pos_weight_every = 100; % added by YJ. Allow position weight to be updated multiple times. default = inf: only update once.
+        eng. update_pos_weight_every = 500; % added by YJ. Allow position weight to be updated multiple times. default = inf: only update once.
         
         if Nlayers>1
             % multilayer extension 

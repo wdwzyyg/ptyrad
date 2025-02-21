@@ -3,10 +3,10 @@
 #SBATCH --mail-user=cl2696@cornell.edu       # Where to send mail
 #SBATCH --nodes=1                            # number of nodes requested
 #SBATCH --ntasks=1                           # number of tasks to run in parallel
-#SBATCH --cpus-per-task=32                    # number of CPUs required for each task. 4 for 10GB, 8 for 20GB, 32 for 80GB of A100.
-#SBATCH --gres=gpu:a100:1               # request a GPU #gpu:a100:1, gpu:2g.20gb:1
+#SBATCH --cpus-per-task=4                    # number of CPUs required for each task. 4 for 10GB, 8 for 20GB, 32 for 80GB of A100.
+#SBATCH --gres=gpu:2g.20gb:1               # request a GPU #gpu:a100:1, gpu:2g.20gb:1
 #SBATCH --time=168:00:00                      # Time limit hrs:min:sec
-#SBATCH --output=logs/log_job_%j_ptyrad_optuna_ZSM5_random.txt  # Standard output and error log to /logs, you need to create this folder first!
+#SBATCH --output=logs/paper/log_job_%j_ptyrad_examples_PSO.txt  # Standard output and error log to /logs, you need to create this folder first!
 
 pwd; hostname; date
 
@@ -15,7 +15,7 @@ module load cuda/11.8
 source activate ptyrad # Use ptyrad_acc if you want to use multi-GPU via `accelerate`
 
 ## Set the params_path variable
-PARAMS_PATH="params/paper/ptyrad_optuna_ZSM5_random.yml"
+PARAMS_PATH="params/paper/ptyrad_examples_PSO.yml"
 echo params_path = ${PARAMS_PATH}
 
 ## Run the script via python or HuggingFace accelerate. Most often you'll do conventional python.
@@ -27,7 +27,7 @@ echo params_path = ${PARAMS_PATH}
 ## The job_id is used as a unique identifier for hypertune mode on multiple GPUs. 
 ## The JOB_ID is an environment variable that'll be automatically set to 1-N via LoopSubmit.sh. If not set, default to 0.
 
-python -u ./scripts/paper/run_ptyrad_loop.py --params_path "${PARAMS_PATH}" --gpuid 0 --jobid "${JOBID:-0}" 2>&1 # This runs via typical python on 1 GPU. 
+python -u ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid 0 --jobid "${JOBID:-0}" 2>&1 # This runs via typical python on 1 GPU. 
 # accelerate launch --num_processes=1 --mixed_precision='fp16' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs on 1 GPU with mixed precision via `accelerate`
 # accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' ./scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" 2>&1 # This runs DDP on 2 GPUs without mixed precision via `accelerate`
 

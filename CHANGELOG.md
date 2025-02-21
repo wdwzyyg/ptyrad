@@ -50,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
+## [Unreleased]
+### Added
+- Add `simulate_tBL_WSe2_4dstem` and `preprocess_simulated_4dstem` notebooks and script to `scripts/paper` to generate simulated data with abTEM
+### Changed
+- Fix the incorrect unit conversion of `meas_add_source_size` for partial spatial coherence. It was applying source size effect incorrectly as ang / scan_step_size. This would make an intended 0.34 Ang std with 0.4 Ang scan step size becomes effectively 0.34 scan step size, so 0.136 Ang std. 
+
 ## [v0.1.0-beta3.1] - 2025-02-13
 ### Added
 - Add `create_optuna_sampler` and `create_optuna_pruner` to allow flexible hyperameter tuning algorithm cofigurations in Optuna. The chosen sampler/pruner names will be affixed to the hypertune result folder.

@@ -275,7 +275,7 @@ class Initializer:
             meas = meas.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], meas.shape[-2], meas.shape[-1])
             source_size_std_ang = self.init_params['exp_params']['meas_add_source_size']
             source_size_std_px = source_size_std_ang / self.init_params['exp_params']['scan_step_size'] # The source size blur std is now in unit of scan steps
-            meas = gaussian_filter(meas, sigma=source_size_std_ang, axes=(0,1)) # Partial spatial coherence is approximated by mixing DPs at nearby probe positions
+            meas = gaussian_filter(meas, sigma=source_size_std_px, axes=(0,1)) # Partial spatial coherence is approximated by mixing DPs at nearby probe positions
             vprint(f"Adding source size (partial spatial coherence) of Gaussian blur std = {source_size_std_px:.4f} scan_step sizes or {source_size_std_ang:.4f} Ang to measurements along the scan directions", verbose=self.verbose)
             meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
             vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)

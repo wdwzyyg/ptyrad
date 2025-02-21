@@ -553,16 +553,22 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
         if constraint_params['complex_ratio']['freq'] is not None:
             obj_type = constraint_params['complex_ratio']['obj_type']
             obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-            output_path += f"_{obj_str}cplx{round(constraint_params['complex_ratio']['alpha1'],2)}"
+            alpha1 = round(constraint_params['complex_ratio']['alpha1'],2)
+            alpha2 = round(constraint_params['complex_ratio']['alpha2'],2)
+            output_path += f"_{obj_str}cplx{alpha1}_{alpha2}"
         
         if constraint_params['mirrored_amp']['freq'] is not None:
-            output_path += f"_mamp{round(constraint_params['mirrored_amp']['scale'],2)}_{round(constraint_params['mirrored_amp']['power'],2)}"
+            scale = round(constraint_params['mirrored_amp']['scale'],2)
+            power = round(constraint_params['mirrored_amp']['power'],2)
+            output_path += f"_mamp{scale}_{power}"
         
         if constraint_params['obja_thresh']['freq'] is not None:
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
         
         if constraint_params['objp_postiv']['freq'] is not None:
-            output_path += "_opos"
+            relax = constraint_params['objp_postiv']['relax']
+            relax_str = '' if relax == 0 else f'{round(relax,2)}'
+            output_path += f"_opos{relax_str}"
         
         if constraint_params['tilt_smooth']['freq'] is not None:
             output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
