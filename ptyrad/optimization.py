@@ -378,11 +378,18 @@ class CombinedConstraint(torch.nn.Module):
         # Note that this `relax` is defined oppositly to PtychoShelves's `positivity_constraint_object` in `ptycho_solver`. 
         # Here, relax=1 means fully relaxed and essentially no constraint.
         objp_postiv_freq = self.constraint_params['objp_postiv']['freq']
-        relax            = self.constraint_params['objp_postiv']['relax'] 
-        if objp_postiv_freq is not None and niter % objp_postiv_freq == 0: 
-            model.opt_objp.data = relax * model.opt_objp + (1-relax) * model.opt_objp.clamp(min=0)
+        relax            = self.constraint_params['objp_postiv']['relax']
+        mode             = self.constraint_params['objp_postiv'].get('mode', 'clip_neg')
+        if objp_postiv_freq is not None and niter % objp_postiv_freq == 0:
+            original_min = model.opt_objp.min()
+            if mode == 'subtract_min':
+                modified_objp = model.opt_objp - original_min
+            else: # 'clip_neg'
+                modified_objp = model.opt_objp.clamp(min=0)
+            model.opt_objp.data = relax * model.opt_objp + (1-relax) * modified_objp
+            omin, omax = model.opt_objp.min().item(), model.opt_objp.max().item()
             relax_str = f'relaxed ({relax}*obj + ({1-relax}*obj_postiv))' if relax != 0 else 'hard'
-            vprint(f"Apply {relax_str} positivity constraint on objp at iter {niter}", verbose=self.verbose)           
+            vprint(f"Apply {relax_str} positivity constraint on objp with '{mode}' mode at iter {niter}. Original min = {original_min.item():.3f}. objp range becomes ({omin:.3f}, {omax:.3f})", verbose=self.verbose)           
 
     def apply_tilt_smooth(self, model, niter):
         ''' Apply Gaussian blur to object tilts '''

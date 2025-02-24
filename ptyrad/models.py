@@ -128,7 +128,7 @@ class PtychoAD(torch.nn.Module):
             self.tilt_obj               = bool(self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts))          # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = bool(self.lr_params['probe_pos_shifts'] != 0)                                           # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.change_thickness       = bool(self.lr_params['slice_thickness']  != 0)
-            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum()
+            self.probe_int_sum          = self.get_measurements().mean(0).sum() # This is only used for the `fix_probe_int`
             self.loss_iters             = []
             self.iter_times             = []
             self.dz_iters               = []

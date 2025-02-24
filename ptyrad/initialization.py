@@ -262,7 +262,9 @@ class Initializer:
             target_Npix  = self.init_params['exp_params']['meas_pad']['target_Npix']
             value        = self.init_params['exp_params']['meas_pad']['value']
             threshold    = self.init_params['exp_params']['meas_pad'].get('threshold', 90)
-            amp_avg      = np.sqrt(meas.mean(0))
+            meas_avg     = meas.mean(0)
+            meas_int_sum = meas_avg.sum()
+            amp_avg      = np.sqrt(meas_avg)
             shape = meas.shape[-2:]  # Assuming last two dimensions are spatial
             
             # Calculate padding for each dimension
@@ -307,6 +309,11 @@ class Initializer:
             # Square the padded amplitude back to intensity
             meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
             
+            # Parse intensity information
+            meas_padded[..., pad_h1:pad_h2, pad_w1:pad_w2] = 0
+            padded_int_sum = meas_padded.sum()
+            vprint(f"Original meas int sum = {meas_int_sum:.4f}, padded region int sum = {padded_int_sum:.4f}, or {padded_int_sum/meas_int_sum:.2%} more intensity after padding", verbose=self.verbose)
+            
             if mode == 'precompute':
                 canvas = np.zeros((meas.shape[0], *meas_padded.shape[1:]))
                 canvas += meas_padded
@@ -338,7 +345,7 @@ class Initializer:
             scale_factors = self.init_params['exp_params']['meas_resample']['scale_factors']
             
             if mode == 'precompute':
-                meas = zoom(meas, np.array([1, *scale_factors]), order=1) # scipy.ndimage.zoom applies to all axes
+                meas = zoom(meas, np.array([1, *scale_factors]), order=1) # scipy.ndimage.zoom applies to all axes. No need to divide by prod(scale_factors) because we have a final normalization at the end of `init_meas`
                 Npix = meas.shape[-1]
                 self.init_variables['on_the_fly_meas_scale_factors'] = None
 

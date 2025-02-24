@@ -566,9 +566,11 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
         
         if constraint_params['objp_postiv']['freq'] is not None:
+            mode  = constraint_params['objp_postiv'].get('mode', 'clip_neg')
+            mode_str = 's' if mode == 'subtract_min' else 'c'
             relax = constraint_params['objp_postiv']['relax']
             relax_str = '' if relax == 0 else f'{round(relax,2)}'
-            output_path += f"_opos{relax_str}"
+            output_path += f"_opos{mode_str}{relax_str}"
         
         if constraint_params['tilt_smooth']['freq'] is not None:
             output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
