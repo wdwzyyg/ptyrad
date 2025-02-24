@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Add `simulate_tBL_WSe2_4dstem` and `preprocess_simulated_4dstem` notebooks and script to `scripts/paper` to generate simulated data with abTEM
+- Add `meas_pad` to `exp_parmas` with both 'precompute' and 'on_the_fly' mode. The 'padding_type' can be 'constant', 'edge', 'linear_ramp', 'exp', and 'power'. This allows flexible diffraction padding to conveniently change the real-space object pixel sampling.
 ### Changed
 - Fix the incorrect unit conversion of `meas_add_source_size` for partial spatial coherence. It was applying source size effect incorrectly as ang / scan_step_size. This would make an intended 0.34 Ang std with 0.4 Ang scan step size becomes effectively 0.34 scan step size, so 0.136 Ang std. 
 

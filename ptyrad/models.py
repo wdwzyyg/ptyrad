@@ -87,7 +87,12 @@ class PtychoAD(torch.nn.Module):
             self.verbose                = verbose
             self.detector_blur_std      = model_params['detector_blur_std']
             self.obj_preblur_std        = model_params['obj_preblur_std']
-            self.meas_scale_factors     = init_variables['on_the_fly_meas_scale_factors']
+            if init_variables.get('on_the_fly_meas_padded', None) is not None:
+                self.meas_padded        = torch.tensor(init_variables['on_the_fly_meas_padded'], dtype=torch.float32, device=device)
+                self.meas_padded_idx    = torch.tensor(init_variables['on_the_fly_meas_padded_idx'], dtype=torch.int32, device=device)
+            else:
+                self.meas_padded        = None
+            self.meas_scale_factors     = init_variables.get('on_the_fly_meas_scale_factors', None)
 
             # Parse the learning rate and start iter for optimizable tensors
             start_iter_dict = {}
@@ -230,6 +235,7 @@ class PtychoAD(torch.nn.Module):
         vprint(f"Change slice thickness    : {self.change_thickness}")
         vprint(f"Sub-px probe shift        : {self.shift_probes}")
         vprint(f"Detector blur             : {True if self.detector_blur_std is not None else False}")
+        vprint(f"On-the-fly meas padding   : {True if self.meas_padded is not None else False}")
         vprint(f"On-the-fly meas resample  : {True if self.meas_scale_factors is not None else False}")
         vprint(" ")
     
@@ -348,12 +354,24 @@ class PtychoAD(torch.nn.Module):
         # If no indices are passed, return the entire measurements
         
         measurements = self.measurements
+        device       = self.device
+        dtype        = measurements.dtype
+        if self.meas_padded is not None:
+            meas_padded  = self.meas_padded
+            meas_padded_idx = self.meas_padded_idx
+            pad_h1, pad_h2, pad_w1, pad_w2 = meas_padded_idx
         scale_factor = tuple(self.meas_scale_factors) if self.meas_scale_factors is not None else None
         
         if indices is not None:
             measurements = self.measurements[indices]
         else:
             measurements = self.measurements
+        
+        if self.meas_padded is not None:
+            canvas = torch.zeros((measurements.shape[0], *meas_padded.shape[-2:]), dtype=dtype, device=device)
+            canvas += meas_padded
+            canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = measurements # Replace the center part with the original meas
+            measurements = canvas
         
         if self.meas_scale_factors is not None and any(factor != 1 for factor in scale_factor):
             measurements = torch.nn.functional.interpolate(measurements[None,], scale_factor=scale_factor, mode='bilinear')[0] # 2D interpolate requires 4D input (N, C, H, W)

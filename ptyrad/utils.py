@@ -1743,6 +1743,42 @@ def ifftshift2(x):
     # Note that fftshift and ifftshift are only equivalent when N = even 
     return torch.fft.ifftshift(x, dim=(-2,-1))  
 
+def exponential_decay(r, a, b):
+    return a * np.exp(-b * r)
+
+def power_law(r, a, b):
+    return a * r**-b
+
+def create_one_hot_mask(image, percentile):
+    threshold = np.percentile(image, percentile)
+    mask = image <= threshold
+    return mask.astype(int)
+
+def fit_background(image, mask, fit_type='exp'):
+    from scipy.optimize import curve_fit
+
+    y, x = np.indices(image.shape)
+    center = np.array(image.shape) // 2
+    r = np.sqrt((x - center[1])**2 + (y - center[0])**2) + 1e-10
+    
+    masked_r = r[mask == 1]
+    masked_image = image[mask == 1]
+    
+    if fit_type == 'exp':
+        initial_guess = [np.max(masked_image), 0.1]  # [a_guess, b_guess]
+        bounds = ([0, 0], [np.inf, np.inf])  # a > 0, b > 0
+        popt, _ = curve_fit(exponential_decay, masked_r, masked_image, p0=initial_guess, bounds=bounds,maxfev=10000)
+        vprint(f"Fitted a = {popt[0]:.4f}, b = {popt[1]:.4f} for exponential decay: y = a*exp(-b*r)")
+    elif fit_type == 'power':
+        initial_guess = [np.max(masked_image), 1]  # [a_guess, b_guess]
+        bounds = ([0, 0], [np.inf, np.inf])  # a > 0, b > 0
+        popt, _ = curve_fit(power_law, masked_r, masked_image, p0=initial_guess, bounds=bounds, maxfev=10000)
+        vprint(f"Fitted a = {popt[0]:.4f}, b = {popt[1]:.4f} for power law decay: y = a*r^-b")
+    else:
+        raise ValueError("fit_type must be 'exp' or 'power'")
+    
+    return popt
+
 ###################################### ARCHIVE ##################################################
 
 def cplx_from_np(a, cplx_type='amp_phase', ndim = -1):

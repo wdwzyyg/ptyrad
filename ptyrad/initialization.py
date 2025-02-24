@@ -7,6 +7,9 @@ from scipy.io.matlab import matfile_version as get_matfile_version
 from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif, load_npy
 from ptyrad.utils import (
     compose_affine_matrix,
+    create_one_hot_mask,
+    exponential_decay,
+    fit_background,
     get_default_probe_simu_params,
     get_rbf,
     kv2wavelength,
@@ -14,6 +17,7 @@ from ptyrad.utils import (
     make_mixed_probe,
     make_stem_probe,
     near_field_evolution,
+    power_law,
     vprint,
 )
 
@@ -243,10 +247,94 @@ class Initializer:
             self.init_exp_params()
             meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
             vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
+        
+        # Preprocess the measurements before padding
+        if (meas < 0).any():
+            meas = self.meas_correct_neg(meas)
+            
+        # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
+        meas = self.meas_normalization(meas)
+        
+        # Pad the meas to enhance real space sampling
+        if self.init_params['exp_params']['meas_pad']['mode'] is not None:
+            mode         = self.init_params['exp_params']['meas_pad']['mode'] # 'on_the_fly' or 'precompute'
+            padding_type = self.init_params['exp_params']['meas_pad']['padding_type']
+            target_Npix  = self.init_params['exp_params']['meas_pad']['target_Npix']
+            value        = self.init_params['exp_params']['meas_pad']['value']
+            threshold    = self.init_params['exp_params']['meas_pad'].get('threshold', 90)
+            amp_avg      = np.sqrt(meas.mean(0))
+            shape = meas.shape[-2:]  # Assuming last two dimensions are spatial
+            
+            # Calculate padding for each dimension
+            pad_y = max(0, target_Npix - shape[0])
+            pad_x = max(0, target_Npix - shape[1])
+
+            # Split padding evenly, handling odd cases
+            pad_y1, pad_y2 = pad_y // 2, pad_y - pad_y // 2
+            pad_x1, pad_x2 = pad_x // 2, pad_x - pad_x // 2
+            
+            # Parse pad_h1, pad_h2, pad_w1, pad_w2
+            pad_h1 = pad_y1
+            pad_h2 = pad_y1+shape[0]
+            pad_w1 = pad_x1
+            pad_w2 = pad_x1+shape[1]
+
+            # Create coordinate grid for padding region
+            y, x = np.ogrid[:target_Npix, :target_Npix]
+            center = (shape[0] // 2 + pad_y1, shape[1] // 2 + pad_x1)
+            r = np.sqrt((y - center[0])**2 + (x - center[1])**2) + 1e-10 # so r is never 0
+            
+            # Calculate the meas_padded
+            if padding_type == 'constant':
+                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='constant', constant_values=value)
+            elif padding_type == 'edge':
+                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='edge')
+            elif padding_type == 'linear_ramp':
+                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='linear_ramp', end_values=value)
+            elif padding_type == 'exp':
+                mask = create_one_hot_mask(amp_avg, percentile=threshold)
+                popt = fit_background(amp_avg, mask, fit_type='exp')
+                background = exponential_decay(r, *popt)
+                amp_padded = background
+            elif padding_type == 'power':
+                mask = create_one_hot_mask(amp_avg, percentile=threshold)
+                popt = fit_background(amp_avg, mask, fit_type='power')
+                background = power_law(r, *popt)
+                amp_padded = background
+            else:
+                raise KeyError(f"meas_pad does not support padding_type = '{padding_type}', please choose from 'constant', 'edge', 'exp', or 'power'")
+
+            # Square the padded amplitude back to intensity
+            meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
+            
+            if mode == 'precompute':
+                canvas = np.zeros((meas.shape[0], *meas_padded.shape[1:]))
+                canvas += meas_padded
+                canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = meas # Replace the center part with the original meas
+                meas = canvas
+            elif mode == 'on_the_fly':
+                pass
+            else:
+                raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+            
+            self.init_variables['on_the_fly_meas_padded']     = meas_padded if mode == 'on_the_fly' else None
+            self.init_variables['on_the_fly_meas_padded_idx'] = [pad_h1, pad_h2, pad_w1, pad_w2] if mode == 'on_the_fly' else None
+            
+            # Update self.init_params['exp_params'], note that this wouldn't update the initial `exp_params` and the original exp_params will be saved into .pt
+            # The updated self.init_params['exp_params'] is for initialization purpose only
+            vprint(f"Update `exp_params` (dx_spec, Npix) after the measurements padding mode = '{mode}'", verbose=self.verbose)
+            self.init_params['exp_params']['dx_spec'] = self.init_params['exp_params']['dx_spec'] * self.init_params['exp_params']['Npix'] / meas_padded.shape[-1]
+            self.init_params['exp_params']['Npix']    = meas_padded.shape[-1]
+            self.init_exp_params()
             
         # Resample diffraction patterns along the ky, kx dimension
         if self.init_params['exp_params']['meas_resample']['mode'] is not None:
             mode = self.init_params['exp_params']['meas_resample']['mode']
+            Npix = self.init_params['exp_params']['Npix']
+            
+            if self.init_variables.get('on_the_fly_meas_padded', None) is not None: # meas_pad is 'on_the_fly' mode, so we need to force 'meas_resample' to on_the_fly as well
+                mode = 'on_the_fly'
+                vprint("'meas_resample' is set to 'on_the_fly' mode because 'meas_pad' is also set to 'on_the_fly' mode")
             scale_factors = self.init_params['exp_params']['meas_resample']['scale_factors']
             
             if mode == 'precompute':
@@ -255,14 +343,14 @@ class Initializer:
                 self.init_variables['on_the_fly_meas_scale_factors'] = None
 
             elif mode == 'on_the_fly':
-                Npix = meas.shape[-1] * scale_factors[-1]
+                Npix = Npix * scale_factors[-1]
                 self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
                 
             else:
                 raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
             
             self.init_params['exp_params']['Npix'] = Npix
-            vprint(f"Update `exp_params` (Npix) into {Npix} after the measurements resampling mode {mode} by scale_factors = {scale_factors}", verbose=self.verbose)
+            vprint(f"Update `exp_params` (Npix) into {Npix} after the measurements resampling mode '{mode}' by scale_factors = {scale_factors}", verbose=self.verbose)
 
             self.init_exp_params()
             vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
@@ -288,41 +376,7 @@ class Initializer:
         
         # Correct negative values if any. Note that for low dose data with a lot negative values, it's better to do clipping then subtraction.
         if (meas < 0).any():
-            neg_params = self.init_params['exp_params'].get('meas_remove_neg_values', {})
-
-            mode = neg_params.get('mode', 'clip_neg')  # Default to 'clip_neg' for better performance on low dose. The default was subtract_min until ptyrad-beta3.1
-            value = neg_params.get('value', None)  # Could be None if not provided
-
-            vprint(f"Removing negative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-
-            if mode == 'subtract_min':
-                min_value = meas.min()
-                meas -= min_value
-                value = None  # Not relevant for this mode
-                vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
-
-            elif mode == 'clip_value':
-                if value is None:
-                    raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
-                vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas[meas < value] = 0
-
-            elif mode == 'subtract_value':
-                if value is None:
-                    raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
-                vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas -= value
-
-            else:  # Default: 'clip_neg'
-                vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas[meas < 0] = 0
-                value = None  # Not relevant for clipping
-
-            # Final check in case the user specified value is not enough to remove all neg values
-            if (meas < 0).any():
-                vprint(f"User specified value = {value} is not enough to remove negative values, applying 0 clipping")
-                vprint(f"Minimum value of {meas.min():.4f} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-                meas[meas<0] = 0
+            meas = self.meas_correct_neg(meas, self.init_params['exp_params'].get('meas_remove_neg_values', {}), self.verbose)
                 
         # Add Poisson noise given electron per Ang^2
         if self.init_params['exp_params']['meas_add_poisson_noise'] is not None:
@@ -346,10 +400,7 @@ class Initializer:
             vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
             
         # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
-        normalization_const = (np.mean(meas, 0).max())
-        meas = meas / normalization_const 
-        meas = meas.astype('float32')
-        vprint(f"Normalizing measurements by {normalization_const:.8g} so the averaged measurement has max intensity at 1 for ease of display/comparison", verbose=self.verbose)
+        meas = self.meas_normalization(meas)
         
         # Get rbf related values (for electron ptychography only)
         if self.init_params['exp_params']['illumination_type'] == 'electron':
@@ -705,13 +756,24 @@ class Initializer:
         omode_occu       = self.init_variables['omode_occu'] 
         H                = self.init_variables['H']
         obj_tilts        = self.init_variables['obj_tilts']
-        scale_factors    = self.init_variables['on_the_fly_meas_scale_factors']
+        if self.init_variables.get('on_the_fly_meas_padded', None) is not None:
+            target_Npix  = self.init_variables['on_the_fly_meas_padded'].shape[-1]
+        else:
+            target_Npix  = meas.shape[-1]
+        if self.init_variables.get('on_the_fly_meas_scale_factors', None) is not None:
+            scale_factors = self.init_variables['on_the_fly_meas_scale_factors']
+        else:
+            scale_factors = [1,1]   
         
         # Check DP shape
         if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'", verbose=self.verbose)
+        elif Npix == target_Npix == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding", verbose=self.verbose)
         elif Npix == meas.shape[-2]*scale_factors[-2] == meas.shape[-1]*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement resampling", verbose=self.verbose)
+        elif Npix == target_Npix*scale_factors[-2] == target_Npix*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding and then resampling", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
         # Check scan pattern
@@ -754,3 +816,50 @@ class Initializer:
         self.init_check()
         
         return self
+
+    ## Initialization related utility functions
+
+    def meas_correct_neg(self, meas):
+        neg_params = self.init_params['exp_params'].get('meas_remove_neg_values', {})
+        mode = neg_params.get('mode', 'clip_neg')  # Default to 'clip_neg' for better performance on low dose. The default was subtract_min until ptyrad-beta3.1
+        value = neg_params.get('value', None)  # Could be None if not provided
+
+        vprint(f"Removing negative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+
+        if mode == 'subtract_min':
+            min_value = meas.min()
+            meas -= min_value
+            value = None  # Not relevant for this mode
+            vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
+
+        elif mode == 'clip_value':
+            if value is None:
+                raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
+            vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas < value] = 0
+
+        elif mode == 'subtract_value':
+            if value is None:
+                raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
+            vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas -= value
+
+        else:  # Default: 'clip_neg'
+            vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas < 0] = 0
+            value = None  # Not relevant for clipping
+
+        # Final check in case the user specified value is not enough to remove all neg values
+        if (meas < 0).any():
+            vprint(f"User specified value = {value} is not enough to remove negative values, applying 0 clipping")
+            vprint(f"Minimum value of {meas.min():.4f} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas<0] = 0
+                
+        return meas
+
+    def meas_normalization(self, meas):
+        normalization_const = (np.mean(meas, 0).max())
+        meas = meas / normalization_const 
+        meas = meas.astype('float32')
+        vprint(f"Normalizing measurements by {normalization_const:.8g} so the averaged measurement has max intensity at 1 for ease of display/comparison", verbose=self.verbose)
+        return meas
