@@ -260,8 +260,8 @@ class Initializer:
             mode         = self.init_params['exp_params']['meas_pad']['mode'] # 'on_the_fly' or 'precompute'
             padding_type = self.init_params['exp_params']['meas_pad']['padding_type']
             target_Npix  = self.init_params['exp_params']['meas_pad']['target_Npix']
-            value        = self.init_params['exp_params']['meas_pad']['value']
-            threshold    = self.init_params['exp_params']['meas_pad'].get('threshold', 90)
+            value        = self.init_params['exp_params']['meas_pad'].get('value', 10)
+            threshold    = self.init_params['exp_params']['meas_pad'].get('threshold', 70)
             meas_avg     = meas.mean(0)
             meas_int_sum = meas_avg.sum()
             amp_avg      = np.sqrt(meas_avg)
@@ -304,7 +304,7 @@ class Initializer:
                 background = power_law(r, *popt)
                 amp_padded = background
             else:
-                raise KeyError(f"meas_pad does not support padding_type = '{padding_type}', please choose from 'constant', 'edge', 'exp', or 'power'")
+                raise KeyError(f"meas_pad does not support padding_type = '{padding_type}', please choose from 'constant', 'edge', 'linear_ramp', 'exp', or 'power'")
 
             # Square the padded amplitude back to intensity
             meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
@@ -312,7 +312,7 @@ class Initializer:
             # Parse intensity information
             meas_padded[..., pad_h1:pad_h2, pad_w1:pad_w2] = 0
             padded_int_sum = meas_padded.sum()
-            vprint(f"Original meas int sum = {meas_int_sum:.4f}, padded region int sum = {padded_int_sum:.4f}, or {padded_int_sum/meas_int_sum:.2%} more intensity after padding", verbose=self.verbose)
+            vprint(f"Original meas int sum = {meas_int_sum:.4f}, padded region int sum = {padded_int_sum:.4f}, or {padded_int_sum/meas_int_sum:.2%} more intensity after padding. This percentage should be ideally less than 5%, or you should set a lower threshold to exclude more central region.", verbose=self.verbose)
             
             if mode == 'precompute':
                 canvas = np.zeros((meas.shape[0], *meas_padded.shape[1:]))
@@ -419,6 +419,7 @@ class Initializer:
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
         self.init_variables['measurements'] = meas
+        self.init_variables['meas_avg_sum'] = meas.mean(0).sum() + padded_int_sum if self.init_params['exp_params']['meas_pad']['mode'] is not None else meas.mean(0).sum()
         vprint(" ", verbose=self.verbose)
         
     def init_probe(self):
@@ -487,19 +488,18 @@ class Initializer:
         # Normalizing probe intensity
         pmode_max = self.init_params['exp_params']['pmode_max']
         try:
-            meas = self.init_variables['measurements']
+            meas_avg_sum = self.init_variables['meas_avg_sum'] # meas.mean(0).sum(), or total intensity of the averaged diffraction pattern
         except KeyError:
             # If 'measurements' doesn't exist, initialize it
-            vprint("Warning: 'measurements' key not found. Initializing measurements for probe intensity normalization...", verbose=self.verbose)
-            self.init_measurements()
-            meas = self.init_variables['measurements']
+            vprint("Warning: 'meas_avg_sum' key not found. Initializing measurements for probe intensity normalization...", verbose=self.verbose)
+            meas_avg_sum = self.init_variables['meas_avg_sum']
             
         # Select pmode range and print summary
         probe = probe[:pmode_max]
-        probe = probe / (np.sum(np.abs(probe)**2)/np.sum(meas)*len(meas))**0.5 # Normalizing the probe_data so that the sum(|probe_data|**2) is the same with an averaged single DP
+        probe = probe / (np.sum(np.abs(probe)**2)/meas_avg_sum)**0.5 # Normalizing the probe_data so that the sum(|probe_data|**2) is the same with an averaged single DP
         probe = probe.astype('complex64')
         vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
-        vprint(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while sum(meas)/len(meas) = {np.sum(meas)/len(meas):.2f}", verbose=self.verbose)
+        vprint(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while meas.mean(0).sum() = {meas_avg_sum:.2f}", verbose=self.verbose)
         self.init_variables['probe'] = probe
         vprint(" ", verbose=self.verbose)
    

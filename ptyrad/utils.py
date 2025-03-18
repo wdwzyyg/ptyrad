@@ -1754,6 +1754,10 @@ def power_law(r, a, b):
 def create_one_hot_mask(image, percentile):
     threshold = np.percentile(image, percentile)
     mask = image <= threshold
+    vprint(f"Using percentile = {percentile:.2f}% to create an one-hot mask for measurements amplitude background fitting")
+    radius_px = np.sqrt(np.abs(1-mask).sum() / np.pi)
+    radius_r  = radius_px / (len(mask)//2)
+    vprint(f"The mask has roughly {radius_px:.2f} px in radius, or {radius_r:.2f} of the distance from center to edge of the image")
     return mask.astype(int)
 
 def fit_background(image, mask, fit_type='exp'):

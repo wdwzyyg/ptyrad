@@ -82,6 +82,9 @@ class PtychoAD(torch.nn.Module):
     def __init__(self, init_variables, model_params, device='cuda', verbose=True):
         super(PtychoAD, self).__init__()
         with torch.no_grad():
+            
+            vprint('### Initializing PtychoAD model ###', verbose=verbose)
+            
             # Setup model behaviors
             self.device                 = device
             self.verbose                = verbose
@@ -128,7 +131,7 @@ class PtychoAD(torch.nn.Module):
             self.tilt_obj               = bool(self.lr_params['obj_tilts']        != 0 or torch.any(self.opt_obj_tilts))          # Set tilt_obj to True if lr_params['obj_tilts'] is not 0 or we have any none-zero tilt values
             self.shift_probes           = bool(self.lr_params['probe_pos_shifts'] != 0)                                           # Set shift_probes to True if lr_params['probe_pos_shifts'] is not 0
             self.change_thickness       = bool(self.lr_params['slice_thickness']  != 0)
-            self.probe_int_sum          = self.get_measurements().mean(0).sum() # This is only used for the `fix_probe_int`
+            self.probe_int_sum          = self.get_complex_probe_view().abs().pow(2).sum() # This is only used for the `fix_probe_int`
             self.loss_iters             = []
             self.iter_times             = []
             self.dz_iters               = []
@@ -146,7 +149,10 @@ class PtychoAD(torch.nn.Module):
                 'probe'           : self.opt_probe,
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
-    
+
+            vprint('### Done initializing PtychoAD model ###', verbose=verbose)
+            vprint(' ', verbose=verbose)
+            
     def get_complex_probe_view(self):
         """ Retrieve complex view of the probe """
         # This is a post-processing to ensure minimal code changes in PtyRAD for the DDP (multiGPU) via NCCL due to limited support for Complex value
@@ -351,7 +357,7 @@ class PtychoAD(torch.nn.Module):
     def get_measurements(self, indices=None):
         """ Get measurements for each position """
         # Return the selected measurements based on input indices
-        # If no indices are passed, return the entire measurements
+        # If no indices are passed, return the entire measurements ignoring any "on-the-fly" padding/resampling
         
         measurements = self.measurements
         device       = self.device
@@ -364,18 +370,21 @@ class PtychoAD(torch.nn.Module):
         
         if indices is not None:
             measurements = self.measurements[indices]
-        else:
+            
+            if self.meas_padded is not None:
+                canvas = torch.zeros((measurements.shape[0], *meas_padded.shape[-2:]), dtype=dtype, device=device)
+                canvas += meas_padded
+                canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = measurements # Replace the center part with the original meas
+                measurements = canvas
+            
+            if self.meas_scale_factors is not None and any(factor != 1 for factor in scale_factor):
+                measurements = torch.nn.functional.interpolate(measurements[None,], scale_factor=scale_factor, mode='bilinear')[0] # 2D interpolate requires 4D input (N, C, H, W)
+                measurements = measurements / prod(scale_factor) # This ensures the intensity scale and the integrated intensity are unchanged
+            
+        else: # Skip the "on-the-fly" operations so it won't throw any CUDA out-of-memory error. All typical PtyRAD usuage would pass get_measurements(batch) so this should be ok.
+            if self.meas_padded is not None or self.meas_scale_factors is not None:
+                vprint(f"WARNING: 'on-the-fly' measurements padding/resampling detected, but they are ignored because it may cause 'CUDA out-of-memory' when 'get_measurements()' is called without any indices. The original measurement with shape = {self.measurements.shape} is returned instead.")
             measurements = self.measurements
-        
-        if self.meas_padded is not None:
-            canvas = torch.zeros((measurements.shape[0], *meas_padded.shape[-2:]), dtype=dtype, device=device)
-            canvas += meas_padded
-            canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = measurements # Replace the center part with the original meas
-            measurements = canvas
-        
-        if self.meas_scale_factors is not None and any(factor != 1 for factor in scale_factor):
-            measurements = torch.nn.functional.interpolate(measurements[None,], scale_factor=scale_factor, mode='bilinear')[0] # 2D interpolate requires 4D input (N, C, H, W)
-            measurements = measurements / prod(scale_factor) # This ensures the intensity scale and the integrated intensity are unchanged
         
         return measurements
         
