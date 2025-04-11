@@ -96,7 +96,8 @@ class CombinedLoss(torch.nn.Module):
         pacbed_params = self.loss_params['loss_pacbed']
         if pacbed_params['state']:
             dp_pow = pacbed_params.get('dp_pow', 0.2)
-            loss_pacbed = self.mse(model_DP.mean(0).pow(dp_pow), measured_DP.mean(0).pow(dp_pow))**0.5
+            data_mean   = measured_DP.pow(dp_pow).mean()
+            loss_pacbed = self.mse(model_DP.mean(0).pow(dp_pow), measured_DP.mean(0).pow(dp_pow))**0.5 / data_mean # Doing Normalized RMSE makes the value quite consistent between dp_pow 0.2-0.5.
             loss_pacbed *= pacbed_params['weight']
         else:
             loss_pacbed = torch.tensor(0, dtype=torch.float32, device=self.device)

@@ -1745,6 +1745,55 @@ def ifftshift2(x):
     # Note that fftshift and ifftshift are only equivalent when N = even 
     return torch.fft.ifftshift(x, dim=(-2,-1))  
 
+def mfft2(im):
+    # Periodic Artifact Reduction in Fourier Transforms of Full Field Atomic Resolution Images
+    # https://doi.org/10.1017/S1431927614014639
+    rows, cols = im.shape
+    
+    # Compute boundary conditions
+    s = np.zeros_like(im)
+    s[0, :] = im[0, :] - im[rows-1, :]
+    s[rows-1, :] = -s[0, :]
+    s[:, 0] += im[:, 0] - im[:, cols-1]
+    s[:, cols-1] -= im[:, 0] - im[:, cols-1]
+
+    # Create grid for computing Poisson solution
+    cx, cy = np.meshgrid(2 * np.pi * np.arange(cols) / cols, 
+                          2 * np.pi * np.arange(rows) / rows)
+
+    # Generate smooth component from Poisson Eq with boundary condition
+    D = 2 * (2 - np.cos(cx) - np.cos(cy))
+    D[0, 0] = np.inf  # Enforce zero mean & handle division by zero
+    S = np.fft.fft2(s) / D
+
+    P = np.fft.fft2(im) - S  # FFT of periodic component
+    return P, S
+
+def center_crop(image, crop_height, crop_width, offset = (0,0)):
+    """
+    Center crops a 2D or 3D array (e.g., an image).
+
+    Args:
+        image (numpy.ndarray): The input array to crop. Can be 2D (H, W) or 3D (H, W, C).
+        crop_height (int): The desired height of the crop.
+        crop_width (int): The desired width of the crop.
+
+    Returns:
+        numpy.ndarray: The cropped image.
+    """
+    if len(image.shape) not in [2, 3]:
+        raise ValueError("Input image must be a 2D or 3D array.")
+
+    height, width = image.shape[-2:]
+
+    if crop_height > height or crop_width > width:
+        raise ValueError("Crop size must be smaller than the input image size.")
+
+    start_y = (height - crop_height) // 2 + offset[0]
+    start_x = (width - crop_width) // 2 + offset[0]
+
+    return image[..., start_y:start_y + crop_height, start_x:start_x + crop_width]
+
 def exponential_decay(r, a, b):
     return a * np.exp(-b * r)
 
