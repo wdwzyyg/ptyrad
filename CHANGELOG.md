@@ -50,6 +50,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delete used variables for lower memory footprint
 - Use in-place operations on tensors don't require grad
 
+## [Unrealsed]
+### Changed
+- Modify `set_gpu_device` to add automatic support for Apple Silicon (MPS) GPUs.
+
 ## [v0.1.0-beta3.2] - 2025-04-11
 ### Added
 - Add `simulate_tBL_WSe2_4dstem` and `preprocess_simulated_4dstem` notebooks and script to `scripts/paper` to generate simulated data with abTEM

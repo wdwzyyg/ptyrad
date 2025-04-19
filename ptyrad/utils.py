@@ -174,10 +174,18 @@ def print_system_info():
         except ImportError:
             vprint("Memory information will be available after `conda install conda-forge::psutil`")
     
-    # CUDA and GPU information
-    vprint(f"CUDA Available: {torch.cuda.is_available()}")
-    vprint(f"CUDA Version: {torch.version.cuda}")
-    vprint(f"GPU Device: {[torch.cuda.get_device_name(d) for d in [d for d in range(torch.cuda.device_count())]]}")
+    # GPU information
+    if torch.backends.cuda.is_built() and torch.cuda.is_available():
+        vprint(f"CUDA Available: {torch.cuda.is_available()}")
+        vprint(f"CUDA Version: {torch.version.cuda}")
+        vprint(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
+    elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
+        vprint(f"MPS Available: {torch.backends.mps.is_available()}")
+    elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
+        vprint("GPU support built with PyTorch, but could not find any GPU device.")
+    else:
+        vprint("No GPU backend (CUDA or MPS) built into this PyTorch install.")
+        vprint("Install a PyTorch version with GPU support if you want to utilize GPUs.")
     
     # Python version and executable
     vprint(f"Python Executable: {sys.executable}")
@@ -192,14 +200,34 @@ def print_system_info():
     vprint(" ")
 
 def set_gpu_device(gpuid=0):
-    vprint("### Setting GPU ID ###")
-    if gpuid is not None:
-        device = torch.device("cuda:" + str(gpuid))
-        torch.set_default_device(device)
-        vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
+    vprint("### Setting GPU Device ###")
+
+    if gpuid is None:
+        device = torch.device("cpu")
+        vprint("Specified to use CPU (gpuid=None).")
+
     else:
-        device = None
-        vprint(f"Selected gpuid = {gpuid}")
+        if torch.cuda.is_available():
+            num_cuda_devices = torch.cuda.device_count()
+            if gpuid < num_cuda_devices:
+                device = torch.device(f"cuda:{gpuid}")
+                torch.set_default_device(device)
+                vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
+            else:
+                device = torch.device("cuda")
+                vprint(f"Requested CUDA device cuda:{gpuid} is out of range (only {num_cuda_devices} available)." 
+                       f"Fall back to GPU device: {device}")
+        
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+            vprint("Selected GPU device: MPS (Apple Silicon)")
+        
+        else:
+            device = torch.device("cpu")
+            vprint(f"GPU ID specifed as {gpuid} but no GPU found. Using CPU instead.")
+            
+    torch.set_default_device(device)
+
     vprint(" ")
     return device
 
@@ -255,8 +283,18 @@ def get_size_bytes(x):
     return size_bytes
 
 def time_sync():
-    torch.cuda.synchronize()
-    # t = time()
+    # PyTorch doesn't have a direct exposed API to check the selected default device 
+    # so we'll be checking these .is_available() just to prevent error.
+    # Luckily these checks won't really affect the performance.
+    
+    # Check if CUDA is available
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    # Check if MPS (Metal Performance Shaders) is available (macOS only)
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
+    
+    # Measure the time
     t = perf_counter()
     return t
 
