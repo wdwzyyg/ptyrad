@@ -155,7 +155,7 @@ def load_params(file_path):
 def load_json_params(file_path):
     import json
     
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding='utf-8') as file:
         params_dict = json.load(file)
     vprint("Success! Loaded .json file path =", file_path)
     params_dict['params_path'] = file_path
@@ -164,7 +164,7 @@ def load_json_params(file_path):
 def load_yml_params(file_path):
     import yaml
 
-    with open(file_path, "r") as file:
+    with open(file_path, "r", encoding='utf-8') as file:
         params_dict = yaml.safe_load(file)
     vprint("Success! Loaded .yml file path =", file_path)
     params_dict['params_path'] = file_path
