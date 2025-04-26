@@ -656,6 +656,15 @@ def create_optuna_pruner(pruner_params, verbose=True):
         vprint(" ", verbose=verbose)
         return pruner
 
+# Helper function to compute the current error
+def compute_optuna_error(model, indices, metric):
+    if metric == 'contrast':
+        return get_objp_contrast(model, indices)
+    elif metric == 'loss':
+        return model.loss_iters[-1][-1]
+    else:
+        raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")
+
 def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda', verbose=False):
     """
     Objective function for Optuna hyperparameter tuning in ptychographic reconstruction.
@@ -798,14 +807,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                
         ## Pruning logic for optuna
         if hypertune_params['pruner_params'] is not None:
-            # Only compute these none-standard error if we're pruning
-            if error_metric == 'contrast':
-                optuna_error = get_objp_contrast(model, indices) 
-            elif error_metric == 'loss':
-                optuna_error = model.loss_iters[-1][-1]
-            else:
-                raise ValueError(f"Unsupported hypertune error metric: '{error_metric}'. Expected 'contrast' or 'loss'.")
-            
+            optuna_error = compute_optuna_error(model, indices, error_metric)
             trial.report(optuna_error, niter)
             
             # Handle pruning based on the intermediate value.
@@ -818,14 +820,9 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
                     plot_summary(output_dir, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
                 raise optuna.exceptions.TrialPruned()
 
-    ## Calculate the optuna_error of the finished trials. This block is skipped if it's been calculated for finsished trials with pruner.
-    if optuna_error is None:
-        if error_metric == 'contrast':
-            optuna_error = get_objp_contrast(model, indices) 
-        elif error_metric == 'loss':
-            optuna_error = model.loss_iters[-1][-1]
-        else:
-            raise ValueError(f"Unsupported hypertune error metric: '{error_metric}'. Expected 'contrast' or 'loss'.")
+    ## Final optuna_error evaluation (only needed if pruner never ran)
+    if hypertune_params['pruner_params'] is None:
+        optuna_error = compute_optuna_error(model, indices, error_metric)
     
     ## Saving collate results and figs of the finished trials
     collate_str = f"_error_{optuna_error:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
