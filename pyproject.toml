@@ -4,35 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ptyrad"
-version = "0.1.0-beta2.6"
+version = "0.1.0b3.dev3"
 authors = [
   { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
 ]
-description = "PtyRAD: PTYchographic Reconstruction using Automatic Differentiation"
+description = "PtyRAD: PTYchographic Reconstruction with Automatic Differentiation. Developed at the Muller Group, Cornell University."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-dependencies = [
-  "cupy",
-  "pytorch-cuda",
-  "h5py",
-  "torchvision",
-  "scikit-learn",
-  "tifffile",
-  "scipy",
-  "matplotlib",
-  "optuna"
-]
 
-[project.optional-dependencies]
-multi_gpu = ["accelerate>=0.34.2"]
+# Leave this empty so all the dependencies are installed via `conda` during environment creation
+# This pyproject.toml is prepared solely to register the `ptyrad` via `pip install -e .` for more robust import
+dependencies = []
 
 [project.urls]
 "Homepage" = "https://github.com/chiahao3/ptyrad"
 "Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+packages = ["ptyrad"]

@@ -5,9 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unrealsed]
+## [0.1.0b3.dev3] - 2025-04-26
+### Added
+- Add `Git_workflow.md`, `CONTRIBUTING.md`, and `WISHLIST.md` drafts
 ### Changed
 - Modify `set_gpu_device` to add automatic support for Apple Silicon (MPS) GPUs.
+- Fix `UnicodeDecodeError` by specifying UTF-8 encoding when loading YAML / JSON params files on non-UTF8 terminals
+- Add paper figure saving as pdf and png with 600 DPI
+- Fix hypertune when no pruner. The final optuna_error should only be calculated when pruner = None.
+- Update `pyproject.toml` with the PEP 440 valid versioning and installation setup for `pip install -e .`
+- Change the versioning `v0.1.0-beta3.3` -> `0.1.0b3.dev3` to get `pyproject.toml` install working. 
 
 ## [v0.1.0-beta3.2] - 2025-04-11
 ### Added
