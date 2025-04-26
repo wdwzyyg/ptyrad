@@ -122,14 +122,19 @@ def load_npy(file_path):
     print("Imported .npy data shape =", data.shape)
     return data
 
-def load_pt(file_path):
+def load_pt(file_path, weights_only=False):
     import torch
 
     # Check if the file exists
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
 
-    data = torch.load(file_path)
+    data = torch.load(file_path, weights_only=weights_only) 
+    # The default behavior of torch.load is `weights_only=True` since PyTorch 2.6 (2025.01.29)
+    # https://dev-discuss.pytorch.org/t/bc-breaking-change-torch-load-is-being-flipped-to-use-weights-only-true-by-default-in-the-nightlies-after-137602/2573
+    # Because PtyRAD .pt isn't a true PyTorch model, so `weights_only=True` would break this critical loading function.
+    # However, `weights_only=False` has potential risk if the .pt file contains malicious code, so please only use this `load_pt` for PtyRAD-generated .pt file.
+    
     print("Success! Loaded .pt file path =", file_path)
     return data
 
