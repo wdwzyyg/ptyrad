@@ -133,11 +133,11 @@ def set_accelerator():
 
 def print_system_info():
     
+    import importlib
+    import importlib.metadata
     import os
     import platform
     import sys
-    import numpy as np
-    import torch
     
     vprint("### System information ###")
     
@@ -173,30 +173,68 @@ def print_system_info():
             vprint(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
         except ImportError:
             vprint("Memory information will be available after `conda install conda-forge::psutil`")
-    
-    # GPU information
-    if torch.backends.cuda.is_built() and torch.cuda.is_available():
-        vprint(f"CUDA Available: {torch.cuda.is_available()}")
-        vprint(f"CUDA Version: {torch.version.cuda}")
-        vprint(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
-    elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
-        vprint(f"MPS Available: {torch.backends.mps.is_available()}")
-    elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
-        vprint("GPU support built with PyTorch, but could not find any GPU device.")
-    else:
-        vprint("No GPU backend (CUDA or MPS) built into this PyTorch install.")
-        vprint("Install a PyTorch version with GPU support if you want to utilize GPUs.")
+    try:
+        import torch
+        # GPU information
+        if torch.backends.cuda.is_built() and torch.cuda.is_available():
+            vprint(f"CUDA Available: {torch.cuda.is_available()}")
+            vprint(f"CUDA Version: {torch.version.cuda}")
+            vprint(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
+        elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
+            vprint(f"MPS Available: {torch.backends.mps.is_available()}")
+        elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
+            vprint("GPU support built with PyTorch, but could not find any GPU device.")
+        else:
+            vprint("No GPU backend (CUDA or MPS) built into this PyTorch install.")
+            vprint("Install a PyTorch version with GPU support if you want to utilize GPUs.")
+    except ImportError:
+        vprint("No GPU information because PyTorch can't be imported")
     
     # Python version and executable
     vprint(f"Python Executable: {sys.executable}")
     vprint(f"Python Version: {sys.version}")
-    vprint(f"NumPy Version: {np.__version__}")
-    vprint(f"PyTorch Version: {torch.__version__}")
+    
+    # Print package versions
+    packages = [
+        ("Numpy", "numpy"),
+        ("PyTorch", "torch"),
+        ("Optuna", "optuna"),
+        ("Accelerate", "accelerate"),
+    ]
+
+    # Check versions for relevant packages
+    for display_name, module_name in packages:
+        try:
+            # Try to get the version from package metadata (installed version)
+            version = importlib.metadata.version(module_name)
+            vprint(f"{display_name} Version (metadata): {version}")
+        except importlib.metadata.PackageNotFoundError:
+            vprint(f"{display_name} not found in the environment.")
+        except Exception as e:
+            vprint(f"Error retrieving version for {display_name}: {e}")
+    
+    # Check the version and path of the used PtyRAD package
+    # Note that we're focusing on the version/path of the actual imported PtyRAD.
+    # If there are both an installed version of PtyRAD in the environment and a local copy in the working directory,
+    # Python will prioritize the version in the working directory.
+    #
+    # When using `pip install -e .`, only the version metadata gets recorded, which won't be updated until you reinstall.
+    # As a result, a user who pulls new code from the repo will have their `__init__.py` updated, but the version metadata recorded by pip will remain unchanged.
+    # Therefore, it is better to retrieve the version directly from `module.__version__` for now, as this will reflect the actual local version being used.
+    # Once we transition to using pip/conda for installation, all code updates will be paired with an installation, 
+    # and we can safely switch to retrieving the version via `importlib.metadata.version`.
     try:
-        import ptyrad
-        vprint(f"PtyRAD Version: {ptyrad.__version__}")
+        # Import ptyrad (which will prioritize the local version if available)
+        module = importlib.import_module('ptyrad')
+        vprint(f"PtyRAD Version (direct import): {module.__version__}") # This version is defined in __init__.py
+        vprint(f"PtyRAD is located at: {module.__file__}")
     except ImportError:
-        vprint("Didn't find PtyRAD")
+        vprint("PtyRAD not found locally")
+    except AttributeError:
+        vprint("PtyRAD imported, but no __version__ attribute found.")
+    except Exception as e:
+        vprint(f"Error retrieving version for PtyRAD: {e}")
+    
     vprint(" ")
 
 def set_gpu_device(gpuid=0):
@@ -242,7 +280,7 @@ def vprint(*args, verbose=True, **kwargs):
             print(*args, **kwargs)
 
 def get_date(date_format='%Y%m%d'):
-    from datetime import datetime, date
+    from datetime import date, datetime
     
     # If the format includes time-specific placeholders, return full datetime
     if any(fmt in date_format for fmt in ['%H', '%M', '%S']):
