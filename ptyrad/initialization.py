@@ -547,7 +547,7 @@ class Initializer:
         elif source == 'simu':
             vprint(f"Simulating probe positions with dx_spec = {dx_spec}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
             pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
-            pos = pos - (pos.max(0) - pos.min(0))/2 + pos.min(0) # Center scan around origin
+            pos = pos - pos.mean(0) # Center scan around origin
             obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
             pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
         elif source == 'foldslice_hdf5': # This preprocessing routine is equivalent to `p.src_positions='hdf5_pos';` in `fold_slice` that was used for many APS instruments
