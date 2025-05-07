@@ -12,7 +12,8 @@ from torch.utils.data import Dataset
 
 from ptyrad.initialization import Initializer
 from ptyrad.models import PtychoAD
-from ptyrad.optimization import CombinedConstraint, CombinedLoss, create_optimizer, get_objp_contrast
+from ptyrad.losses import CombinedLoss, get_objp_contrast
+from ptyrad.constraints import CombinedConstraint
 from ptyrad.utils import (
     copy_params_to_dir,
     get_blob_size,
@@ -269,6 +270,41 @@ class IndicesDataset(Dataset):
 
     def __getitem__(self, idx):
         return self.indices[idx]
+
+def create_optimizer(optimizer_params, optimizable_params, verbose=True):
+    # Extract the optimizer name and configs
+    optimizer_name = optimizer_params['name']
+    optimizer_configs = optimizer_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
+    pt_path = optimizer_params.get('load_state')
+    
+    vprint(f"### Creating PyTorch '{optimizer_name}' optimizer with configs = {optimizer_configs} ###", verbose=verbose)
+    
+    # Get the optimizer class from torch.optim
+    optimizer_class = getattr(torch.optim, optimizer_name, None)
+    
+    if optimizer_class is None:
+        raise ValueError(f"Optimizer '{optimizer_name}' is not supported.")
+    if optimizer_name == 'LBFGS':
+        vprint("Note: LBFGS optimizer is a quasi-Newton 2nd order optimizer that will run multiple forward passes (default: 20) for 1 update step")
+        vprint("Note: LBFGS usually converges faster for convex problem with full-batch non-noisy gradients, but each update step is computationally slower")
+        non_zero_lr = [p['lr'] for p in optimizable_params if p['lr'] != 0]
+        optimizer_configs['lr'] = min(non_zero_lr)
+        vprint(f"Note: LBFGS optimizer does not support per parameter learning rate so it'll be set to the minimal non-zero learning rate = {min(non_zero_lr)}")
+        optimizable_params = [p['params'][0] for p in optimizable_params if p['params'][0].requires_grad] # LBFGS only takes 1 params group as an iterable
+
+    optimizer = optimizer_class(optimizable_params, **optimizer_configs)
+
+    if pt_path is not None:
+        try:
+            from ptyrad.data_io import load_pt
+            optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
+            vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
+        except ImportError as e:
+            raise ImportError("Failed to import 'load_pt' from ptyrad.data_io. Make sure data_io is accessible.") from e
+        except KeyError:
+            raise KeyError(f"Missing 'optim_state_dict' in loaded checkpoint from {pt_path}")
+    vprint(" ", verbose=verbose)
+    return optimizer
 
 def prepare_recon(model, init, params):
     """
