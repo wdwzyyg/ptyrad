@@ -6,23 +6,6 @@ import scipy.io as sio
 
 from ptyrad.utils import vprint
 
-def yaml2json(input_filepath, output_filepath):
-    import yaml
-    import json
-    with open(input_filepath, 'r') as file:
-        try:
-            # Load as YAML
-            data = yaml.safe_load(file)
-            
-            # Save to JSON
-            with open(output_filepath, 'w') as json_file:
-                json.dump(data, json_file, indent=4)
-                
-            print(f"YAML {input_filepath} has been successfully converted and saved to JSON {output_filepath}")
-
-        except yaml.YAMLError as e:
-            print("Error parsing YAML file:", e)
-
 def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
     # shape = (N, height, width)
     # np.fromfile with custom dtype is faster than the np.read and np.frombuffer

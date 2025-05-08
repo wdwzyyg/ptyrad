@@ -10,24 +10,21 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import Dataset
 
-from ptyrad.initialization import Initializer
-from ptyrad.models import PtychoAD
-from ptyrad.losses import CombinedLoss, get_objp_contrast
 from ptyrad.constraints import CombinedConstraint
+from ptyrad.initialization import Initializer
+from ptyrad.losses import CombinedLoss, get_objp_contrast
+from ptyrad.models import PtychoAD
+from ptyrad.save import copy_params_to_dir, make_output_folder, save_results
 from ptyrad.utils import (
-    copy_params_to_dir,
     get_blob_size,
     get_date,
-    make_batches,
-    make_output_folder,
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
-    save_results,
-    select_scan_indices,
     time_sync,
     vprint,
 )
 from ptyrad.visualization import plot_pos_grouping, plot_summary
+
 
 class PtyRADSolver(object):
     """
@@ -305,6 +302,154 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
             raise KeyError(f"Missing 'optim_state_dict' in loaded checkpoint from {pt_path}")
     vprint(" ", verbose=verbose)
     return optimizer
+
+def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full', verbose=True):
+    
+    N_scans = N_scan_slow * N_scan_fast
+    vprint(f"Selecting indices with the '{mode}' mode ", verbose=verbose)
+    # Generate flattened indices for the entire FOV
+    if mode == 'full':
+        indices = np.arange(N_scans)
+        return indices
+
+    # Set default values for subscan params
+    if subscan_slow is None and subscan_fast is None:
+        vprint("Subscan params are not provided, setting subscans to default as half of the total scan for both directions", verbose=verbose)
+        subscan_slow = N_scan_slow//2
+        subscan_fast = N_scan_fast//2
+        
+    # Generate flattened indices for the center rectangular region
+    if mode == 'center':
+        vprint(f"Choosing subscan with {(subscan_slow, subscan_fast)}", verbose=verbose) 
+        start_row = (N_scan_slow - subscan_slow) // 2
+        end_row = start_row + subscan_slow
+        start_col = (N_scan_fast - subscan_fast) // 2
+        end_col = start_col + subscan_fast
+        indices = np.array([row * N_scan_fast + col for row in range(start_row, end_row) for col in range(start_col, end_col)])
+
+    # Generate flattened indices for the entire FOV with sub-sampled indices
+    elif mode == 'sub':
+        vprint(f"Choosing subscan with {(subscan_slow, subscan_fast)}", verbose=verbose) 
+        full_indices = np.arange(N_scans).reshape(N_scan_slow, N_scan_fast)
+        subscan_slow_id = np.linspace(0, N_scan_slow-1, num=subscan_slow, dtype=int)
+        subscan_fast_id = np.linspace(0, N_scan_fast-1, num=subscan_fast, dtype=int)
+        slow_grid, fast_grid = np.meshgrid(subscan_slow_id, subscan_fast_id, indexing='ij')
+        indices = full_indices[slow_grid, fast_grid].reshape(-1)
+
+    else:
+        raise KeyError(f"Indices selection mode {mode} not implemented, please use either 'full', 'center', or 'sub'")   
+        
+    return indices
+
+def make_batches(indices, pos, batch_size, mode='random', verbose=True):
+    ''' Make batches from input indices '''
+    # Input:
+    #   indices: int, (Ns,) array. indices could be a subset of all indices.
+    #   pos: int/float (N,2) array. Always pass in the full positions.
+    #   batch_size: int. The number of indices of each mini-batch
+    #   mode: str. Choose between 'random', 'compact', or 'sparse' grouping.
+    # Output:
+    #   batches: A list of `num_batch` arrays, or [batch0, batch1, ...]
+    # Note:
+    #   The actual batch size would only be "close" if it's not divisible by len(indices) for 'random' grouping
+    #   For 'compact' or 'sparse', it's generally fluctuating around the specified batch size
+    #   'sparse' can be quite slow for large scan positions (like 256x256 takes more than 10min, and 128x128 takes more than 1min on a CPU)
+    #   PtychoShelves automatically switches to 'random' for len(pos) > 1e3 and relying on the random statistics 
+    #   To check the correctness of each grouping, you may visualize the pos
+    #   Also we want to make sure we're not missing any indices, so we can do:
+    #
+    #   flatten_indices = np.concatenate(batches)
+    #   flatten_indices.sort()
+    #   indices.sort()
+    #   all(flatten_indices == indices)
+    from time import time
+    
+    try:
+        from sklearn.cluster import MiniBatchKMeans
+    except ImportError as e:
+        missing_package = str(e).split()[-1]
+        vprint(f"### {missing_package} is not available, group mode set to 'random'. 'scikit-learn' is needed for 'sparse' and 'compact' ###")
+        mode = 'random'
+        
+    if len(indices) > len(pos):
+        raise ValueError(f"len(indices) = '{len(indices)}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
+    
+    if indices.max() > len(pos):
+        raise ValueError(f"Maximum index '{indices.max()}' is larger than total number of probe positions ({len(pos)}), check your indices generation params")
+
+    num_batch = len(indices) // batch_size   
+    t_start = time()
+    if mode == 'random':
+        rng = np.random.default_rng()
+        shuffled_indices = rng.permutation(indices)           # This will make a shuffled copy    
+        random_batches = np.array_split(shuffled_indices, num_batch)
+        vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
+        return random_batches
+        
+    else: # Either 'compact' or 'sparse'
+        # Choose the selected pos from indices
+        pos_s = pos[indices]
+        # Kmeans for clustering
+        kmeans = MiniBatchKMeans(init="k-means++", n_init=10, n_clusters=num_batch, max_iter=10, batch_size=3072)
+        kmeans.fit(pos_s)
+        labels = kmeans.labels_
+        
+        # Separate data points into groups
+        compact_batches = []
+        for batch_idx in range(num_batch):
+            batch_indices_s = np.where(labels == batch_idx)[0]
+            compact_batches.append(indices[batch_indices_s])
+
+        if mode == 'compact':
+            vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
+            return compact_batches
+
+        else: # 'sparse' mode
+            from scipy.spatial.distance import cdist
+            sparse_indices = indices.copy() # Make a deep copy of indices so that we may pop elements from sparse_indices later
+            
+            # Initialize the list to store groups
+            sparse_batches = []
+            
+            # Calculate the centroid for each compact group as initial start for sparse groups
+            # The idea is the centroids of each compact group are naturally sparse
+            centroids = np.array([np.mean(pos[cbatch], axis=0) for cbatch in compact_batches])
+            pairwise_distances = cdist(pos, pos) # Calculate the dist for ALL pos can keep the absolute index and skip the conversion between indexing
+            
+            used_indices = [] # This list stores the indices used for initialization of the sparse groups
+            # Find the indices closest to the centroids of compact groups, these indices are the initial point for each sparse group
+            for batch_idx in range(num_batch):
+                distances = np.linalg.norm(pos_s - centroids[batch_idx], axis=1) # Note that this distances is only for selected pos (pos_s = pos[indices])
+                closest_idx_s = np.argmin(distances) # closest_idx_s is the position of min distances
+                closest_idx = indices[closest_idx_s] # closest_idx is the actual index that is closest to the centroid
+                sparse_batches.append([closest_idx])
+                used_indices.append(closest_idx_s)
+            sparse_indices = np.delete(sparse_indices, used_indices) # Delete the used_indices after the entire loop, this helps keep indexing correct and consistent
+            # Deleting elements in a loop would make indexing very challenging
+            
+            # Iterate through remaining points
+            for idx in sparse_indices:
+                min_distances = []
+                # Iterate through groups
+                for batch_idx in range(num_batch):
+                    distances = pairwise_distances[sparse_batches[batch_idx], idx]
+                    min_distances.append(np.min(distances))
+                
+                max_group_index = np.argmax(min_distances)
+
+                # Add the point to the group with the farthest minimal distance
+                sparse_batches[max_group_index].append(idx)
+            
+            # Final check because this procedure is fairly complicated
+            flatten_indices = np.concatenate(sparse_batches)
+            flatten_indices.sort()
+            indices.sort()
+            assert all(flatten_indices == indices), "Sorry, something went wrong with the sparse grouping, please try 'random' for now"
+            vprint(f"Generated {num_batch} '{mode}' groups of ~{batch_size} scan positions in {time() - t_start:.3f} sec", verbose=verbose)
+            
+            # Final process to make batches a list of arrays
+            sparse_batches = [np.array(batch) for batch in sparse_batches]
+            return sparse_batches
 
 def prepare_recon(model, init, params):
     """

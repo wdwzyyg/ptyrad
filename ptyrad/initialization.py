@@ -1,18 +1,18 @@
 ## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
 
 import numpy as np
-from scipy.ndimage import gaussian_filter, zoom
 from scipy.io.matlab import matfile_version as get_matfile_version
+from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_pt, load_raw, load_tif, load_npy
+from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_npy, load_pt, load_raw, load_tif
 from ptyrad.utils import (
     compose_affine_matrix,
     create_one_hot_mask,
     exponential_decay,
     fit_background,
     get_default_probe_simu_params,
+    get_EM_constants,
     get_rbf,
-    kv2wavelength,
     make_fzp_probe,
     make_mixed_probe,
     make_stem_probe,
@@ -20,6 +20,7 @@ from ptyrad.utils import (
     power_law,
     vprint,
 )
+
 
 class Initializer:
     def __init__(self, exp_params, source_params, verbose=True):
@@ -114,7 +115,7 @@ class Initializer:
         
         if exp_params['illumination_type']  == 'electron':    
             voltage     = exp_params['kv']
-            wavelength  = kv2wavelength(voltage)
+            wavelength  = get_EM_constants(voltage, 'wavelength')
             conv_angle  = exp_params['conv_angle']
             Npix        = exp_params['Npix']
             N_scan_slow = exp_params['N_scan_slow']
@@ -690,7 +691,7 @@ class Initializer:
         dx_spec = self.init_params['exp_params']['dx_spec']
         
         if self.init_params['exp_params']['illumination_type'] == 'electron':
-            lambd = kv2wavelength(self.init_params['exp_params']['kv'])
+            lambd = get_EM_constants(self.init_params['exp_params']['kv'], 'wavelength')
             vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec:.4f} Ang, slice_thickness = {slice_thickness:.4f} Ang, lambd = {lambd:.4f} Ang", verbose=self.verbose)
         elif self.init_params['exp_params']['illumination_type'] == 'xray':
             lambd = 1.23984193e-9 / (self.init_params['exp_params']['energy'])
