@@ -137,6 +137,10 @@ def load_params(file_path):
         params_dict =  load_py_params(param_path)
     else:
         raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
+    
+    # Add the file path to the params_dict while we save the params file to output folder
+    params_dict['params_path'] = file_path
+    
     vprint(" ")
     return params_dict
 
@@ -146,7 +150,6 @@ def load_json_params(file_path):
     with open(file_path, "r", encoding='utf-8') as file:
         params_dict = json.load(file)
     vprint("Success! Loaded .json file path =", file_path)
-    params_dict['params_path'] = file_path
     return params_dict
 
 def load_yml_params(file_path):
@@ -155,20 +158,18 @@ def load_yml_params(file_path):
     with open(file_path, "r", encoding='utf-8') as file:
         params_dict = yaml.safe_load(file)
     vprint("Success! Loaded .yml file path =", file_path)
-    params_dict['params_path'] = file_path
     return params_dict
 
 def load_py_params(file_path):
     import importlib
 
     params_module = importlib.import_module(file_path)
-    print("Success! Loaded .py file path =", file_path)
     params_dict = {
         name: getattr(params_module, name)
         for name in dir(params_module)
         if not name.startswith("__")
     }
-    params_dict['params_path'] = file_path
+    vprint("Success! Loaded .py file path =", file_path)
     return params_dict
 
 def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplify_cells=True):
