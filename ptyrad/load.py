@@ -129,8 +129,10 @@ def load_params(file_path):
     
     vprint("### Loading params file ###")
     param_path, param_type = os.path.splitext(file_path)
-    if param_type == ".yml":
+    if param_type in (".yml", ".yaml"):
         params_dict = load_yml_params(file_path)
+    elif param_type == ".toml":
+        params_dict = load_toml_params(file_path)
     elif param_type == ".json":
         params_dict = load_json_params(file_path)
     elif param_type == ".py":
@@ -150,6 +152,44 @@ def load_json_params(file_path):
     with open(file_path, "r", encoding='utf-8') as file:
         params_dict = json.load(file)
     vprint("Success! Loaded .json file path =", file_path)
+    return params_dict
+
+def load_toml_params(file_path):
+    """
+    Load parameters from a TOML file.
+    
+    Parameters:
+    file_path (str): The path to the TOML file to be loaded.
+    
+    Returns:
+    dict: A dictionary containing the parameters loaded from the TOML file.
+    
+    Raises:
+    FileNotFoundError: If the specified file does not exist.
+    ImportError: If the tomli package is not installed for Python < 3.11.
+    """
+
+    try:
+        # Read the file with utf-8
+        # Note that "A TOML file must be a valid UTF-8 encoded Unicode document." per documentation.
+        # Therefore, the toml file is read in binary mode ("rb") and the encoding is handled internally.
+        # But I've observed some encoding mismatch when people run the script with terminal that has different default encoding.
+        # Therefore, it is safer to read it with utf-8 encoding first and pass it to tomllib.
+        with open(file_path, "r", encoding='utf-8') as file:
+            content = file.read()
+        
+        try:
+            # For Python 3.11+
+            import tomllib
+            params_dict = tomllib.loads(content)
+        except ImportError:
+            # For Python < 3.11
+            import tomli # type: ignore
+            params_dict = tomli.loads(content)
+    except ImportError:
+        raise ImportError("TOML support requires 'tomli' package for Python < 3.11 or built-in 'tomllib' for Python 3.11+. ")
+    
+    vprint("Success! Loaded .toml file path =", file_path)
     return params_dict
 
 def load_yml_params(file_path):

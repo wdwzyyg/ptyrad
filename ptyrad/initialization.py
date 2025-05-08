@@ -185,7 +185,7 @@ class Initializer:
         # Load file
         if source   == 'custom':
             meas = params
-        elif source == 'tif':
+        elif source in ('tif', 'tiff'):
             meas = load_tif(params['path']) # key is ignored because it's not needed for tif files
         elif source == 'mat':
             meas = load_fields_from_mat(params['path'], params['key'])[0]
