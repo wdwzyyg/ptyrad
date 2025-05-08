@@ -293,11 +293,11 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
 
     if pt_path is not None:
         try:
-            from ptyrad.data_io import load_pt
+            from ptyrad.load import load_pt
             optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
             vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
         except ImportError as e:
-            raise ImportError("Failed to import 'load_pt' from ptyrad.data_io. Make sure data_io is accessible.") from e
+            raise ImportError("Failed to import 'load_pt' from ptyrad.load. Make sure load.py is accessible.") from e
         except KeyError:
             raise KeyError(f"Missing 'optim_state_dict' in loaded checkpoint from {pt_path}")
     vprint(" ", verbose=verbose)

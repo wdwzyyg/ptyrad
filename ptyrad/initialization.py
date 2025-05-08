@@ -4,7 +4,7 @@ import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.data_io import load_fields_from_mat, load_hdf5, load_npy, load_pt, load_raw, load_tif
+from ptyrad.load import load_fields_from_mat, load_hdf5, load_npy, load_pt, load_raw, load_tif
 from ptyrad.utils import (
     compose_affine_matrix,
     create_one_hot_mask,

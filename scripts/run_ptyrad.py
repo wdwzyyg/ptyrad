@@ -6,7 +6,7 @@ import sys
 
 PATH_TO_PTYRAD = "/home/fs01/cl2696/workspace/ptyrad"  # Change this for the ptyrad package path
 sys.path.append(PATH_TO_PTYRAD)
-from ptyrad.data_io import load_params  # noqa: E402
+from ptyrad.load import load_params  # noqa: E402
 from ptyrad.reconstruction import PtyRADSolver  # noqa: E402
 from ptyrad.utils import CustomLogger, print_system_info, set_accelerator, set_gpu_device # noqa: E402
 
