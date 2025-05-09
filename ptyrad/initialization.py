@@ -1,5 +1,7 @@
 ## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
 
+from copy import deepcopy
+
 import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
@@ -18,57 +20,66 @@ from ptyrad.utils import (
     make_stem_probe,
     near_field_evolution,
     power_law,
+    safe_get_nested,
     vprint,
+    vprint_nested_dict,
 )
 
 
 class Initializer:
-    def __init__(self, exp_params, source_params, verbose=True):
-        self.init_params = {'exp_params':exp_params.copy(), 'source_params':source_params} # Note that self.init_params is a copy of exp_params so they could have different values 
-        self.init_variables = {}
+    def __init__(self, init_params, verbose=True):
+        
+        # A deepcopy creates a new object so modifying self.init_params won't affect the original init_params dict that was outside the class
+        # This is important because self.init_params might get updated if there's cropping, padding, or resampling of the measurements
+        # The original params file will could be directly saved to the output dir with `save.copy_params_to_dir`,
+        # while we also keep a digital copy of the original params in self.init_params_original
+        
+        self.init_params = deepcopy(init_params) # This is the central params dict that will be used for initialization
+        self.init_params_original = deepcopy(init_params)
+        self.init_variables = {} # This dict stores all the variables that will be used for the later ptychography reconstruction
         self.verbose=verbose
+        self.init_params_dict()
         
     def set_use_cached_flags(self, source):
         """ Set the flags for each field whether we can cache or not """
         
-        source_params   = self.init_params['source_params']
-        obj_source      = source_params['obj_source']
-        obj_params      = source_params['obj_params']
-        probe_source    = source_params['probe_source']
-        probe_params    = source_params['probe_params']
-        pos_source      = source_params['pos_source']
-        pos_params      = source_params['pos_params']
+        obj_source  = self.init_params['obj']['source']
+        obj_input   = self.init_params['obj']['input']
+        probe_source = self.init_params['probe']['source']
+        probe_input  = self.init_params['probe']['input']
+        pos_source   = self.init_params['pos']['source']
+        pos_input    = self.init_params['pos']['input']
+        
+        triplets = [
+        ('obj', obj_source, obj_input),
+        ('probe', probe_source, probe_input),
+        ('pos', pos_source, pos_input)]
+        
+        # Helper for comparison
+        def same_source_and_input(a, b):
+            return a[1] == b[1] == source and a[2] == b[2]
         
         # Check if obj, probe, and pos sources are the same
-        if all(field == source for field in (obj_source, probe_source, pos_source)):
-            if (obj_params == probe_params == pos_params):
-                self.use_cached_obj = True
-                self.use_cached_probe = True
-                self.use_cached_pos = True
-                self.cache_path = obj_params
-                self.cache_source = obj_source
+        if same_source_and_input(triplets[0], triplets[1]) and same_source_and_input(triplets[1], triplets[2]):
+            self.use_cached_obj = self.use_cached_probe = self.use_cached_pos = True
+            self.cache_path = obj_input
+            self.cache_source = obj_source
+            return
 
-        if all(field == source for field in (obj_source, probe_source)):
-            if (obj_params == probe_params):
-                self.use_cached_obj = True
-                self.use_cached_probe = True
-                self.cache_path = obj_params
-                self.cache_source = obj_source
+        if same_source_and_input(triplets[0], triplets[1]):
+            self.use_cached_obj = self.use_cached_probe = True
+            self.cache_path = obj_input
+            self.cache_source = obj_source
 
+        if same_source_and_input(triplets[0], triplets[2]):
+            self.use_cached_obj = self.use_cached_pos = True
+            self.cache_path = obj_input
+            self.cache_source = obj_source
 
-        if all(field == source for field in (obj_source, pos_source)):
-            if (obj_params == pos_params):
-                self.use_cached_obj = True
-                self.use_cached_pos = True
-                self.cache_path = obj_params
-                self.cache_source = obj_source
-                
-        if all(field == source for field in (probe_source, pos_source)):
-            if (probe_params == pos_params):
-                self.use_cached_probe = True
-                self.use_cached_pos = True
-                self.cache_path = probe_params
-                self.cache_source = probe_source
+        if same_source_and_input(triplets[1], triplets[2]):
+            self.use_cached_probe = self.use_cached_pos = True
+            self.cache_path = probe_input
+            self.cache_source = probe_source
     
     def init_cache(self):
         """ Check if the source paths are the same, if so, we may cache that field to reduce file loading time """
@@ -85,7 +96,7 @@ class Initializer:
         self.use_cached_probe = False
         self.use_cached_pos = False
         
-        for source in ('PtyRAD', 'PtyShv', 'py4DSTEM'):
+        for source in ['PtyRAD', 'PtyShv', 'py4DSTEM']:
             self.set_use_cached_flags(source)
             
         if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
@@ -105,23 +116,33 @@ class Initializer:
         vprint(f"use_cached_pos   = {self.use_cached_pos}", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
     
-    def init_exp_params(self):
-        vprint("### Initializing exp_params ###", verbose=self.verbose)
-        exp_params = self.init_params['exp_params']   
+    # TODO Move this method to the top of the class later
+    def init_params_dict(self):
+        vprint("### Initializing init_params ###", verbose=self.verbose)
+        
+        # TODO Check whether I need to create these params entries at all
+        # Note that the self.init_params can be modified by _meas_crop and other methods
+        # So we need to call this method to re-initialize the self.init_variables
+        self.meas_params = self.init_params['meas']
+        self.probe_params = self.init_params['probe']
+        self.pos_params = self.init_params['pos']
+        self.obj_params = self.init_params['obj']
+        self.tilt_params = self.init_params['tilt']
+        
         vprint("Input values are displayed below:", verbose=self.verbose)
-        for key, value in exp_params.items():
-            vprint(f"{key}: {value}", verbose=self.verbose)
+        vprint_nested_dict(self.init_params, verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
         
-        if exp_params['illumination_type']  == 'electron':    
-            voltage     = exp_params['kv']
+        illumination_type = self.probe_params.get('illumination_type') or 'electron'
+        if  illumination_type == 'electron':
+            voltage     = self.probe_params['kv']
             wavelength  = get_EM_constants(voltage, 'wavelength')
-            conv_angle  = exp_params['conv_angle']
-            Npix        = exp_params['Npix']
-            N_scan_slow = exp_params['N_scan_slow']
-            N_scan_fast = exp_params['N_scan_fast']
+            conv_angle  = self.probe_params['conv_angle']
+            Npix        = self.meas_params['Npix']
+            N_scan_slow = self.pos_params['N_scan_slow']
+            N_scan_fast = self.pos_params['N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
-            dx          = exp_params['dx_spec']
+            dx          = self.probe_params['dx_spec']
             dk          = 1/(dx*Npix)
             
             # Print some derived values for sanity check
@@ -138,19 +159,19 @@ class Initializer:
                 vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
                 vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
 
-        elif exp_params['illumination_type']  == 'xray':
-            energy      = exp_params['energy']
+        elif illumination_type == 'xray':
+            energy      = self.probe_params['energy']
             wavelength  = 1.23984193e-9 / energy
-            dx          = exp_params['dx_spec']
-            N_scan_slow = exp_params['N_scan_slow']
-            N_scan_fast = exp_params['N_scan_fast']
+            dx          = self.probe_params['dx_spec']
+            N_scan_slow = self.pos_params['N_scan_slow']
+            N_scan_fast = self.pos_params['N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
-            Npix        = exp_params['Npix']
-            dRn         = exp_params['dRn']
-            Rn          = exp_params['Rn']
-            D_H         = exp_params['D_H']
-            D_FZO       = exp_params['D_FZP']
-            Ls          = exp_params['Ls']
+            Npix        = self.meas_params['Npix']
+            dRn         = self.probe_params['dRn']
+            Rn          = self.probe_params['Rn']
+            D_H         = self.probe_params['D_H']
+            D_FZO       = self.probe_params['D_FZP']
+            Ls          = self.probe_params['Ls']
             dk          = 1/(dx*Npix)
             
             if self.verbose:
@@ -166,7 +187,7 @@ class Initializer:
                 vprint(f'dx                 = {dx} m')
         
         else:
-            raise KeyError(f"exp_params['illumination_type'] = {exp_params['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")
+            raise KeyError(f"probe_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
         
         # Save general values into init_variables        
         self.init_variables['Npix']        = Npix
@@ -178,250 +199,535 @@ class Initializer:
         vprint(" ", verbose=self.verbose)
         
     def init_measurements(self):
-        source = self.init_params['source_params']['measurements_source']
-        params = self.init_params['source_params']['measurements_params']
-        vprint(f"### Initializing measurements from '{source}' ###", verbose=self.verbose)
-        
-        # Load file
-        if source   == 'custom':
-            meas = params
-        elif source in ('tif', 'tiff'):
-            meas = load_tif(params['path']) # key is ignored because it's not needed for tif files
-        elif source == 'mat':
-            meas = load_fields_from_mat(params['path'], params['key'])[0]
-        elif source == 'hdf5':
-            meas = load_hdf5(params['path'], params['key']).astype('float32')
-        elif source == 'npy':
-            meas = load_npy(params['path']).astype('float32')
-        elif source == 'raw':
-            default_shape = (self.init_variables['N_scans'], self.init_variables['Npix'], self.init_variables['Npix'])
-            meas = load_raw(params['path'], shape=params.get('shape', default_shape), offset=params.get('offset', 0), gap=params.get('gap', 1024))
-        else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw' !!")
-        vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
-        vprint(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
-        
-        # Permute, reshape, and flip
-        if self.init_params['exp_params']['meas_permute'] is not None:
-            permute_order = self.init_params['exp_params']['meas_permute']
-            vprint(f"Permuting measurements with {permute_order}", verbose=self.verbose)
-            meas = meas.transpose(permute_order)
-            
-        if self.init_params['exp_params']['meas_reshape'] is not None:
-            meas_shape = self.init_params['exp_params']['meas_reshape']
-            vprint(f"Reshaping measurements into {meas_shape}", verbose=self.verbose)
-            meas = meas.reshape(meas_shape)
-            
-        if self.init_params['exp_params']['meas_flipT'] is not None:
-            flipT_axes = self.init_params['exp_params']['meas_flipT']
-            vprint(f"Flipping measurements with [flipup, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
-            
-            if flipT_axes[0] != 0:
-                meas = np.flip(meas, 1)
-            if flipT_axes[1] != 0:
-                meas = np.flip(meas, 2)
-            if flipT_axes[2] != 0:
-                meas = np.transpose(meas, (0,2,1))
+        vprint("### Initializing measurements ###", verbose=self.verbose)
 
-        # Crop out a sub-region from meas
-        if self.init_params['exp_params']['meas_crop'] is not None:
-            vprint(f"Reshaping measurements into {meas.shape} for cropping", verbose=self.verbose)
-            meas = meas.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], meas.shape[-2], meas.shape[-1])
+        meas = self._load_meas()
+        meas = self._process_meas(meas)
 
-            crop_indices = np.array(self.init_params['exp_params']['meas_crop'])
-            vprint(f"Cropping measurements with [N_slow, N_fast, ky, kx] = {crop_indices}", verbose=self.verbose)
-            Nslow_i, Nslow_f = crop_indices[0]
-            Nfast_i, Nfast_f = crop_indices[1]
-            ky_i,    ky_f    = crop_indices[2]
-            kx_i,    kx_f    = crop_indices[3]
-            meas = meas[Nslow_i:Nslow_f, Nfast_i:Nfast_f, ky_i:ky_f, kx_i:kx_f]
-            vprint(f"Cropped measurements have shape (N_slow, N_fast, ky, kx) = {meas.shape}", verbose=self.verbose)
-            
-            # Update self.init_params['exp_params'], note that this wouldn't update the initial `exp_params` and the original exp_params will be saved into .pt
-            # The updated self.init_params['exp_params'] is for initialization purpose only
-            vprint("Update `exp_params` (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
-            self.init_params['exp_params']['dx_spec'] = self.init_params['exp_params']['dx_spec'] * self.init_params['exp_params']['Npix'] / meas.shape[-1]
-            self.init_params['exp_params']['Npix'] = meas.shape[-1]
-            self.init_params['exp_params']['N_scans'] = meas.shape[0] * meas.shape[1]
-            self.init_params['exp_params']['N_scan_slow'] = meas.shape[0]
-            self.init_params['exp_params']['N_scan_fast'] = meas.shape[1]
-            self.init_exp_params()
-            meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
-            vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
-        
-        # Preprocess the measurements before padding
-        if (meas < 0).any():
-            meas = self.meas_correct_neg(meas)
-            
-        # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
-        meas = self.meas_normalization(meas)
-        
-        # Pad the meas to enhance real space sampling
-        if self.init_params['exp_params']['meas_pad']['mode'] is not None:
-            mode         = self.init_params['exp_params']['meas_pad']['mode'] # 'on_the_fly' or 'precompute'
-            padding_type = self.init_params['exp_params']['meas_pad']['padding_type']
-            target_Npix  = self.init_params['exp_params']['meas_pad']['target_Npix']
-            value        = self.init_params['exp_params']['meas_pad'].get('value', 10)
-            threshold    = self.init_params['exp_params']['meas_pad'].get('threshold', 70)
-            meas_avg     = meas.mean(0)
-            meas_int_sum = meas_avg.sum()
-            amp_avg      = np.sqrt(meas_avg)
-            shape = meas.shape[-2:]  # Assuming last two dimensions are spatial
-            
-            # Calculate padding for each dimension
-            pad_y = max(0, target_Npix - shape[0])
-            pad_x = max(0, target_Npix - shape[1])
-
-            # Split padding evenly, handling odd cases
-            pad_y1, pad_y2 = pad_y // 2, pad_y - pad_y // 2
-            pad_x1, pad_x2 = pad_x // 2, pad_x - pad_x // 2
-            
-            # Parse pad_h1, pad_h2, pad_w1, pad_w2
-            pad_h1 = pad_y1
-            pad_h2 = pad_y1+shape[0]
-            pad_w1 = pad_x1
-            pad_w2 = pad_x1+shape[1]
-
-            # Create coordinate grid for padding region
-            y, x = np.ogrid[:target_Npix, :target_Npix]
-            center = (shape[0] // 2 + pad_y1, shape[1] // 2 + pad_x1)
-            r = np.sqrt((y - center[0])**2 + (x - center[1])**2) + 1e-10 # so r is never 0
-            
-            # Calculate the meas_padded
-            if padding_type == 'constant':
-                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='constant', constant_values=value)
-            elif padding_type == 'edge':
-                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='edge')
-            elif padding_type == 'linear_ramp':
-                amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='linear_ramp', end_values=value)
-            elif padding_type == 'exp':
-                mask = create_one_hot_mask(amp_avg, percentile=threshold)
-                popt = fit_background(amp_avg, mask, fit_type='exp')
-                background = exponential_decay(r, *popt)
-                amp_padded = background
-            elif padding_type == 'power':
-                mask = create_one_hot_mask(amp_avg, percentile=threshold)
-                popt = fit_background(amp_avg, mask, fit_type='power')
-                background = power_law(r, *popt)
-                amp_padded = background
-            else:
-                raise KeyError(f"meas_pad does not support padding_type = '{padding_type}', please choose from 'constant', 'edge', 'linear_ramp', 'exp', or 'power'")
-
-            # Square the padded amplitude back to intensity
-            meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
-            
-            # Parse intensity information
-            meas_padded[..., pad_h1:pad_h2, pad_w1:pad_w2] = 0
-            padded_int_sum = meas_padded.sum()
-            vprint(f"Original meas int sum = {meas_int_sum:.4f}, padded region int sum = {padded_int_sum:.4f}, or {padded_int_sum/meas_int_sum:.2%} more intensity after padding. This percentage should be ideally less than 5%, or you should set a lower threshold to exclude more central region.", verbose=self.verbose)
-            
-            if mode == 'precompute':
-                canvas = np.zeros((meas.shape[0], *meas_padded.shape[1:]))
-                canvas += meas_padded
-                canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = meas # Replace the center part with the original meas
-                meas = canvas
-            elif mode == 'on_the_fly':
-                pass
-            else:
-                raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
-            
-            self.init_variables['on_the_fly_meas_padded']     = meas_padded if mode == 'on_the_fly' else None
-            self.init_variables['on_the_fly_meas_padded_idx'] = [pad_h1, pad_h2, pad_w1, pad_w2] if mode == 'on_the_fly' else None
-            
-            # Update self.init_params['exp_params'], note that this wouldn't update the initial `exp_params` and the original exp_params will be saved into .pt
-            # The updated self.init_params['exp_params'] is for initialization purpose only
-            vprint(f"Update `exp_params` (dx_spec, Npix) after the measurements padding mode = '{mode}'", verbose=self.verbose)
-            self.init_params['exp_params']['dx_spec'] = self.init_params['exp_params']['dx_spec'] * self.init_params['exp_params']['Npix'] / meas_padded.shape[-1]
-            self.init_params['exp_params']['Npix']    = meas_padded.shape[-1]
-            self.init_exp_params()
-            
-        # Resample diffraction patterns along the ky, kx dimension
-        if self.init_params['exp_params']['meas_resample']['mode'] is not None:
-            mode = self.init_params['exp_params']['meas_resample']['mode']
-            Npix = self.init_params['exp_params']['Npix']
-            
-            if self.init_variables.get('on_the_fly_meas_padded', None) is not None: # meas_pad is 'on_the_fly' mode, so we need to force 'meas_resample' to on_the_fly as well
-                mode = 'on_the_fly'
-                vprint("'meas_resample' is set to 'on_the_fly' mode because 'meas_pad' is also set to 'on_the_fly' mode")
-            scale_factors = self.init_params['exp_params']['meas_resample']['scale_factors']
-            
-            if mode == 'precompute':
-                meas = zoom(meas, np.array([1, *scale_factors]), order=1) # scipy.ndimage.zoom applies to all axes. No need to divide by prod(scale_factors) because we have a final normalization at the end of `init_meas`
-                Npix = meas.shape[-1]
-                self.init_variables['on_the_fly_meas_scale_factors'] = None
-
-            elif mode == 'on_the_fly':
-                Npix = Npix * scale_factors[-1]
-                self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
-                
-            else:
-                raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
-            
-            self.init_params['exp_params']['Npix'] = Npix
-            vprint(f"Update `exp_params` (Npix) into {Npix} after the measurements resampling mode '{mode}' by scale_factors = {scale_factors}", verbose=self.verbose)
-
-            self.init_exp_params()
-            vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
-        else:
-            self.init_variables['on_the_fly_meas_scale_factors'] = None
-            
-        # Add source size (partial spatial coherence)
-        if self.init_params['exp_params']['meas_add_source_size'] is not None:
-            vprint(f"Reshaping measurements into {meas.shape} for adding partial spatial coherence (source size)", verbose=self.verbose)
-            meas = meas.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], meas.shape[-2], meas.shape[-1])
-            source_size_std_ang = self.init_params['exp_params']['meas_add_source_size']
-            source_size_std_px = source_size_std_ang / self.init_params['exp_params']['scan_step_size'] # The source size blur std is now in unit of scan steps
-            meas = gaussian_filter(meas, sigma=source_size_std_px, axes=(0,1)) # Partial spatial coherence is approximated by mixing DPs at nearby probe positions
-            vprint(f"Adding source size (partial spatial coherence) of Gaussian blur std = {source_size_std_px:.4f} scan_step sizes or {source_size_std_ang:.4f} Ang to measurements along the scan directions", verbose=self.verbose)
-            meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
-            vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
-        
-        # Add detector blur (point-spread function of the detector)
-        if self.init_params['exp_params']['meas_add_detector_blur'] is not None:
-            detector_blur_std = self.init_params['exp_params']['meas_add_detector_blur'] # The detector blur std is in unit of final detector px
-            meas = gaussian_filter(meas, sigma=detector_blur_std, axes=(-2,-1)) # Detector blur is essentially the Gaussian blur along ky, kx
-            vprint(f"Adding detector blur (point-spread function of the detector) of Gaussian blur std = {detector_blur_std:.4f} px to measurements along the ky, kx directions", verbose=self.verbose)
-        
-        # Correct negative values if any. Note that for low dose data with a lot negative values, it's better to do clipping then subtraction.
-        if (meas < 0).any():
-            meas = self.meas_correct_neg(meas, self.init_params['exp_params'].get('meas_remove_neg_values', {}), self.verbose)
-                
-        # Add Poisson noise given electron per Ang^2
-        if self.init_params['exp_params']['meas_add_poisson_noise'] is not None:
-            poisson_params = self.init_params['exp_params']['meas_add_poisson_noise']
-            unit = poisson_params['unit']
-            value = poisson_params['value']
-            scan_step_size = self.init_params['exp_params']['scan_step_size']
-            
-            if unit == 'total_e_per_pattern':
-                total_electron = value
-                dose = total_electron / scan_step_size **2
-            elif unit == 'e_per_Ang2':
-                dose = value
-                total_electron =  dose * scan_step_size **2 # Number of electron per diffraction pattern
-            else:
-                raise ValueError(f"Unsupported unit: '{unit}' for Poisson noise. Expected 'total_e_per_pattern' or 'e_per_Ang2'.")
-            
-            vprint(f"total electron per measurement = dose x scan_step_size^2 = {dose:.3f}(e-/Ang^2) x {scan_step_size:.3f}(Ang)^2 = {total_electron:.3f}", verbose=self.verbose)
-            meas = meas / meas.sum((-2,-1))[:,None,None] # Make each slice of the meas to sum to 1
-            meas = np.random.poisson(meas * total_electron)
-            vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
-            
-        # Normalizing the meas_data so that the averaged DP has max at 1. This will make each DP has max somewhere ~ 1
-        meas = self.meas_normalization(meas)
+        ## We can combine these estimations into self._analyze_meas() in the future
+        # For example, get_rbf, get_detector_blur, get_meas_shifts, get_conv_angle, etc.
         
         # Get rbf related values (for electron ptychography only)
-        if self.init_params['exp_params']['illumination_type'] == 'electron':
+        if self.probe_params.get('illumination_type') == 'electron':
             rbf = get_rbf(meas)
-            suggested_probe_mask_k_radius = 2*rbf/meas.shape[-1]
-            vprint(f"Radius of bright field disk             (rbf) = {rbf} px, suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
+            suggested_probe_mask_k_radius = 2 * rbf / meas.shape[-1]
+            vprint(f"Radius of bright field disk (rbf) = {rbf:.1f} px, "
+                f"suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
+
+        meas_avg_sum = meas.mean(0).sum()
         
+        pad_mode = safe_get_nested(self.init_params, ['meas', 'process', 'pad', 'mode'])
+        if pad_mode == 'on_the_fly':
+            padded = self.init_variables.get('on_the_fly_meas_padded')
+            padded_int_sum = padded.sum() if padded is not None else 0
+            vprint(f"Adjusting `meas_avg_sum` by adding {padded_int_sum:.4f} for on_the_fly meas padding", verbose=self.verbose)
+            meas_avg_sum += padded_int_sum # meas_avg_sum is used to normalize the probe intensity. 
+            # Because the meas could gain intensity during on_the_fly padding, 
+            # we need to consider the extra intensity from the padded region here. 
+            
+        self.init_variables['meas_avg_sum'] = meas_avg_sum
+        self.init_variables['measurements'] = meas
+
         # Print out some measurements statistics
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
-        self.init_variables['measurements'] = meas
-        self.init_variables['meas_avg_sum'] = meas.mean(0).sum() + padded_int_sum if self.init_params['exp_params']['meas_pad']['mode'] is not None else meas.mean(0).sum()
         vprint(" ", verbose=self.verbose)
+    
+    def _load_meas(self):
+        """Load diffraction data from file or memory according to init_params['meas']."""
+        
+        # Validate required fields
+        try:
+            meas_params = self.init_params['meas']
+            source = meas_params['source']
+            input_params = meas_params['input']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        vprint(f"Loading measurements from source = '{source}'", verbose=self.verbose)
+
+        if source == 'custom':
+            meas = input_params  # assumed to already be a NumPy array
+        elif source in ('tif', 'tiff'):
+            meas = load_tif(input_params['path']) # key is ignored because it's not needed for tif files
+        elif source == 'mat':
+            meas = load_fields_from_mat(input_params['path'], input_params['key'])[0]
+        elif source == 'hdf5':
+            meas = load_hdf5(input_params['path'], input_params['key']).astype('float32')
+        elif source == 'npy':
+            meas = load_npy(input_params['path']).astype('float32')
+        elif source == 'raw':
+            default_shape = (
+                self.init_variables['N_scans'],
+                self.init_variables['Npix'],
+                self.init_variables['Npix'],
+            )
+            meas = load_raw(
+                input_params['path'],
+                shape=input_params.get('shape', default_shape),
+                offset=input_params.get('offset', 0),
+                gap=input_params.get('gap', 1024)
+            )
+        else:
+            raise KeyError(f"Unsupported measurement source '{source}'. "
+                        "Use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw'.")
+
+        vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
+        vprint(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
+        return meas
+    
+    def _process_meas(self, meas):
+        """
+        Applies all processing steps to raw loaded measurements.
+        
+        """
+        
+        # Note that _meas_correct_neg and _meas_normalization will always be executed
+        # If you really want to nullify them, explictly set 
+        # 'remove_neg_values': {'mode': 'subtract_value', 'value': 0}
+        # 'normalization': {'mode': 'divide_const', 'const': 1}
+        
+        proc = safe_get_nested(self.init_params, ['meas', 'process'], default={})
+
+        # Simple geometric operations
+        meas = self._meas_permute(meas, proc.get('permute'))
+        meas = self._meas_reshape(meas, proc.get('reshape'))
+        meas = self._meas_flipT(meas, proc.get('flipT'))
+        
+        # Operations that may change the shape of the measurements
+        meas = self._meas_crop(meas, proc.get('crop'))
+        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) # meas need to be positive before the padding with background fitting mode
+        meas = self._meas_pad(meas, proc.get('pad'))
+        meas = self._meas_resample(meas, proc.get('resample'))
+        
+        # Operations that add realistic factors to (simulated perfect) measurements
+        meas = self._meas_add_source_size(meas, proc.get('add_source_size'))
+        meas = self._meas_add_detector_blur(meas, proc.get('add_detector_blur'))
+        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) # meas need to be positive before applying poisson noise
+        meas = self._meas_add_poisson_noise(meas, proc.get('add_poisson_noise'))
+        
+        # Final check of the measurements
+        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) 
+        meas = self._meas_normalization(meas, proc.get('normalization'))
+
+        return meas
+    
+    def _meas_permute(self, meas, order):
+        if order is not None:
+            vprint(f"Permuting measurements with order = {order}", verbose=self.verbose)
+            return meas.transpose(order)
+        return meas
+    
+    def _meas_reshape(self, meas, target_shape):
+        if target_shape is not None:
+            vprint(f"Reshaping measurements to shape = {target_shape}", verbose=self.verbose)
+            return meas.reshape(target_shape)
+        return meas
+
+    def _meas_flipT(self, meas, flipT_axes):
+        """
+        Flip and transpose measurement array.
+        flipT_axes: list of 3 binary/int values [flipud, fliplr, transpose]
+        """
+        if flipT_axes is None:
+            return meas
+
+        # Validate length
+        if not isinstance(flipT_axes, (list, tuple)) or len(flipT_axes) != 3:
+            raise ValueError(f"Expected flipT_axes to be a list of 3 values, got: {flipT_axes}")
+
+        # Safely cast all entries to int
+        try:
+            flipT_axes = [int(v) for v in flipT_axes]
+        except Exception as e:
+            raise ValueError(f"flipT_axes must contain values convertible to int (0 or 1). Got: {flipT_axes}") from e
+
+        vprint(f"Flipping measurements with [flipud, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
+
+        if flipT_axes[0]:
+            meas = np.flip(meas, axis=1)
+        if flipT_axes[1]:
+            meas = np.flip(meas, axis=2)
+        if flipT_axes[2]:
+            meas = np.transpose(meas, (0, 2, 1))
+
+        return meas
+
+    def _meas_crop(self, meas, crop_ranges):
+        """
+        Crop measurements across 4 dimensions:
+        [[slow_i, slow_f], [fast_i, fast_f], [ky_i, ky_f], [kx_i, kx_f]]
+        Allows any entry to be `None` to skip cropping that axis.
+        Note that this method would also update the `self.init_params` and `self.init_variables`
+        """
+        if crop_ranges is None:
+            return meas
+
+        if len(crop_ranges) != 4:
+            raise ValueError(f"Expected 4 crop ranges [N_slow, N_fast, ky, kx], got {crop_ranges}")
+
+        # Reshape (N, ky, kx) -> (N_slow, N_fast, ky, kx)
+        Nslow, Nfast = self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast']
+        meas = meas.reshape(Nslow, Nfast, *meas.shape[-2:])
+        vprint(f"Reshaping measurements into {meas.shape} for cropping", verbose=self.verbose)
+
+        axes_names = ['N_slow', 'N_fast', 'ky', 'kx']
+        slices = []
+
+        for i, bounds in enumerate(crop_ranges):
+            if bounds is None:
+                slices.append(slice(None))
+            else:
+                try:
+                    start, stop = bounds
+                    slices.append(slice(start, stop))
+                    vprint(f"Cropping axis {axes_names[i]} from {start} to {stop}", verbose=self.verbose)
+                except Exception as e:
+                    raise ValueError(f"Invalid crop bounds for axis {axes_names[i]}: {bounds}") from e
+
+        meas = meas[slices[0], slices[1], slices[2], slices[3]]
+        vprint(f"Cropped measurements have shape (N_slow, N_fast, ky, kx) = {meas.shape}", verbose=self.verbose)
+
+        # Update internal variables and re-init self.init_params / self.init_variables
+        vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
+        self.init_params['probe']['dx_spec'] *= self.init_params['meas']['Npix'] / meas.shape[-1]
+        self.init_params['meas']['Npix'] = meas.shape[-1]
+        self.init_params['pos']['N_scans'] = meas.shape[0] * meas.shape[1]
+        self.init_params['pos']['N_scan_slow'] = meas.shape[0]
+        self.init_params['pos']['N_scan_fast'] = meas.shape[1]
+        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
+        self.init_params_dict()
+        vprint(" ", verbose=self.verbose)
+        meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
+        vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
+
+        return meas  
+    
+    def _meas_correct_neg(self, meas, neg_cfg):
+        """
+        Correct negative values in the measurement array based on the specified configuration.
+
+        Args:
+            meas (numpy.ndarray): The measurement array to process.
+            neg_cfg (dict): Configuration for handling negative values. Expected keys:
+                - mode (str): Method to handle negative values. Options are 'clip_neg', 'subtract_min',
+                'clip_value', or 'subtract_value'. Default is 'clip_neg'.
+                - value (float or None): Value used for 'clip_value' or 'subtract_value' modes. Default is None.
+
+        Returns:
+            numpy.ndarray: The processed measurement array with negative values handled.
+        """
+        # Check if there are negative values
+        if not (meas < 0).any():
+            vprint("No negative values found in measurements. Skipping non-neg correction.", verbose=self.verbose)
+            return meas
+
+        # This correction is enforced even the neg_cfg is None (not provided by user)
+        if neg_cfg is None:
+            neg_cfg = {}
+
+        # Extract configuration with defaults
+        mode = neg_cfg.get('mode', 'clip_neg')  # Default to 'clip_neg'
+        value = neg_cfg.get('value', None)  # Default to None
+
+        vprint(f"Removing negative values in measurement with method = {mode} and value = {value}", verbose=self.verbose)
+
+        if mode == 'subtract_min':
+            min_value = meas.min()
+            meas -= min_value
+            value = None  # Not relevant for this mode
+            vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
+
+        elif mode == 'clip_value':
+            if value is None:
+                raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
+            vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas < value] = 0
+
+        elif mode == 'subtract_value':
+            if value is None:
+                raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
+            vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas -= value
+
+        elif mode == 'clip_neg': # Default mode
+            vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas < 0] = 0
+            value = None  # Not relevant for clipping
+
+        else:
+            raise ValueError(f"Unsupported mode '{mode}' for handling negative values. Use 'clip_neg', 'subtract_min', 'clip_value', or 'subtract_value'.")
+
+        # Final check in case the user specified value is not enough to remove all neg values
+        if (meas < 0).any():
+            vprint(f"User specified value = {value} is not enough to remove negative values, applying 0 clipping")
+            vprint(f"Minimum value of {meas.min():.4f} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
+            meas[meas<0] = 0
+
+        return meas
+    
+    def _meas_normalization(self, meas, norm_cfg):
+        """
+        Normalize the measurement array based on the specified normalization mode.
+
+        Args:
+            meas (numpy.ndarray): The measurement array to normalize, shape (N, ky, kx).
+            Returns:
+            numpy.ndarray: The normalized measurement array.
+        """
+        
+        # This correction is enforced even the norm_cfg is None (not provided by user)
+        if norm_cfg is None:
+            norm_cfg = {}
+        
+        norm_mode = norm_cfg.get('mode', 'max_at_one')  # Default to 'max_at_one'
+        norm_const = norm_cfg.get('const', None)  # Used for 'divide_const' mode
+
+        vprint(f"Normalizing measurements with mode = '{norm_mode}' and value = '{norm_const}'", verbose=self.verbose)
+
+        if norm_mode == 'max_at_one':
+            normalization_const = meas.mean(0).max()
+            vprint(f"Normalizing by max of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+
+        elif norm_mode == 'mean_at_one':
+            normalization_const = meas.mean(0).mean()
+            vprint(f"Normalizing by mean of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+
+        elif norm_mode == 'sum_to_one':
+            normalization_const = meas.mean(0).sum()
+            vprint(f"Normalizing by sum of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+
+        elif norm_mode == 'divide_const':
+            if norm_const is None:
+                raise ValueError("Mode 'divide_const' requires a non-None 'norm_const'.")
+            normalization_const = norm_const
+            vprint(f"Normalizing by user-defined constant: {normalization_const:.8g}", verbose=self.verbose)
+
+        else:
+            raise ValueError(f"Unsupported normalization mode '{norm_mode}'. Use 'max_at_one', 'mean_at_one', 'sum_to_one', or 'divide_const'.")
+
+        # Normalize the measurements
+        meas = meas / normalization_const
+        meas = meas.astype('float32')
+        return meas
+    
+    def _meas_pad(self, meas, pad_cfg):
+        """
+        _meas_pad Padd the 3D measurements array to a target size using the specified padding mode and type.
+
+        Args:
+            meas (numpy.ndarray): The measurement array to normalize, shape (N, ky, kx).
+            pad_cfg (dict): A dictionary containing the padding configuration. Expected keys:
+            pad_cfg = {'mode': 'on_the_fly', 'padding_type': 'power', 'target_Npix': 256, 'value': 0}
+
+        Raises:
+            KeyError: _description_
+            KeyError: _description_
+
+        Returns:
+           numpy.ndarray: The padded measurement array.
+        """
+        
+        if pad_cfg is None or pad_cfg.get('mode') is None:
+            self.init_variables['on_the_fly_meas_padded'] = None
+            self.init_variables['on_the_fly_meas_padded_idx'] = None
+            return meas
+
+        mode = pad_cfg['mode']  # 'precompute' or 'on_the_fly'. Use `on_the_fly` to save GPU memory
+        padding_type = pad_cfg['padding_type']
+        target_Npix = pad_cfg['target_Npix']
+        value = pad_cfg.get('value', 10) # For constant and linear_ramp padding
+        threshold = pad_cfg.get('threshold', 70) # For exp and power padding that requires fitting a thresholded mask
+
+        vprint(f"Padding measurements with mode='{mode}', padding_type='{padding_type}', target_Npix={target_Npix}", verbose=self.verbose)
+
+        # Get amplitude from average DP
+        meas_avg = meas.mean(axis=0)
+        meas_int_sum = meas_avg.sum()
+        amp_avg = np.sqrt(meas_avg)
+        H, W = amp_avg.shape
+        
+        # Calculate padding for each dimension
+        pad_y = max(0, target_Npix - H)
+        pad_x = max(0, target_Npix - W)
+        pad_y1, pad_y2 = pad_y // 2, pad_y - pad_y // 2
+        pad_x1, pad_x2 = pad_x // 2, pad_x - pad_x // 2
+        pad_h1, pad_h2 = pad_y1, pad_y1 + H
+        pad_w1, pad_w2 = pad_x1, pad_x1 + W
+
+        # Create coordinate grid for radial background fitting
+        y, x = np.ogrid[:target_Npix, :target_Npix]
+        center = (H // 2 + pad_y1, W // 2 + pad_x1)
+        r = np.sqrt((y - center[0])**2 + (x - center[1])**2) + 1e-10 # so r is never 0
+
+        # Compute background
+        if padding_type == 'constant':
+            amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='constant', constant_values=value)
+        elif padding_type == 'edge':
+            amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='edge')
+        elif padding_type == 'linear_ramp':
+            amp_padded = np.pad(amp_avg, ((pad_y1, pad_y2), (pad_x1, pad_x2)), mode='linear_ramp', end_values=value)
+        elif padding_type == 'exp':
+            mask = create_one_hot_mask(amp_avg, percentile=threshold) # It feels like we probably don't need to normalize meas before padding because the mask is calculated by percentile
+            popt = fit_background(amp_avg, mask, fit_type='exp')
+            amp_padded = exponential_decay(r, *popt)
+        elif padding_type == 'power':
+            mask = create_one_hot_mask(amp_avg, percentile=threshold)
+            popt = fit_background(amp_avg, mask, fit_type='power')
+            amp_padded = power_law(r, *popt)
+        else:
+            raise KeyError(f"Unsupported padding_type = '{padding_type}'")
+        
+        # Square the padded amplitude back to intensity
+        meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
+        meas_padded[..., pad_h1:pad_h2, pad_w1:pad_w2] = 0
+        padded_int_sum = meas_padded.sum()
+        vprint(f"Original meas int sum = {meas_int_sum:.4f}, padded region int sum = {padded_int_sum:.4f}, or {padded_int_sum/meas_int_sum:.2%} more intensity after padding.", verbose=self.verbose) 
+        vprint("This percentage should be ideally less than 5%, or you should set a lower threshold to exclude more central region.", verbose=self.verbose)
+
+        if mode == 'precompute':
+            canvas = np.zeros((meas.shape[0], *meas_padded.shape[1:]))
+            canvas += meas_padded
+            canvas[..., pad_h1:pad_h2, pad_w1:pad_w2] = meas
+            meas = canvas
+            self.init_variables['on_the_fly_meas_padded'] = None
+            self.init_variables['on_the_fly_meas_padded_idx'] = None
+        elif mode == 'on_the_fly':
+            # For on_the_fly padding, we pass the padded 2D pattern (extra background) and padding indices to the model
+            self.init_variables['on_the_fly_meas_padded'] = meas_padded
+            self.init_variables['on_the_fly_meas_padded_idx'] = [pad_h1, pad_h2, pad_w1, pad_w2]
+        else:
+            raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+
+        # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
+        vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements padding", verbose=self.verbose)
+        self.init_params['probe']['dx_spec'] *= self.init_params['meas']['Npix'] / meas_padded.shape[-1]
+        self.init_params['meas']['Npix'] = meas_padded.shape[-1] # This will update Npix to target_Npix no matter what mode is used
+        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+        self.init_params_dict()
+
+        return meas
+
+    def _meas_resample(self, meas, resample_cfg):
+        """
+        _meas_resample Resample measurements along the ky, kx dimension
+
+        """
+        if resample_cfg is None or resample_cfg.get('mode') is None:
+            self.init_variables['on_the_fly_meas_scale_factors'] = None
+            return meas
+
+        # Validate required fields
+        try:
+            mode = resample_cfg['mode']
+            Npix = self.init_params['meas']['Npix']
+            scale_factors = resample_cfg['scale_factors']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        # Ensure scale_factors is a list or tuple of length 2
+        if len(scale_factors) != 2:
+            raise ValueError("scale_factors for resample must be a list or tuple of two elements.")
+
+        if scale_factors[0] != scale_factors[1]:
+            min_scale = min(scale_factors)
+            vprint(f"Non-uniform scale_factors {scale_factors} detected. Using uniform scale factor: {min_scale}")
+            scale_factors = [min_scale, min_scale]
+        
+        # If on-the-fly padding is set, force resample to be on-the-fly as well
+        if self.init_variables.get('on_the_fly_meas_padded', None) is not None:
+            mode = 'on_the_fly'
+            vprint("'meas_resample' is set to 'on_the_fly' mode because 'meas_pad' is also set to 'on_the_fly' mode", verbose=self.verbose)
+
+        vprint(f"Resampling measurements with mode = '{mode}', scale_factors = {scale_factors}", verbose=self.verbose)
+
+        if mode == 'precompute':
+            zoom_factors = np.array([1.0, *scale_factors]) # scipy.ndimage.zoom applies to all axes.
+            meas = zoom(meas, zoom_factors, order=1) # bilinear (order=1) could prevent overshooting. Resampling would change the meas.sum(), but we have normalization at the end of the process.
+            Npix = meas.shape[-1] # Update Npix
+            self.init_variables['on_the_fly_meas_scale_factors'] = None
+
+        elif mode == 'on_the_fly':
+            # Don't change `meas`, just update Npix
+            Npix = int(Npix * scale_factors[-1])
+            self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
+
+        else:
+            raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+
+        # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
+        self.init_params['meas']['Npix'] = Npix
+        vprint(f"Update Npix into '{Npix}' after the measurements resampling", verbose=self.verbose)
+        vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
+        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+        self.init_params_dict()
+
+        return meas
+
+    def _meas_add_source_size(self, meas, source_size_std_ang):
+        if source_size_std_ang is None or source_size_std_ang == 0:
+            return meas
+
+        Nslow, Nfast = self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast']
+        meas = meas.reshape(Nslow, Nfast, *meas.shape[-2:])
+        vprint(f"Reshaping measurements into {meas.shape} for adding partial spatial coherence (source size) induced blurring on measurements", verbose=self.verbose)
+
+        # Convert real-space blur in Angstroms to Gaussian std in scan units (px)
+        source_size_std_px = source_size_std_ang / self.init_params['pos']['scan_step_size']
+        vprint(f"Adding source size (partial spatial coherence) of Gaussian blur std = {source_size_std_px:.4f} scan_step sizes or {source_size_std_ang:.4f} Ang to measurements along the scan directions", verbose=self.verbose)
+
+        # Apply blur over scan dimensions (0,1)
+        meas = gaussian_filter(meas, sigma=source_size_std_px, axes=(0,1)) # Partial spatial coherence is approximated by mixing DPs at nearby probe positions
+        meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
+        vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
+        
+        return meas
+
+    def _meas_add_detector_blur(self, meas, detector_blur_std_px):
+        """
+        Add detector blur (point-spread function of the detector)
+
+        """
+        if detector_blur_std_px is None or detector_blur_std_px == 0:
+            return meas
+        
+        meas = gaussian_filter(meas, sigma=detector_blur_std_px, axes=(-2,-1)) # Detector blur is essentially the Gaussian blur along ky, kx
+        vprint(f"Adding detector blur (point-spread function of the detector) of Gaussian blur std = {detector_blur_std_px:.4f} px to measurements along the ky, kx directions", verbose=self.verbose)
+        
+        return meas
+    
+    def _meas_add_poisson_noise(self, meas, poisson_cfg):
+        if poisson_cfg is None:
+            return meas
+
+        # Validate required fields
+        try:
+            unit = poisson_cfg['unit']
+            value = poisson_cfg['value']
+            scan_step_size = self.init_params['pos']['scan_step_size']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        # Convert units to total electrons per pattern
+        if unit == 'total_e_per_pattern':
+            total_electron = value
+            dose = total_electron / scan_step_size**2
+        elif unit == 'e_per_Ang2':
+            dose = value
+            total_electron = dose * scan_step_size**2
+        else:
+            raise ValueError(f"Unsupported unit for Poisson noise: '{unit}'. Use 'total_e_per_pattern' or 'e_per_Ang2'.")
+
+        vprint(f"total electron per measurement = dose x scan_step_size^2 = {dose:.3f}(e-/Ang^2) x {scan_step_size:.3f}(Ang)^2 = {total_electron:.3f}", verbose=self.verbose)
+
+        # Normalize each DP to sum = 1 before applying Poisson noise
+        meas = meas / meas.sum((-2,-1))[:,None,None] # Make each slice of the meas to sum to 1
+        meas = np.random.poisson(meas * total_electron)
+        vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
+        
+        return meas
         
     def init_probe(self):
         source = self.init_params['source_params']['probe_source']
@@ -813,7 +1119,6 @@ class Initializer:
         # Run this method to initialize all
         
         self.init_cache()
-        self.init_exp_params()
         self.init_measurements()
         self.init_probe()
         self.init_pos()
@@ -824,50 +1129,3 @@ class Initializer:
         self.init_check()
         
         return self
-
-    ## Initialization related utility functions
-
-    def meas_correct_neg(self, meas):
-        neg_params = self.init_params['exp_params'].get('meas_remove_neg_values', {})
-        mode = neg_params.get('mode', 'clip_neg')  # Default to 'clip_neg' for better performance on low dose. The default was subtract_min until ptyrad-beta3.1
-        value = neg_params.get('value', None)  # Could be None if not provided
-
-        vprint(f"Removing negative values in measurement with method = {mode} and value = {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-
-        if mode == 'subtract_min':
-            min_value = meas.min()
-            meas -= min_value
-            value = None  # Not relevant for this mode
-            vprint(f"Minimum value of {min_value:.4f} subtracted due to the positive px value constraint of measurements", verbose=self.verbose)
-
-        elif mode == 'clip_value':
-            if value is None:
-                raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
-            vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-            meas[meas < value] = 0
-
-        elif mode == 'subtract_value':
-            if value is None:
-                raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
-            vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
-            meas -= value
-
-        else:  # Default: 'clip_neg'
-            vprint(f"Minimum value = {meas.min():.4f}, negative values are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-            meas[meas < 0] = 0
-            value = None  # Not relevant for clipping
-
-        # Final check in case the user specified value is not enough to remove all neg values
-        if (meas < 0).any():
-            vprint(f"User specified value = {value} is not enough to remove negative values, applying 0 clipping")
-            vprint(f"Minimum value of {meas.min():.4f} is clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
-            meas[meas<0] = 0
-                
-        return meas
-
-    def meas_normalization(self, meas):
-        normalization_const = (np.mean(meas, 0).max())
-        meas = meas / normalization_const 
-        meas = meas.astype('float32')
-        vprint(f"Normalizing measurements by {normalization_const:.8g} so the averaged measurement has max intensity at 1 for ease of display/comparison", verbose=self.verbose)
-        return meas

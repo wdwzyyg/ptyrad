@@ -275,6 +275,43 @@ def vprint(*args, verbose=True, **kwargs):
         else:
             print(*args, **kwargs)
 
+def vprint_nested_dict(d, indent=0, verbose=True, leaf_inline_threshold=6):
+    indent_str = "    " * indent
+    for key, value in d.items():
+        if isinstance(value, dict):
+            # Check if this is a flat leaf dict
+            is_flat_leaf = all(not isinstance(v, (dict, list)) for v in value.values())
+            if is_flat_leaf and len(value) <= leaf_inline_threshold:  # Determine whether to print inline or not
+                flat = ", ".join(f"{k}: {repr(v)}" for k, v in value.items())
+                vprint(f"{indent_str}{key}: {{{flat}}}", verbose=verbose)
+            else:
+                vprint(f"{indent_str}{key}:", verbose=verbose)
+                vprint_nested_dict(value, indent + 1, verbose=verbose)
+        elif isinstance(value, list) and all(not isinstance(i, (dict, list)) for i in value):
+            vprint(f"{indent_str}{key}: {value}", verbose=verbose)
+        else:
+            vprint(f"{indent_str}{key}: {repr(value)}", verbose=verbose)
+
+def safe_get_nested(d, keys, default=None):
+    """
+    Safely get a value from a nested dictionary.
+    
+    Parameters:
+    - d (dict): The dictionary to traverse.
+    - keys (list or tuple): A sequence of keys to access nested values.
+    - default: The value to return if any key is missing or intermediate value is None.
+    
+    Returns:
+    - The nested value if found, otherwise `default`.
+    """
+    for key in keys:
+        if not isinstance(d, dict):
+            return default
+        d = d.get(key)
+        if d is None:
+            return default
+    return d
+
 def get_date(date_format='%Y%m%d'):
     from datetime import date, datetime
     

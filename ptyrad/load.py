@@ -6,7 +6,7 @@ import scipy.io as sio
 
 from ptyrad.utils import vprint
 
-def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
+def load_raw(file_path, shape, dtype=np.float32, offset=0, gap=1024):
     # shape = (N, height, width)
     # np.fromfile with custom dtype is faster than the np.read and np.frombuffer
     # This implementaiton is also roughly 2x faster (10sec vs 20sec) than load_hdf5 with a 128x128x128x128 (1GB) EMPAD dataset
@@ -15,7 +15,7 @@ def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
 
     # Verify file size first
     expected_size = offset + N * (height * width * dtype().itemsize + gap)
-    actual_size = os.path.getsize(path)
+    actual_size = os.path.getsize(file_path)
 
     if actual_size != expected_size:
         raise ValueError(f"Mismatch in expected ({expected_size} bytes = offset + N * (height * width * 4 + gap)) vs. actual ({actual_size} bytes) file size! Check your loading configurations!")
@@ -27,13 +27,15 @@ def load_raw(path, shape, dtype=np.float32, offset=0, gap=1024):
     ])
 
     # Read the entire file using the custom dtype
-    with open(path, 'rb') as f:
+    with open(file_path, 'rb') as f:
         f.seek(offset)
         raw_data = np.fromfile(f, dtype=custom_dtype, count=N)
 
     # Extract just the 'data' part (ignoring the gaps)
     data = raw_data['data']
-
+    vprint("Success! Loaded .raw file path =", file_path)
+    vprint("Imported .raw data shape =", data.shape)
+    vprint("Imported .raw data type =", data.dtype)
     return data
 
 def load_hdf5(file_path, dataset_key="ds"):
@@ -61,25 +63,25 @@ def load_hdf5(file_path, dataset_key="ds"):
 
     with h5py.File(file_path, "r") as hf:
         if dataset_key is None:
-            print("Imported entire .hdf5 as a dict:", file_path)
+            vprint("Imported entire .hdf5 as a dict:", file_path)
             f = dict()
             for key in hf.keys():
                 data = np.array(hf[key])
                 if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                    print(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                    vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
                     data = data.view('complex128')
                 f[key] = data
-            print("Success! Loaded .hdf5 file path =", file_path)
+            vprint("Success! Loaded .hdf5 file path =", file_path)
             return f
             
         else:
             data = np.array(hf[dataset_key])
             if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                print(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
                 data = data.view('complex128')
-            print("Success! Loaded .hdf5 file path =", file_path)
-            print("Imported .hdf5 data shape =", data.shape)
-            print("Imported .hdf5 data type =", data.dtype)
+            vprint("Success! Loaded .hdf5 file path =", file_path)
+            vprint("Imported .hdf5 data shape =", data.shape)
+            vprint("Imported .hdf5 data type =", data.dtype)
             return data
 
 def load_tif(file_path):
@@ -90,8 +92,8 @@ def load_tif(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
     data = imread(file_path)
-    print("Success! Loaded .tif file path =", file_path)
-    print("Imported .tif data shape =", data.shape)
+    vprint("Success! Loaded .tif file path =", file_path)
+    vprint("Imported .tif data shape =", data.shape)
     return data
 
 def load_npy(file_path):
@@ -101,8 +103,8 @@ def load_npy(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
     
     data = np.load(file_path)
-    print("Success! Loaded .npy file path =", file_path)
-    print("Imported .npy data shape =", data.shape)
+    vprint("Success! Loaded .npy file path =", file_path)
+    vprint("Imported .npy data shape =", data.shape)
     return data
 
 def load_pt(file_path, weights_only=False):
@@ -118,7 +120,7 @@ def load_pt(file_path, weights_only=False):
     # Because PtyRAD .pt isn't a true PyTorch model, so `weights_only=True` would break this critical loading function.
     # However, `weights_only=False` has potential risk if the .pt file contains malicious code, so please only use this `load_pt` for PtyRAD-generated .pt file.
     
-    print("Success! Loaded .pt file path =", file_path)
+    vprint("Success! Loaded .pt file path =", file_path)
     return data
 
 def load_params(file_path):
@@ -251,7 +253,7 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
         # Process the results
         for i, result in enumerate(results):
             if result is not None:
-                print(f"Result {i + 1}: {result}")
+                vprint(f"Result {i + 1}: {result}")
     """
     # Check if the file exists
     if not os.path.exists(file_path):
@@ -265,16 +267,16 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             mat_contents = sio.loadmat(
                 file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
             )
-            print("Success! Loaded .mat File path =", file_path)
+            vprint("Success! Loaded .mat File path =", file_path)
             return mat_contents
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
-            print("Can't load .mat v7.3 with 'scipy.io.loadmat'. Switching to h5py.")
+            vprint("Can't load .mat v7.3 with 'scipy.io.loadmat'. Switching to h5py.")
             mat_contents = {}
             with h5py.File(file_path, "r") as hdf_file:
                 for key in hdf_file.keys():
                     mat_contents[key] = hdf_file[key][()]
-            print("Success! Loaded .mat file path =", file_path)
+            vprint("Success! Loaded .mat file path =", file_path)
             return mat_contents
 
     # Check target_field type
@@ -304,17 +306,17 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
                     else:
                         outputs = outputs[field]
                 else:
-                    print(f"Field '{field}' not found in file {file_path}")
+                    vprint(f"Field '{field}' not found in file {file_path}")
                     result_list.append(None)
                     break
             else:
                 result_list.append(outputs)
         except NotImplementedError:
             # If loading from MATLAB file complains, switch to HDF5
-            print("Can't load .mat v7.3 with scipy. Switching to h5py.")
+            vprint("Can't load .mat v7.3 with scipy. Switching to h5py.")
             if name == 'outputs.probe_positions': # Convert the scipy syntax to hdf5 syntax
                 name = 'outputs/probe_positions'
             data = load_hdf5(file_path, name)
             result_list.append(data)
-    print("Success! Loaded .mat file path =", file_path)
+    vprint("Success! Loaded .mat file path =", file_path)
     return result_list
