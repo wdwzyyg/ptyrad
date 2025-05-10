@@ -85,21 +85,21 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         return complex_object_interp3d.astype(obj_dtype)
 
 # Initialize probes
-def get_default_probe_simu_params(exp_params):
-    illumination_type = exp_params['illumination_type']
+def get_default_probe_simu_params(probe_params):
+    illumination_type = probe_params['illumination_type']
     if illumination_type == 'electron':
         probe_simu_params = {
                         ## Basic params
-                        "kv"             : exp_params['kv'],
-                        "conv_angle"     : exp_params['conv_angle'],
-                        "Npix"           : exp_params['Npix'],
-                        "dx"             : exp_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                        "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
-                        "pmode_init_pows": exp_params['pmode_init_pows'],
+                        "kv"             : probe_params['kv'],
+                        "conv_angle"     : probe_params['conv_angle'],
+                        "Npix"           : probe_params['Npix'],
+                        "dx"             : probe_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
+                        "pmodes"         : probe_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": probe_params['pmode_init_pows'],
                         ## Aberration coefficients
-                        "df"             : exp_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
-                        "c3"             : exp_params['c3'] , #third-order spherical aberration in angstrom
-                        "c5"             : exp_params['c5'], #fifth-order spherical aberration in angstrom
+                        "df"             : probe_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
+                        "c3"             : probe_params['c3'] , #third-order spherical aberration in angstrom
+                        "c5"             : probe_params['c5'], #fifth-order spherical aberration in angstrom
                         "c7":0, #seventh-order spherical aberration in angstrom
                         "f_a2":0, #twofold astigmatism in angstrom
                         "f_a3":0, #threefold astigmatism in angstrom
@@ -107,27 +107,27 @@ def get_default_probe_simu_params(exp_params):
                         "theta_a2":0, #azimuthal orientation in radian
                         "theta_a3":0, #azimuthal orientation in radian
                         "theta_c3":0, #azimuthal orientation in radian
-                        "shifts":[0,0], #shift probe center in angstrom
+                        "shifts":[0.0,0.0], #shift probe center in angstrom
                         }
     elif illumination_type == 'xray':
         probe_simu_params = {
                         ## Basic params
-                        "beam_energy"    : exp_params['energy'],
-                        "Npix"           : exp_params['Npix'],
-                        "dx"             : exp_params['dx_spec'],
-                        "pmodes"         : exp_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
-                        "pmode_init_pows": exp_params['pmode_init_pows'],
-                        "Ls"             : exp_params['Ls'],
-                        "Rn"             : exp_params['Rn'],
-                        "dRn"            : exp_params['dRn'],
-                        "D_FZP"          : exp_params['D_FZP'],
-                        "D_H"            : exp_params['D_H'],
+                        "beam_energy"    : probe_params['energy'],
+                        "Npix"           : probe_params['Npix'],
+                        "dx"             : probe_params['dx_spec'],
+                        "pmodes"         : probe_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": probe_params['pmode_init_pows'],
+                        "Ls"             : probe_params['Ls'],
+                        "Rn"             : probe_params['Rn'],
+                        "dRn"            : probe_params['dRn'],
+                        "D_FZP"          : probe_params['D_FZP'],
+                        "D_H"            : probe_params['D_H'],
         }
     else:
-        raise KeyError(f"exp_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
+        raise KeyError(f"probe_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
     return probe_simu_params
 
-def make_stem_probe(params_dict, verbose=True):
+def make_stem_probe(probe_params, verbose=True):
     # MAKE_TEM_PROBE Generate probe functions produced by object lens in 
     # transmission electron microscope.
     # Written by Yi Jiang based on Eq.(2.10) in Advanced Computing in Electron 
@@ -137,27 +137,27 @@ def make_stem_probe(params_dict, verbose=True):
     # Outputs:
         #  probe: complex probe functions at real space (sample plane)
     # Inputs: 
-        #  params_dict: probe parameters and other settings
+        #  probe_params: probe parameters and other settings
     
     from numpy.fft import fftfreq, fftshift, ifft2, ifftshift
     
     ## Basic params
-    voltage     = float(params_dict["kv"])         # Ang
-    conv_angle  = float(params_dict["conv_angle"]) # mrad
-    Npix        = int  (params_dict["Npix"])       # Number of pixel of thr detector/probe
-    dx          = float(params_dict["dx"])         # px size in Angstrom
+    voltage     = float(probe_params["kv"])         # kV
+    conv_angle  = float(probe_params["conv_angle"]) # mrad
+    Npix        = int  (probe_params["Npix"])       # Number of pixel of thr detector/probe
+    dx          = float(probe_params["dx"])         # px size in Angstrom
     ## Aberration coefficients
-    df          = float(params_dict["df"]) #first-order aberration (defocus) in angstrom
-    c3          = float(params_dict["c3"]) #third-order spherical aberration in angstrom
-    c5          = float(params_dict["c5"]) #fifth-order spherical aberration in angstrom
-    c7          = float(params_dict["c7"]) #seventh-order spherical aberration in angstrom
-    f_a2        = float(params_dict["f_a2"]) #twofold astigmatism in angstrom
-    f_a3        = float(params_dict["f_a3"]) #threefold astigmatism in angstrom
-    f_c3        = float(params_dict["f_c3"]) #coma in angstrom
-    theta_a2    = float(params_dict["theta_a2"]) #azimuthal orientation in radian
-    theta_a3    = float(params_dict["theta_a3"]) #azimuthal orientation in radian
-    theta_c3    = float(params_dict["theta_c3"]) #azimuthal orientation in radian
-    shifts      = params_dict["shifts"] #shift probe center in angstrom
+    df          = float(probe_params.get("df",0))       # first-order aberration (defocus) in angstrom
+    c3          = float(probe_params.get("c3",0))       # third-order spherical aberration in angstrom
+    c5          = float(probe_params.get("c5",0))       # fifth-order spherical aberration in angstrom
+    c7          = float(probe_params.get("c7",0))       # seventh-order spherical aberration in angstrom
+    f_a2        = float(probe_params.get("f_a2",0))     # twofold astigmatism in angstrom
+    f_a3        = float(probe_params.get("f_a3",0))     # threefold astigmatism in angstrom
+    f_c3        = float(probe_params.get("f_c3",0))     # coma in angstrom
+    theta_a2    = float(probe_params.get("theta_a2",0)) # azimuthal orientation in radian
+    theta_a3    = float(probe_params.get("theta_a3",0)) # azimuthal orientation in radian
+    theta_c3    = float(probe_params.get("theta_c3",0)) # azimuthal orientation in radian
+    shifts      = probe_params.get("shifts",[0.0,0.0])   # shift probe center in angstrom
     
     # Calculate some variables
     wavelength = 12.398/np.sqrt((2*511.0+voltage)*voltage) #angstrom
@@ -215,7 +215,7 @@ def make_stem_probe(params_dict, verbose=True):
     
     return probe
 
-def make_fzp_probe(params_dict, verbose=True):
+def make_fzp_probe(probe_params, verbose=True):
     """
     Generates a Fresnel zone plate probe with internal Fresnel propagation for x-ray ptychography simulations.
 
@@ -232,14 +232,14 @@ def make_fzp_probe(params_dict, verbose=True):
     Returns:
         ndarray: Calculated probe field in the sample plane.
     """
-    N        = int(params_dict['Npix'])
-    energy   = int(params_dict['beam_energy'])
-    dx       = params_dict['dx']
-    Ls       = params_dict['Ls']
-    Rn       = params_dict['Rn']
-    dRn      = params_dict['dRn']
-    D_FZP    = params_dict['D_FZP']
-    D_H      = params_dict['D_H']
+    N        = int(probe_params['Npix'])
+    energy   = int(probe_params['beam_energy'])
+    dx       = float(probe_params['dx'])
+    Ls       = float(probe_params['Ls'])
+    Rn       = float(probe_params['Rn'])
+    dRn      = float(probe_params['dRn'])
+    D_FZP    = float(probe_params['D_FZP'])
+    D_H      = float(probe_params['D_H'])
 
     lambda_ = 1.23984193e-9 / energy
     fl = 2 * Rn * dRn / lambda_  # focal length corresponding to central wavelength

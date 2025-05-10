@@ -3,24 +3,24 @@ init_params: {
     'source': 'raw',
     'input': {'path': data/tBL_WSe2/Panel_g-h_Themis/scan_x128_y128.raw},
     'Npix': 128,
-    'process': null, #{
-    #   'permute': null,
-    #   'reshape': null,
-    #   'flipT': null,
-    #   'crop': [[0,64], [0,64], null, null],
-    #   'pad': null, #{'mode': precompute, 'padding_type': 'power', 'target_Npix': 256, 'value': 0},
-    #   'resample': null, #{'mode': on_the_fly, 'scale_factors': [2, 2]},
-    #   'add_source_size': null,
-    #   'add_detector_blur': null,
-    #   'add_poisson_noise': null, #{'unit': 'total_e_per_pattern', 'value': 10000},
-    #   'remove_neg_values': {'mode': 'clip_neg', 'value': null}, # {'mode': 'subtract_value', 'value': -100}, #{'mode': 'clip_neg', 'value': null},
-    #   'normalization': {'mode': 'divide_const', 'const': 1.0e-4}, #{'mode': 'max_at_one', 'const': null},
-    # }
+    'process': {
+      'permute': null,
+      'reshape': null,
+      'flipT': null,
+      'crop': [[0,64], [0,64], null, null],
+      'pad': null, #{'mode': precompute, 'padding_type': 'power', 'target_Npix': 256, 'value': 0},
+      'resample': null, #{'mode': on_the_fly, 'scale_factors': [2, 2]},
+      'add_source_size': null,
+      'add_detector_blur': null,
+      'add_poisson_noise': null, #{'unit': 'total_e_per_pattern', 'value': 10000},
+      'remove_neg_values': {'mode': 'clip_neg', 'value': null}, # {'mode': 'subtract_value', 'value': -100}, #{'mode': 'clip_neg', 'value': null},
+      'normalization': {'mode': 'divide_const', 'const': 1.0e-4}, #{'mode': 'max_at_one', 'const': null},
+    }
   },
 
   'probe': {
     'source': 'simu',
-    'input': 'output\tBL_WSe2\20250508_full_N16384_dp128_flipT100_random32_p6_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_orblur0.5_ozblur1_mamp0.03_4_oathr0.98_oposc_sng1.0_spr0.1/model_iter0005.pt',
+    'input': null, #'output\tBL_WSe2\20250508_full_N16384_dp128_flipT100_random32_p6_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_orblur0.5_ozblur1_mamp0.03_4_oathr0.98_oposc_sng1.0_spr0.1/model_iter0005.pt',
     'illumination_type': 'electron',
     'kv': 80,
     'conv_angle': 24.9,
@@ -37,7 +37,7 @@ init_params: {
 
   'pos': {
     'source': 'simu',
-    'input': 'output\tBL_WSe2\20250508_full_N16384_dp128_flipT100_random32_p6_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_orblur0.5_ozblur1_mamp0.03_4_oathr0.98_oposc_sng1.0_spr0.1/model_iter0005.pt',
+    'input': null, #'output\tBL_WSe2\20250508_full_N16384_dp128_flipT100_random32_p6_1obj_2slice_dz6_Adam_plr1e-4_oalr5e-4_oplr5e-4_slr1e-4_orblur0.5_ozblur1_mamp0.03_4_oathr0.98_oposc_sng1.0_spr0.1/model_iter0005.pt',
     'N_scans': 16384,
     'N_scan_slow': 128,
     'N_scan_fast': 128,

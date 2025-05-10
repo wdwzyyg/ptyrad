@@ -170,7 +170,7 @@ class Initializer:
             dRn         = self.probe_params['dRn']
             Rn          = self.probe_params['Rn']
             D_H         = self.probe_params['D_H']
-            D_FZO       = self.probe_params['D_FZP']
+            D_FZP       = self.probe_params['D_FZP']
             Ls          = self.probe_params['Ls']
             dk          = 1/(dx*Npix)
             
@@ -181,7 +181,7 @@ class Initializer:
                 vprint(f'outmost zone width = {dRn} m')
                 vprint(f'Rn                 = {Rn} m')
                 vprint(f'D_H                = {D_H} m')
-                vprint(f'D_FZO              = {D_FZO} m')
+                vprint(f'D_FZP              = {D_FZP} m')
                 vprint(f'Ls                 = {Ls} m')
                 vprint(f'Npix               = {Npix} px')
                 vprint(f'dx                 = {dx} m')
@@ -728,87 +728,180 @@ class Initializer:
         vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
         
         return meas
-        
-    def init_probe(self):
-        source = self.init_params['source_params']['probe_source']
-        params = self.init_params['source_params']['probe_params']
-        illumination_type  = self.init_params['exp_params']['illumination_type']
-        vprint(f"### Initializing probe from '{source}' ###", verbose=self.verbose)
 
-        # Load file
-        if source   == 'custom':
-            probe = params
+    def init_probe(self):
+        """
+        Initialize the probe by loading or simulating and then processing it.
+        """
+        vprint("### Initializing probe ###", verbose=self.verbose)
+
+        probe = self._load_probe()
+        probe = self._process_probe(probe)
+        
+        #
+        pmode_max = self.init_params['probe']['pmode_max']
+        probe = probe[:pmode_max]
+
+        # Print summary
+        vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
+        self.init_variables['probe'] = probe
+        vprint(" ", verbose=self.verbose)
+        
+    def _load_probe(self):
+        """
+        Load the probe from the specified source.
+        
+        returns:
+            probe (numpy.ndarray): The loaded probe array would always be casted to (pmode, Ny, Nx).
+        """
+        
+        # Validate required fields
+        try:
+            probe_params = self.init_params['probe']
+            source = probe_params['source']
+            input_params = probe_params['input']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+        
+        illumination_type = self.init_params['probe'].get('illumination_type', 'electron')
+
+        vprint(f"Loading probe from source = '{source}'", verbose=self.verbose)
+
+        if source == 'custom':
+            probe = input_params
         elif source == 'PtyRAD':
-            pt_path = params
+            pt_path = input_params
             ckpt = self.cache_contents if self.use_cached_probe else load_pt(pt_path)
             probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
         elif source == 'PtyShv':
-            mat_path = params
-            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
-            use_h5py = True if mat_version[0] == 2 else False
-            probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0] # PtychoShelves probe generally has (Ny,Nx,pmode,vp) dimension. Usually people prefer pmode over vp.
-            vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
-            if use_h5py:
-                probe = probe.transpose(range(probe.ndim)[::-1]) 
-                vprint(f"Reverse array axes because .mat (v7.3) is loaded with h5py, probe.shape = {probe.shape}", verbose=self.verbose)
-            if probe.ndim == 4:
-                vprint("Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
-                probe = probe[...,0]
-            elif probe.ndim == 2:
-                vprint("Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
-                probe = probe[...,None]
-            else:
-                probe = probe # probe = (pmode, Ny, Nx)
-            vprint("Permuting PtyShv probe into (pmode, Ny, Nx)", verbose=self.verbose) # For PtychoShelves input, do the transpose
-            probe = probe.transpose(2,0,1)
+            probe = self._load_probe_from_ptyshv(input_params)
         elif source == 'py4DSTEM':
-            hdf5_path = params
-            probe = self.cache_contents['probe'] if self.use_cached_probe else load_hdf5(hdf5_path, 'probe') # py4DSTEM probe generally has (pmode,Ny,Nx) dimension.
-            vprint(f"Input py4DSTEM probe has original shape {probe.shape}", verbose=self.verbose)
-            if probe.ndim == 2:
-                vprint("Expanding py4DSTEM probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
-                probe = probe[None,...]
-            else:
-                probe = probe # probe = (pmode, Ny, Nx)
+            probe = self._load_probe_from_py4dstem(input_params)
         elif source == 'simu':
-            probe_simu_params = params
-            if probe_simu_params is None:
-                vprint("Use exp_params and default values instead for simulation", verbose=self.verbose)
-                probe_simu_params = get_default_probe_simu_params(self.init_params['exp_params'])
-            if illumination_type == 'electron':
-                probe = make_stem_probe(probe_simu_params, verbose=self.verbose)[None,] # probe = (1,Ny,Nx) to be comply with PtyRAD convention
-            elif illumination_type == 'xray':
-                probe = make_fzp_probe(probe_simu_params)[None,] # simulated probe for fresnel zone plate condition
-            else:
-                raise KeyError(f"exp_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
-            if probe_simu_params['pmodes'] > 1:
-                probe = make_mixed_probe(probe[0], probe_simu_params['pmodes'], probe_simu_params['pmode_init_pows'], verbose=self.verbose) # Pass in the 2D probe (Ny,Nx) to get 3D probe of (pmode, Ny, Nx)
+            probe = self._simulate_probe(input_params, illumination_type)
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
+            raise KeyError(f"Unsupported probe source '{source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
+
+        vprint(f"Loaded probe shape = {probe.shape}, dtype = {probe.dtype}", verbose=self.verbose)
+        return probe
+    
+    def _load_probe_from_ptyshv(self, params):
+        """
+        Load the probe from a PtychoShelves (fold_slice) .mat file.
+        """
+        mat_path = params
+        mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
+        use_h5py = (mat_version[0] == 2)
+        probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0]
+        vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
+
+        if use_h5py:
+            probe = probe.transpose(range(probe.ndim)[::-1])
+            vprint(f"Reverse array axes because .mat (v7.3) is loaded with h5py, probe.shape = {probe.shape}", verbose=self.verbose)
+
+        if probe.ndim == 4:
+            vprint("Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
+            probe = probe[..., 0]
+            
+        elif probe.ndim == 2:
+            vprint("Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
+            probe = probe[..., None]
+            
+        vprint("Permuting PtyShv probe into (pmode, Ny, Nx)", verbose=self.verbose) # For PtychoShelves input, do the transpose
+        probe = probe.transpose(2, 0, 1)  # Permute to (pmode, Ny, Nx)
+        return probe
+    
+    def _load_probe_from_py4dstem(self, params):
+        """
+        Load the probe from a py4DSTEM hdf5 file.
         
-        # Postprocess
-        if self.init_params['exp_params']['probe_permute'] is not None and source != 'PtyShv':
-            permute_order = self.init_params['exp_params']['probe_permute']
-            vprint(f"Permuting probe with {permute_order}", verbose=self.verbose)
-            probe = probe.transpose(permute_order)
-            
-        # Normalizing probe intensity
-        pmode_max = self.init_params['exp_params']['pmode_max']
+        Note that the ouput file is expected to be generated by my modified py4DSTEM fork.
+        https://github.com/chiahao3/py4DSTEM/tree/benchmark
+        """
+        hdf5_path = params
+        probe = self.cache_contents['probe'] if self.use_cached_probe else load_hdf5(hdf5_path, 'probe')
+
+        vprint(f"Input py4DSTEM probe has original shape {probe.shape}", verbose=self.verbose)
+
+        if probe.ndim == 2:
+            vprint("Expanding py4DSTEM probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
+            probe = probe[None, ...]
+
+        return probe
+
+    def _simulate_probe(self, params, illumination_type):
+        """
+        Simulate the probe based on the specified parameters.
+        """
+        
+        # TODO Can probably improve the params file structure and simulation process for probe
+        # Currently the probe simu parameters that are not needed when we load existing probes
+        # are just implictly ignored, like defocus, convergence angle. 
+        # Illumination type is something that can probably live directly under `init_params.probe`
+                
+        if params is None:
+            probe_params = self.init_params['probe']
+            probe_params['Npix'] = self.init_params['meas']['Npix']
+            vprint("Using default simulation parameters for probe.", verbose=self.verbose)
+            params = get_default_probe_simu_params(probe_params)
+
+        if illumination_type == 'electron':
+            probe = make_stem_probe(params, verbose=self.verbose)[None, ...]
+        elif illumination_type == 'xray':
+            probe = make_fzp_probe(params, verbose=self.verbose)[None, ...]
+        else:
+            raise KeyError(f"Unsupported illumination type '{illumination_type}'. Use 'electron' or 'xray'.")
+
+        # probe is (1, Ny, Nx) after simulation, expand it to (pmode, Ny, Nx) if needed
+        if params['pmodes'] > 1:
+            probe = make_mixed_probe(probe[0], params['pmodes'], params['pmode_init_pows'], verbose=self.verbose)
+
+        return probe
+
+    def _process_probe(self, probe):
+        """
+        Process the loaded probe, including permutation, normalization, and mode selection.
+        """
+        
+        proc = safe_get_nested(self.init_params, ['probe', 'process'], default={})
+        
+        probe = self._probe_permute(probe, proc.get('permute'))
+        probe = self._probe_normalize(probe, proc.get('normalize'))
+
+        return probe
+
+    def _probe_permute(self, probe, order):
+        """
+        Permute the probe dimensions if specified in the parameters.
+        """
+        if order is not None:
+            vprint(f"Permuting probe with order = {order}", verbose=self.verbose)
+            probe = probe.transpose(order)
+        return probe
+    
+    def _probe_normalize(self, probe, norm_cfg):
+        """
+        Normalize the probe intensity based on the measurements.
+        """
+        
+        # TODO Extend this method to support other normalization methods
+        # like the target intensity (vacuum probe), or a scaling factor over meas_avg_sum
+        
+        # This correction is enforced even the norm_cfg is None (not provided by user)
+        if norm_cfg is None:
+            norm_cfg = {}
+        
         try:
-            meas_avg_sum = self.init_variables['meas_avg_sum'] # meas.mean(0).sum(), or total intensity of the averaged diffraction pattern
-        except KeyError:
-            # If 'measurements' doesn't exist, initialize it
-            vprint("Warning: 'meas_avg_sum' key not found. Initializing measurements for probe intensity normalization...", verbose=self.verbose)
+            # Using the pre-calculated meas_avg_sum for probe intensity normalization
+            # becasue on-the-fly padding could increase the total meas intensity
             meas_avg_sum = self.init_variables['meas_avg_sum']
-            
-        # Select pmode range and print summary
-        probe = probe[:pmode_max]
-        probe = probe / (np.sum(np.abs(probe)**2)/meas_avg_sum)**0.5 # Normalizing the probe_data so that the sum(|probe_data|**2) is the same with an averaged single DP
-        probe = probe.astype('complex64')
-        vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
+        except KeyError:
+            raise ValueError("Measurement average sum ('meas_avg_sum') is required for probe normalization.")
+
+        normalization_factor = (np.sum(np.abs(probe) ** 2) / meas_avg_sum) ** 0.5
+        probe = probe / normalization_factor
         vprint(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while meas.mean(0).sum() = {meas_avg_sum:.2f}", verbose=self.verbose)
-        self.init_variables['probe'] = probe
-        vprint(" ", verbose=self.verbose)
+        return probe.astype('complex64')
    
     def init_pos(self):
         source          = self.init_params['source_params']['pos_source']
