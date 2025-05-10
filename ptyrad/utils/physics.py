@@ -85,21 +85,25 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
         return complex_object_interp3d.astype(obj_dtype)
 
 # Initialize probes
-def get_default_probe_simu_params(probe_params):
-    illumination_type = probe_params['illumination_type']
-    if illumination_type == 'electron':
+def get_default_probe_simu_params(init_params):
+    """
+    Get default probe simulation parameters based on the init_params dict
+
+    """
+    probe_illum_type = init_params['probe_illum_type']
+    if probe_illum_type == 'electron':
         probe_simu_params = {
                         ## Basic params
-                        "kv"             : probe_params['kv'],
-                        "conv_angle"     : probe_params['conv_angle'],
-                        "Npix"           : probe_params['Npix'],
-                        "dx"             : probe_params['dx_spec'], # dx = 1/(dk*Npix) #angstrom
-                        "pmodes"         : probe_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
-                        "pmode_init_pows": probe_params['pmode_init_pows'],
+                        "kv"             : init_params['probe_kv'],
+                        "conv_angle"     : init_params['probe_conv_angle'],
+                        "Npix"           : init_params['meas_Npix'],
+                        "dx"             : init_params['probe_dx_spec'], # dx = 1/(dk*Npix) #angstrom
+                        "pmodes"         : init_params['probe_pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": init_params['probe_pmode_init_pows'],
                         ## Aberration coefficients
-                        "df"             : probe_params['defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
-                        "c3"             : probe_params['c3'] , #third-order spherical aberration in angstrom
-                        "c5"             : probe_params['c5'], #fifth-order spherical aberration in angstrom
+                        "df"             : init_params['probe_defocus'], #first-order aberration (defocus) in angstrom, positive defocus here refers to actual underfocus or weaker lens strength following Kirkland's notation
+                        "c3"             : init_params['probe_c3'] , #third-order spherical aberration in angstrom
+                        "c5"             : init_params['probe_c5'], #fifth-order spherical aberration in angstrom
                         "c7":0, #seventh-order spherical aberration in angstrom
                         "f_a2":0, #twofold astigmatism in angstrom
                         "f_a3":0, #threefold astigmatism in angstrom
@@ -109,22 +113,22 @@ def get_default_probe_simu_params(probe_params):
                         "theta_c3":0, #azimuthal orientation in radian
                         "shifts":[0.0,0.0], #shift probe center in angstrom
                         }
-    elif illumination_type == 'xray':
+    elif probe_illum_type == 'xray':
         probe_simu_params = {
                         ## Basic params
-                        "beam_energy"    : probe_params['energy'],
-                        "Npix"           : probe_params['Npix'],
-                        "dx"             : probe_params['dx_spec'],
-                        "pmodes"         : probe_params['pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
-                        "pmode_init_pows": probe_params['pmode_init_pows'],
-                        "Ls"             : probe_params['Ls'],
-                        "Rn"             : probe_params['Rn'],
-                        "dRn"            : probe_params['dRn'],
-                        "D_FZP"          : probe_params['D_FZP'],
-                        "D_H"            : probe_params['D_H'],
+                        "beam_energy"    : init_params['probe_energy'],
+                        "Npix"           : init_params['meas_Npix'],
+                        "dx"             : init_params['probe_dx_spec'],
+                        "pmodes"         : init_params['probe_pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
+                        "pmode_init_pows": init_params['probe_pmode_init_pows'],
+                        "Ls"             : init_params['probe_Ls'],
+                        "Rn"             : init_params['probe_Rn'],
+                        "dRn"            : init_params['probe_dRn'],
+                        "D_FZP"          : init_params['probe_D_FZP'],
+                        "D_H"            : init_params['probe_D_H'],
         }
     else:
-        raise KeyError(f"probe_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
+        raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
     return probe_simu_params
 
 def make_stem_probe(probe_params, verbose=True):

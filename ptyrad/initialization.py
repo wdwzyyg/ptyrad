@@ -22,7 +22,6 @@ from ptyrad.utils import (
     power_law,
     safe_get_nested,
     vprint,
-    vprint_nested_dict,
 )
 
 
@@ -43,42 +42,42 @@ class Initializer:
     def set_use_cached_flags(self, source):
         """ Set the flags for each field whether we can cache or not """
         
-        obj_source  = self.init_params['obj']['source']
-        obj_input   = self.init_params['obj']['input']
-        probe_source = self.init_params['probe']['source']
-        probe_input  = self.init_params['probe']['input']
-        pos_source   = self.init_params['pos']['source']
-        pos_input    = self.init_params['pos']['input']
+        obj_source   = self.init_params['obj_source']
+        obj_params    = self.init_params['obj_params']
+        probe_source = self.init_params['probe_source']
+        probe_params  = self.init_params['probe_params']
+        pos_source   = self.init_params['pos_source']
+        pos_params    = self.init_params['pos_params']
         
         triplets = [
-        ('obj', obj_source, obj_input),
-        ('probe', probe_source, probe_input),
-        ('pos', pos_source, pos_input)]
+        ('obj', obj_source, obj_params),
+        ('probe', probe_source, probe_params),
+        ('pos', pos_source, pos_params)]
         
         # Helper for comparison
-        def same_source_and_input(a, b):
+        def same_source_and_params(a, b):
             return a[1] == b[1] == source and a[2] == b[2]
         
         # Check if obj, probe, and pos sources are the same
-        if same_source_and_input(triplets[0], triplets[1]) and same_source_and_input(triplets[1], triplets[2]):
+        if same_source_and_params(triplets[0], triplets[1]) and same_source_and_params(triplets[1], triplets[2]):
             self.use_cached_obj = self.use_cached_probe = self.use_cached_pos = True
-            self.cache_path = obj_input
+            self.cache_path = obj_params
             self.cache_source = obj_source
             return
 
-        if same_source_and_input(triplets[0], triplets[1]):
+        if same_source_and_params(triplets[0], triplets[1]):
             self.use_cached_obj = self.use_cached_probe = True
-            self.cache_path = obj_input
+            self.cache_path = obj_params
             self.cache_source = obj_source
 
-        if same_source_and_input(triplets[0], triplets[2]):
+        if same_source_and_params(triplets[0], triplets[2]):
             self.use_cached_obj = self.use_cached_pos = True
-            self.cache_path = obj_input
+            self.cache_path = obj_params
             self.cache_source = obj_source
 
-        if same_source_and_input(triplets[1], triplets[2]):
+        if same_source_and_params(triplets[1], triplets[2]):
             self.use_cached_probe = self.use_cached_pos = True
-            self.cache_path = probe_input
+            self.cache_path = probe_params
             self.cache_source = probe_source
     
     def init_cache(self):
@@ -120,29 +119,26 @@ class Initializer:
     def init_params_dict(self):
         vprint("### Initializing init_params ###", verbose=self.verbose)
         
-        # TODO Check whether I need to create these params entries at all
         # Note that the self.init_params can be modified by _meas_crop and other methods
         # So we need to call this method to re-initialize the self.init_variables
-        self.meas_params = self.init_params['meas']
-        self.probe_params = self.init_params['probe']
-        self.pos_params = self.init_params['pos']
-        self.obj_params = self.init_params['obj']
-        self.tilt_params = self.init_params['tilt']
         
         vprint("Input values are displayed below:", verbose=self.verbose)
-        vprint_nested_dict(self.init_params, verbose=self.verbose)
+        for key, value in self.init_params.items():
+            vprint(f"  {key}: {value}", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
         
-        illumination_type = self.probe_params.get('illumination_type') or 'electron'
-        if  illumination_type == 'electron':
-            voltage     = self.probe_params['kv']
-            wavelength  = get_EM_constants(voltage, 'wavelength')
-            conv_angle  = self.probe_params['conv_angle']
-            Npix        = self.meas_params['Npix']
-            N_scan_slow = self.pos_params['N_scan_slow']
-            N_scan_fast = self.pos_params['N_scan_fast']
+        # TODO: The assignment and printing are a bit messy, we can improve this later
+        
+        probe_illum_type = self.init_params.get('probe_illum_type') or 'electron'
+        if  probe_illum_type == 'electron':
+            voltage     = self.init_params['probe_kv']
+            wavelength  = get_EM_constants(voltage, output_type='wavelength')
+            conv_angle  = self.init_params['probe_conv_angle']
+            Npix        = self.init_params['meas_Npix']
+            N_scan_slow = self.init_params['pos_N_scan_slow']
+            N_scan_fast = self.init_params['pos_N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
-            dx          = self.probe_params['dx_spec']
+            dx          = self.init_params['probe_dx_spec']
             dk          = 1/(dx*Npix)
             
             # Print some derived values for sanity check
@@ -159,19 +155,19 @@ class Initializer:
                 vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
                 vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
 
-        elif illumination_type == 'xray':
-            energy      = self.probe_params['energy']
+        elif probe_illum_type == 'xray':
+            energy      = self.init_params['probe_energy']
             wavelength  = 1.23984193e-9 / energy
-            dx          = self.probe_params['dx_spec']
-            N_scan_slow = self.pos_params['N_scan_slow']
-            N_scan_fast = self.pos_params['N_scan_fast']
+            dx          = self.init_params['probe_dx_spec']
+            N_scan_slow = self.init_params['probe_N_scan_slow']
+            N_scan_fast = self.init_params['probe_N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
-            Npix        = self.meas_params['Npix']
-            dRn         = self.probe_params['dRn']
-            Rn          = self.probe_params['Rn']
-            D_H         = self.probe_params['D_H']
-            D_FZP       = self.probe_params['D_FZP']
-            Ls          = self.probe_params['Ls']
+            Npix        = self.init_params['meas_Npix']
+            dRn         = self.init_params['probe_dRn']
+            Rn          = self.init_params['probe_Rn']
+            D_H         = self.init_params['probe_D_H']
+            D_FZP       = self.init_params['probe_D_FZP']
+            Ls          = self.init_params['probe_Ls']
             dk          = 1/(dx*Npix)
             
             if self.verbose:
@@ -187,13 +183,22 @@ class Initializer:
                 vprint(f'dx                 = {dx} m')
         
         else:
-            raise KeyError(f"probe_params['illumination_type'] = {illumination_type} not implemented yet, please use either 'electron' or 'xray'!")
+            raise KeyError(f"'probe_illum_type' = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
         
-        # Save general values into init_variables        
+        # Save general values into init_variables
+        # While they aren't necessarily "critical" for all initialization scenarios (like some variables aren't needed when we load things),
+        # But it's better to request these experimental parameters from users, since most of them should come with the measurements.
+        # We should collect all available experimental parameteres needed for minimal reconstruction from scratch
+        # And keep them with useful derived values in self.init_variables dict
+        
+        # TODO: May consider use here to centralize the initalizaiton of all useful/derived variables
+        self.init_variables['probe_illum_type'] = probe_illum_type
         self.init_variables['Npix']        = Npix
+        self.init_variables['probe_shape'] = np.array([Npix, Npix]).astype(float) # Keep this at float
         self.init_variables['N_scan_slow'] = N_scan_slow
         self.init_variables['N_scan_fast'] = N_scan_fast
         self.init_variables['N_scans']     = N_scans
+        self.init_variables['scan_step_size'] = self.init_params['pos_scan_step_size']
         self.init_variables['dx']          = dx #   Ang
         self.init_variables['dk']          = dk # 1/Ang
         vprint(" ", verbose=self.verbose)
@@ -208,7 +213,7 @@ class Initializer:
         # For example, get_rbf, get_detector_blur, get_meas_shifts, get_conv_angle, etc.
         
         # Get rbf related values (for electron ptychography only)
-        if self.probe_params.get('illumination_type') == 'electron':
+        if self.init_variables.get('probe_illum_type') == 'electron':
             rbf = get_rbf(meas)
             suggested_probe_mask_k_radius = 2 * rbf / meas.shape[-1]
             vprint(f"Radius of bright field disk (rbf) = {rbf:.1f} px, "
@@ -216,7 +221,7 @@ class Initializer:
 
         meas_avg_sum = meas.mean(0).sum()
         
-        pad_mode = safe_get_nested(self.init_params, ['meas', 'process', 'pad', 'mode'])
+        pad_mode = safe_get_nested(self.init_params, ['meas_pad', 'mode'])
         if pad_mode == 'on_the_fly':
             padded = self.init_variables.get('on_the_fly_meas_padded')
             padded_int_sum = padded.sum() if padded is not None else 0
@@ -238,38 +243,37 @@ class Initializer:
         
         # Validate required fields
         try:
-            meas_params = self.init_params['meas']
-            source = meas_params['source']
-            input_params = meas_params['input']
+            meas_source = self.init_params['meas_source']
+            meas_params = self.init_params['meas_params']
         except KeyError as e:
             raise ValueError(f"Missing required configuration field: {e}")
 
-        vprint(f"Loading measurements from source = '{source}'", verbose=self.verbose)
+        vprint(f"Loading measurements from source = '{meas_source}'", verbose=self.verbose)
 
-        if source == 'custom':
-            meas = input_params  # assumed to already be a NumPy array
-        elif source in ('tif', 'tiff'):
-            meas = load_tif(input_params['path']) # key is ignored because it's not needed for tif files
-        elif source == 'mat':
-            meas = load_fields_from_mat(input_params['path'], input_params['key'])[0]
-        elif source == 'hdf5':
-            meas = load_hdf5(input_params['path'], input_params['key']).astype('float32')
-        elif source == 'npy':
-            meas = load_npy(input_params['path']).astype('float32')
-        elif source == 'raw':
+        if meas_source == 'custom':
+            meas = meas_params  # assumed to already be a NumPy array
+        elif meas_source in ('tif', 'tiff'):
+            meas = load_tif(meas_params['path']) # key is ignored because it's not needed for tif files
+        elif meas_source == 'mat':
+            meas = load_fields_from_mat(meas_params['path'], meas_params['key'])[0]
+        elif meas_source == 'hdf5':
+            meas = load_hdf5(meas_params['path'], meas_params['key']).astype('float32')
+        elif meas_source == 'npy':
+            meas = load_npy(meas_params['path']).astype('float32')
+        elif meas_source == 'raw':
             default_shape = (
                 self.init_variables['N_scans'],
                 self.init_variables['Npix'],
                 self.init_variables['Npix'],
             )
             meas = load_raw(
-                input_params['path'],
-                shape=input_params.get('shape', default_shape),
-                offset=input_params.get('offset', 0),
-                gap=input_params.get('gap', 1024)
+                meas_params['path'],
+                shape=meas_params.get('shape', default_shape),
+                offset=meas_params.get('offset', 0),
+                gap=meas_params.get('gap', 1024)
             )
         else:
-            raise KeyError(f"Unsupported measurement source '{source}'. "
+            raise KeyError(f"Unsupported measurement source '{meas_source}'. "
                         "Use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw'.")
 
         vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
@@ -282,33 +286,32 @@ class Initializer:
         
         """
         
-        # Note that _meas_correct_neg and _meas_normalization will always be executed
+        # If the processing config is None, the methods will skip it internally
+        # Note that _meas_remove_neg_values and _meas_normalization will always be executed
         # If you really want to nullify them, explictly set 
-        # 'remove_neg_values': {'mode': 'subtract_value', 'value': 0}
-        # 'normalization': {'mode': 'divide_const', 'const': 1}
+        # 'meas_remove_neg_values': {'mode': 'subtract_value', 'value': 0}
+        # 'meas_normalization': {'mode': 'divide_const', 'const': 1}
         
-        proc = safe_get_nested(self.init_params, ['meas', 'process'], default={})
-
         # Simple geometric operations
-        meas = self._meas_permute(meas, proc.get('permute'))
-        meas = self._meas_reshape(meas, proc.get('reshape'))
-        meas = self._meas_flipT(meas, proc.get('flipT'))
+        meas = self._meas_permute(meas, self.init_params.get('meas_permute'))
+        meas = self._meas_reshape(meas, self.init_params.get('meas_reshape'))
+        meas = self._meas_flipT(meas, self.init_params.get('meas_flipT'))
         
         # Operations that may change the shape of the measurements
-        meas = self._meas_crop(meas, proc.get('crop'))
-        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) # meas need to be positive before the padding with background fitting mode
-        meas = self._meas_pad(meas, proc.get('pad'))
-        meas = self._meas_resample(meas, proc.get('resample'))
+        meas = self._meas_crop(meas, self.init_params.get('meas_crop'))
+        meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) # meas need to be positive before the padding with background fitting mode
+        meas = self._meas_pad(meas, self.init_params.get('meas_pad'))
+        meas = self._meas_resample(meas, self.init_params.get('meas_resample'))
         
         # Operations that add realistic factors to (simulated perfect) measurements
-        meas = self._meas_add_source_size(meas, proc.get('add_source_size'))
-        meas = self._meas_add_detector_blur(meas, proc.get('add_detector_blur'))
-        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) # meas need to be positive before applying poisson noise
-        meas = self._meas_add_poisson_noise(meas, proc.get('add_poisson_noise'))
+        meas = self._meas_add_source_size(meas, self.init_params.get('meas_add_source_size'))
+        meas = self._meas_add_detector_blur(meas, self.init_params.get('meas_add_detector_blur'))
+        meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) # meas need to be positive before applying poisson noise
+        meas = self._meas_add_poisson_noise(meas, self.init_params.get('meas_add_poisson_noise'))
         
         # Final check of the measurements
-        meas = self._meas_correct_neg(meas, proc.get('remove_neg_values')) 
-        meas = self._meas_normalization(meas, proc.get('normalization'))
+        meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) 
+        meas = self._meas_normalization(meas, self.init_params.get('meas_normalization'))
 
         return meas
     
@@ -390,11 +393,11 @@ class Initializer:
 
         # Update internal variables and re-init self.init_params / self.init_variables
         vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
-        self.init_params['probe']['dx_spec'] *= self.init_params['meas']['Npix'] / meas.shape[-1]
-        self.init_params['meas']['Npix'] = meas.shape[-1]
-        self.init_params['pos']['N_scans'] = meas.shape[0] * meas.shape[1]
-        self.init_params['pos']['N_scan_slow'] = meas.shape[0]
-        self.init_params['pos']['N_scan_fast'] = meas.shape[1]
+        self.init_params['probe_dx_spec'] *= self.init_params['meas_Npix'] / meas.shape[-1]
+        self.init_params['meas_Npix'] = meas.shape[-1]
+        self.init_params['pos_N_scans'] = meas.shape[0] * meas.shape[1]
+        self.init_params['pos_N_scan_slow'] = meas.shape[0]
+        self.init_params['pos_N_scan_fast'] = meas.shape[1]
         vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
         self.init_params_dict()
         vprint(" ", verbose=self.verbose)
@@ -403,7 +406,7 @@ class Initializer:
 
         return meas  
     
-    def _meas_correct_neg(self, meas, neg_cfg):
+    def _meas_remove_neg_values(self, meas, neg_cfg):
         """
         Correct negative values in the measurement array based on the specified configuration.
 
@@ -601,8 +604,8 @@ class Initializer:
 
         # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
         vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements padding", verbose=self.verbose)
-        self.init_params['probe']['dx_spec'] *= self.init_params['meas']['Npix'] / meas_padded.shape[-1]
-        self.init_params['meas']['Npix'] = meas_padded.shape[-1] # This will update Npix to target_Npix no matter what mode is used
+        self.init_params['probe_dx_spec'] *= self.init_params['meas_Npix'] / meas_padded.shape[-1]
+        self.init_params['meas_Npix'] = meas_padded.shape[-1] # This will update Npix to target_Npix no matter what mode is used
         vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
         self.init_params_dict()
@@ -657,7 +660,7 @@ class Initializer:
             raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
 
         # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
-        self.init_params['meas']['Npix'] = Npix
+        self.init_params['meas_Npix'] = Npix
         vprint(f"Update Npix into '{Npix}' after the measurements resampling", verbose=self.verbose)
         vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
         vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
@@ -675,7 +678,7 @@ class Initializer:
         vprint(f"Reshaping measurements into {meas.shape} for adding partial spatial coherence (source size) induced blurring on measurements", verbose=self.verbose)
 
         # Convert real-space blur in Angstroms to Gaussian std in scan units (px)
-        source_size_std_px = source_size_std_ang / self.init_params['pos']['scan_step_size']
+        source_size_std_px = source_size_std_ang / self.init_params['pos_scan_step_size']
         vprint(f"Adding source size (partial spatial coherence) of Gaussian blur std = {source_size_std_px:.4f} scan_step sizes or {source_size_std_ang:.4f} Ang to measurements along the scan directions", verbose=self.verbose)
 
         # Apply blur over scan dimensions (0,1)
@@ -706,7 +709,7 @@ class Initializer:
         try:
             unit = poisson_cfg['unit']
             value = poisson_cfg['value']
-            scan_step_size = self.init_params['pos']['scan_step_size']
+            scan_step_size = self.init_params['pos_scan_step_size']
         except KeyError as e:
             raise ValueError(f"Missing required configuration field: {e}")
 
@@ -739,7 +742,7 @@ class Initializer:
         probe = self._process_probe(probe)
         
         #
-        pmode_max = self.init_params['probe']['pmode_max']
+        pmode_max = self.init_params['probe_pmode_max']
         probe = probe[:pmode_max]
 
         # Print summary
@@ -757,35 +760,38 @@ class Initializer:
         
         # Validate required fields
         try:
-            probe_params = self.init_params['probe']
-            source = probe_params['source']
-            input_params = probe_params['input']
+            probe_source = self.init_params['probe_source']
+            probe_params = self.init_params['probe_params']
         except KeyError as e:
             raise ValueError(f"Missing required configuration field: {e}")
         
-        illumination_type = self.init_params['probe'].get('illumination_type', 'electron')
+        probe_illum_type = self.init_variables['probe_illum_type']
 
-        vprint(f"Loading probe from source = '{source}'", verbose=self.verbose)
+        vprint(f"Loading probe from source = '{probe_source}'", verbose=self.verbose)
 
-        if source == 'custom':
-            probe = input_params
-        elif source == 'PtyRAD':
-            pt_path = input_params
-            ckpt = self.cache_contents if self.use_cached_probe else load_pt(pt_path)
-            probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
-        elif source == 'PtyShv':
-            probe = self._load_probe_from_ptyshv(input_params)
-        elif source == 'py4DSTEM':
-            probe = self._load_probe_from_py4dstem(input_params)
-        elif source == 'simu':
-            probe = self._simulate_probe(input_params, illumination_type)
+        if probe_source == 'custom':
+            probe = probe_params
+        elif probe_source == 'PtyRAD':
+            probe = self._load_probe_from_ptyrad(probe_params)
+        elif probe_source == 'PtyShv':
+            probe = self._load_probe_from_ptyshv(probe_params)
+        elif probe_source == 'py4DSTEM':
+            probe = self._load_probe_from_py4dstem(probe_params)
+        elif probe_source == 'simu':
+            probe = self._simulate_probe(probe_params, probe_illum_type)
         else:
-            raise KeyError(f"Unsupported probe source '{source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
+            raise KeyError(f"Unsupported probe source '{probe_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
 
         vprint(f"Loaded probe shape = {probe.shape}, dtype = {probe.dtype}", verbose=self.verbose)
         return probe
+
+    def _load_probe_from_ptyrad(self, params: str):
+        pt_path = params
+        ckpt = self.cache_contents if self.use_cached_probe else load_pt(pt_path)
+        probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
+        return probe
     
-    def _load_probe_from_ptyshv(self, params):
+    def _load_probe_from_ptyshv(self, params: str):
         """
         Load the probe from a PtychoShelves (fold_slice) .mat file.
         """
@@ -811,7 +817,7 @@ class Initializer:
         probe = probe.transpose(2, 0, 1)  # Permute to (pmode, Ny, Nx)
         return probe
     
-    def _load_probe_from_py4dstem(self, params):
+    def _load_probe_from_py4dstem(self, params: str):
         """
         Load the probe from a py4DSTEM hdf5 file.
         
@@ -829,7 +835,7 @@ class Initializer:
 
         return probe
 
-    def _simulate_probe(self, params, illumination_type):
+    def _simulate_probe(self, simu_params: dict, probe_illum_type: str):
         """
         Simulate the probe based on the specified parameters.
         """
@@ -839,35 +845,33 @@ class Initializer:
         # are just implictly ignored, like defocus, convergence angle. 
         # Illumination type is something that can probably live directly under `init_params.probe`
                 
-        if params is None:
-            probe_params = self.init_params['probe']
-            probe_params['Npix'] = self.init_params['meas']['Npix']
-            vprint("Using default simulation parameters for probe.", verbose=self.verbose)
-            params = get_default_probe_simu_params(probe_params)
-
-        if illumination_type == 'electron':
-            probe = make_stem_probe(params, verbose=self.verbose)[None, ...]
-        elif illumination_type == 'xray':
-            probe = make_fzp_probe(params, verbose=self.verbose)[None, ...]
+        if simu_params is not None:
+            vprint("Using user-specified parameters in 'init_params['probe_params']' for probe simulation.", verbose=self.verbose)
         else:
-            raise KeyError(f"Unsupported illumination type '{illumination_type}'. Use 'electron' or 'xray'.")
+            vprint("Using experimental parameters specified by 'init_params' for probe simulation.", verbose=self.verbose)
+            simu_params = get_default_probe_simu_params(self.init_params)
+
+        if probe_illum_type == 'electron':
+            probe = make_stem_probe(simu_params, verbose=self.verbose)[None, ...]
+        elif probe_illum_type == 'xray':
+            probe = make_fzp_probe(simu_params, verbose=self.verbose)[None, ...]
+        else:
+            raise KeyError(f"Unsupported illumination type '{probe_illum_type}'. Use 'electron' or 'xray'.")
 
         # probe is (1, Ny, Nx) after simulation, expand it to (pmode, Ny, Nx) if needed
-        if params['pmodes'] > 1:
-            probe = make_mixed_probe(probe[0], params['pmodes'], params['pmode_init_pows'], verbose=self.verbose)
+        if simu_params['pmodes'] > 1:
+            probe = make_mixed_probe(probe[0], simu_params['pmodes'], simu_params['pmode_init_pows'], verbose=self.verbose)
 
         return probe
 
     def _process_probe(self, probe):
         """
-        Process the loaded probe, including permutation, normalization, and mode selection.
+        Process the loaded probe, including permutation, normalization
         """
+        # If the processing config is None, the methods will skip it internally
         
-        proc = safe_get_nested(self.init_params, ['probe', 'process'], default={})
-        
-        probe = self._probe_permute(probe, proc.get('permute'))
-        probe = self._probe_normalize(probe, proc.get('normalize'))
-
+        probe = self._probe_permute(probe, self.init_params.get('probe_permute'))
+        probe = self._probe_normalize(probe, self.init_params.get('probe_normalize'))
         return probe
 
     def _probe_permute(self, probe, order):
@@ -904,6 +908,173 @@ class Initializer:
         return probe.astype('complex64')
    
     def init_pos(self):
+        """
+        Initialize the probe positions by loading and processing them.
+        """
+        vprint("### Initializing probe positions ###", verbose=self.verbose)
+    
+        pos = self._load_pos()
+        pos = self._process_pos(pos)
+
+        probe_shape = self.init_variables['probe_shape']
+        obj_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
+        crop_pos = np.round(pos).astype('int16')
+        probe_pos_shifts = (pos - crop_pos).astype('float32')
+        
+        # Save the processed positions
+        self.init_variables['obj_extent'] = obj_extent
+        self.init_variables['crop_pos'] = crop_pos
+        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
+        self.init_variables['scan_affine'] = self.init_params['pos_scan_affine']
+    
+        # Print summary
+        vprint(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}", verbose=self.verbose)
+        vprint(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}", verbose=self.verbose)
+        vprint(f"crop_pos extent (Ang)                         = {(crop_pos.max(0) - crop_pos.min(0))*self.init_variables['dx']}", verbose=self.verbose)
+        vprint(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+    
+    def _load_pos(self):
+        """
+        Load the probe positions from the specified source.
+        """
+        
+        # Validate required fields
+        try:
+            pos_source = self.init_params['pos_source']
+            pos_params = self.init_params['pos_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+    
+        vprint(f"Loading probe positions from source = '{pos_source}'", verbose=self.verbose)
+    
+        if pos_source == 'custom':
+            pos = pos_params
+        elif pos_source == 'PtyRAD':
+            pos = self._load_pos_from_ptyrad(pos_params)
+        elif pos_source == 'PtyShv':
+            pos = self._load_pos_from_ptyshv(pos_params)
+        elif pos_source == 'py4DSTEM':
+            pos = self._load_pos_from_py4dstem(pos_params)
+        elif pos_source == 'simu':
+            pos = self._simulate_pos(pos_params)
+        elif pos_source == 'foldslice_hdf5':
+            pos = self._load_pos_from_foldslice(pos_params)
+        else:
+            raise KeyError(f"Unsupported position source '{pos_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', 'simu', or 'foldslice_hdf5'.")
+    
+        return pos
+    
+    def _load_pos_from_ptyrad(self, params: str):
+        pt_path = params
+        ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
+        crop_pos = ckpt['model_attributes']['crop_pos'].detach().cpu().numpy()
+        probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
+        pos = crop_pos + probe_pos_shifts
+        return pos
+    
+    def _load_pos_from_ptyshv(self, params: str):
+        mat_path = params
+        mat_version = get_matfile_version(mat_path) # https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
+        use_h5py = (mat_version[0] == 2)
+        mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
+
+        if use_h5py:
+            mat_contents = [arr.transpose(range(arr.ndim)[::-1]) for arr in mat_contents]
+            vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
+
+        probe_positions = mat_contents[2]
+        probe_shape = mat_contents[1].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp) or (Ny,Nx,pmode)
+        obj_shape   = mat_contents[0].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
+        pos_offset = np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) - 1 # For Matlab - Python index shift
+        probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
+        pos                  = probe_positions_yx + pos_offset 
+        return pos
+    
+    def _load_pos_from_py4dstem(self, params: str):
+        hdf5_path       = params
+        hdf5_contents   = self.cache_contents if self.use_cached_pos else load_hdf5(hdf5_path, 'positions_px')
+        probe_positions = hdf5_contents['positions_px']
+        probe_shape     = hdf5_contents['probe'].shape[-2:] # py4DSTEM probe is (pmode,Ny,Nx)
+        pos             = probe_positions - np.array(probe_shape)/2 
+        return pos
+    
+    def _load_pos_from_foldslice(self, params: str):
+        # This preprocessing routine is equivalent to `p.src_positions='hdf5_pos';` in `fold_slice`
+        # which was used for many APS instruments
+        
+        dx = self.init_variables['dx']
+        probe_shape = self.init_variables['probe_shape']
+        
+        hdf5_path = params
+        ppY = load_hdf5(hdf5_path, dataset_key='ppY')
+        ppX = load_hdf5(hdf5_path, dataset_key='ppX')
+        pos = np.stack((-ppY, -ppX), axis=1) / dx 
+        pos = np.flipud(pos) # (N,2) in (pos_y_px, pos_x_px)
+        obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
+        pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate      
+        return pos
+    
+    def _simulate_pos(self, simu_params: dict):
+
+        if simu_params is not None:
+            vprint("Using user-specified parameters in 'init_params['pos_params']' for position simulation.", verbose=self.verbose)
+        else:
+            simu_params = {}
+            vprint("Using experimental parameters specified by 'init_params' for position simulation.", verbose=self.verbose)
+
+        # The unspecified parameters will be set to the values specified in self.init_variables
+        dx_spec        = simu_params.get('dx_spec', self.init_variables['dx'])
+        scan_step_size = simu_params.get('scan_step_size', self.init_variables['N_scan_slow'])
+        N_scan_slow    = simu_params.get('N_scan_slow', self.init_variables['N_scan_slow'])
+        N_scan_fast    = simu_params.get('N_scan_fast', self.init_variables['N_scan_fast'])
+        probe_shape    = simu_params.get('probe_shape', self.init_variables['probe_shape'])
+        
+        vprint(f"Simulating probe positions with dx_spec = {dx_spec}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
+        pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
+        pos = pos - pos.mean(0) # Center scan around origin
+        obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
+        pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
+        return pos
+
+    def _process_pos(self, pos):
+        """
+        Process the loaded probe positions, including flipping, affine transformations, and random displacements.
+        """
+        # If the processing config is None, the methods will skip it internally
+        
+        pos = self._pos_scan_flipT(pos, self.init_params.get('pos_scan_flipT'))
+        pos = self._pos_scan_affine_transform(pos, self.init_params.get('pos_scan_affine'))
+        pos = self._pos_scan_add_random_displacement(pos, self.init_params.get('pos_scan_rand_std'))
+        return pos
+    
+    def _pos_scan_flipT(self, pos, flipT_axes):
+        if flipT_axes is not None:
+            flipT_axes = np.nonzero(flipT_axes)[0]
+            if len(flipT_axes) > 0:
+                vprint(f"Flipping scan pattern with [flipup, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
+                pos = pos.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], 2)
+                pos = np.flip(pos, flipT_axes)
+                pos = pos.reshape(-1, 2)
+        return pos
+    
+    def _pos_scan_affine_transform(self, pos, scan_affine):
+        if scan_affine is not None:
+            (scale, asymmetry, rotation, shear) = scan_affine
+            vprint(f"Applying affine transformation to scan pattern with (scale, asymmetry, rotation, shear) = {(scale, asymmetry, rotation, shear)}", verbose=self.verbose)
+            pos = pos - pos.mean(0)
+            pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
+            probe_shape = self.init_variables['probe_shape']
+            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
+            pos = pos + np.ceil((np.array(obj_shape) / 2) - (np.array(probe_shape) / 2))
+        return pos
+    
+    def _pos_scan_add_random_displacement(self, pos, scan_rand_std):
+        vprint(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions", verbose=self.verbose)
+        pos = pos + scan_rand_std * np.random.randn(*pos.shape)
+        return pos
+    
+    def init_pos_archive(self):
         source          = self.init_params['source_params']['pos_source']
         params          = self.init_params['source_params']['pos_params']
         dx_spec         = self.init_params['exp_params']['dx_spec']
@@ -1089,14 +1260,14 @@ class Initializer:
         slice_thickness = self.init_params['exp_params']['slice_thickness']
         dx_spec = self.init_params['exp_params']['dx_spec']
         
-        if self.init_params['exp_params']['illumination_type'] == 'electron':
+        if self.init_params['exp_params']['probe_illum_type'] == 'electron':
             lambd = get_EM_constants(self.init_params['exp_params']['kv'], 'wavelength')
             vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec:.4f} Ang, slice_thickness = {slice_thickness:.4f} Ang, lambd = {lambd:.4f} Ang", verbose=self.verbose)
-        elif self.init_params['exp_params']['illumination_type'] == 'xray':
+        elif self.init_params['exp_params']['probe_illum_type'] == 'xray':
             lambd = 1.23984193e-9 / (self.init_params['exp_params']['energy'])
             vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec} m, slice_thickness = {slice_thickness} m, lambd = {lambd} m", verbose=self.verbose)
         else:
-            raise KeyError(f"exp_params['illumination_type'] = {self.init_params['exp_params']['illumination_type']} not implemented yet, please use either 'electron' or 'xray'!")
+            raise KeyError(f"exp_params['probe_illum_type'] = {self.init_params['exp_params']['probe_illum_type']} not implemented yet, please use either 'electron' or 'xray'!")
         
         H = near_field_evolution(probe_shape, dx_spec, slice_thickness, lambd)
         H = H.astype('complex64')
