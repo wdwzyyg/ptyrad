@@ -63,27 +63,14 @@ def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_
     
     return save_dict
 
-def make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
-    ''' Generate the output folder given indices, recon_params, model, constraint_params, and loss_params '''
-    
-    # # Example
-    # NITER        = 50
-    # INDICES_MODE = 'full' #'full', 'center', 'sub'
-    # BATCH_SIZE   = 128
-    # GROUP_MODE   = 'random' #'random', 'sparse', 'compact'
+def make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
+    ''' 
+    Generate the output folder given indices, recon_params, model, constraint_params, and loss_params 
+    '''
 
-    # output_dir   = 'output/STO'
-    # postfix      = ''
-
-    # pos          = model.crop_pos.cpu().numpy()
-    # indices      = select_scan_indices(exp_params['N_scan_slow'], exp_params['N_scan_slow'], subscan_slow=None, subscan_fast=None, mode=INDICES_MODE)
-    # batches      = make_batches(indices, pos, BATCH_SIZE, mode=GROUP_MODE)
-    # recon_params = make_recon_params_dict(NITER, INDICES_MODE, BATCH_SIZE, GROUP_MODE)
-    # output_path  = make_output_folder(output_dir, indices, recon_params, model, constraint_params, postfix)
-    
     output_path  = output_dir
-    illumination = exp_params['illumination_type']
-    meas_flipT   = exp_params['meas_flipT']
+    illumination = init_params['probe_illum_type']
+    meas_flipT   = init_params['meas_flipT']
     indices_mode = recon_params['INDICES_MODE'].get('mode')
     group_mode   = recon_params['GROUP_MODE']
     batch_size   = recon_params['BATCH_SIZE'].get('size') * recon_params['BATCH_SIZE'].get('grad_accumulation') # Affix the effective batch size
@@ -99,7 +86,7 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     tilt_lr      = format(model.lr_params['obj_tilts'],        '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
     dz_lr        = format(model.lr_params['slice_thickness'],  '.0e').replace("e-0", "e-") if model.lr_params['slice_thickness'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
-    scan_affine  = model.scan_affine if model.scan_affine is not None else None
+    scan_affine  = model.scan_affine # Note that scan_affine could be None
     init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
     optimizer_str   = model.optimizer_params['name']
     start_iter_dict = model.start_iter
@@ -240,10 +227,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
     # # Attach init params (optional)
     if 'init' in recon_dir_affixes:
         if illumination == 'electron':
-            init_conv_angle = exp_params['conv_angle']
-            init_defocus    = exp_params['defocus']
-            init_c3    = exp_params['c3']
-            init_c5    = exp_params['c5']
+            init_conv_angle = init_params['probe_conv_angle']
+            init_defocus    = init_params['probe_defocus']
+            init_c3    = init_params['probe_c3']
+            init_c5    = init_params['probe_c5']
             output_path += f"_ca{init_conv_angle:.3g}"
             output_path += f"_df{init_defocus:.3g}"
             if init_c3 != 0:
@@ -251,10 +238,10 @@ def make_output_folder(output_dir, indices, exp_params, recon_params, model, con
             if init_c5 != 0:
                 output_path += f"_c5{format(init_c5, '.0e')}"
         elif illumination =='xray':
-            init_Ls = exp_params['Ls']
+            init_Ls = init_params['Ls']
             output_path += f"_Ls{init_Ls* 1e9:.0f}"
         else:
-            raise KeyError(f"exp_params['illumination_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
+            raise KeyError(f"init_params['probe_illum_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
             
     if scan_affine is not None:
         affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)

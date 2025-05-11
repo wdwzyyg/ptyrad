@@ -97,7 +97,7 @@ def get_default_probe_simu_params(init_params):
                         "kv"             : init_params['probe_kv'],
                         "conv_angle"     : init_params['probe_conv_angle'],
                         "Npix"           : init_params['meas_Npix'],
-                        "dx"             : init_params['probe_dx_spec'], # dx = 1/(dk*Npix) #angstrom
+                        "dx"             : init_params['probe_dx'], # dx = 1/(dk*Npix) #angstrom
                         "pmodes"         : init_params['probe_pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
                         "pmode_init_pows": init_params['probe_pmode_init_pows'],
                         ## Aberration coefficients
@@ -118,7 +118,7 @@ def get_default_probe_simu_params(init_params):
                         ## Basic params
                         "beam_energy"    : init_params['probe_energy'],
                         "Npix"           : init_params['meas_Npix'],
-                        "dx"             : init_params['probe_dx_spec'],
+                        "dx"             : init_params['probe_dx'],
                         "pmodes"         : init_params['probe_pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
                         "pmode_init_pows": init_params['probe_pmode_init_pows'],
                         "Ls"             : init_params['probe_Ls'],
@@ -206,16 +206,16 @@ def make_stem_probe(probe_params, verbose=True):
 
     if verbose:
         # Print some useful values
-        vprint(f'kv          = {voltage} kV')    
-        vprint(f'wavelength  = {wavelength:.4f} Ang')
-        vprint(f'conv_angle  = {conv_angle} mrad')
-        vprint(f'Npix        = {Npix} px')
-        vprint(f'dk          = {dk:.4f} Ang^-1')
-        vprint(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
-        vprint(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
-        vprint(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-        vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-        vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
+        vprint(f'  kv          = {voltage} kV')    
+        vprint(f'  wavelength  = {wavelength:.4f} Ang')
+        vprint(f'  conv_angle  = {conv_angle} mrad')
+        vprint(f'  Npix        = {Npix} px')
+        vprint(f'  dk          = {dk:.4f} Ang^-1')
+        vprint(f'  kMax        = {(Npix*dk/2):.4f} Ang^-1')
+        vprint(f'  alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+        vprint(f'  dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+        vprint(f'  Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+        vprint(f'  Real space probe extent = {dx*Npix:.4f} Ang')
     
     return probe
 

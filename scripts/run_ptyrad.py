@@ -1,5 +1,5 @@
 # Python script to run PtyRAD
-# Updated by Chia-Hao Lee on 2024.10.19
+# Updated by Chia-Hao Lee on 2025.05.11
 
 import argparse
 import sys
@@ -12,7 +12,7 @@ from ptyrad.utils import CustomLogger, print_system_info, set_accelerator, set_g
 
 if __name__ == "__main__":
     # If you want to run with GPU 0
-    # python ./scripts/run_ptyrad.py --params_path "params/demo/tBL_WSe2_reconstruct.yml" --gpuid 0
+    # python ./scripts/run_ptyrad.py --params_path "params/demo_tBL_WSe2_reconstruct.yml" --gpuid 0
     
     # If you want to run independent processes on 2 GPUs on your workstation from Bash terminal
     # parallel --delay 5 python ./scripts/run_ptyrad.py --params_path scan4_64mrad_optune.yml --gpuid ::: 0 1

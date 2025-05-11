@@ -63,7 +63,7 @@ class PtyRADSolver(object):
     """
     def __init__(self, params, device=None, acc=None, logger=None):
         self.params          = params
-        self.if_hypertune    = self.params['hypertune_params']['if_hypertune']
+        self.if_hypertune    = self.params.get('hypertune_params', {}).get('if_hypertune', False)
         self.verbose         = not self.params['recon_params']['if_quiet']
         self.accelerator     = acc
         self.use_acc_device  = True if (device is None and acc is not None) else False
@@ -80,7 +80,7 @@ class PtyRADSolver(object):
     def init_initializer(self):
         # These components are organized into individual methods so we can re-initialize some of them if needed 
         vprint("### Initializing Initializer ###")
-        self.init          = Initializer(self.params['exp_params'], self.params['source_params']).init_all()
+        self.init          = Initializer(self.params['init_params']).init_all()
         vprint(" ")
 
     def init_loss(self):
@@ -481,7 +481,7 @@ def prepare_recon(model, init, params):
     vprint("### Generating indices, batches, and output_path ###", verbose=verbose)
     # Parse the variables
     init_variables = init.init_variables
-    exp_params = init.init_params.get('exp_params') # These could be modified by Optuna, hence can be different from params['exp_params]
+    init_params = init.init_params # These could be modified by Optuna, hence can be different from params['init_params]
     params_path = params.get('params_path')
     loss_params = params.get('loss_params')
     constraint_params = params.get('constraint_params')
@@ -496,7 +496,7 @@ def prepare_recon(model, init, params):
     output_dir = recon_params['output_dir']
     recon_dir_affixes = recon_params['recon_dir_affixes']
     copy_params = recon_params['copy_params']
-    if_hypertune = params['hypertune_params']['if_hypertune']
+    if_hypertune = params.get('hypertune_params', {}).get('if_hypertune', False)
     
     # Generate the indices, batches, and fig_grouping
     pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
@@ -510,7 +510,7 @@ def prepare_recon(model, init, params):
 
     # Create the output path, save fig_grouping, and copy params file
     if SAVE_ITERS is not None:
-        output_path = make_output_folder(output_dir, indices, exp_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
+        output_path = make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
         fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
         if copy_params and not if_hypertune:
             # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
@@ -580,7 +580,8 @@ def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, 
                     # Use the method on the wrapped model (DDP) if it exists
                     model_instance = model.module if hasattr(model, "module") else model
                     
-                    # Note that `exp_params` stores the initial exp_params, while `model` contains the actual params that could be updated if either meas_crop or meas_resample is not None
+                    # Note that `params` stores the original params from the configuration file, 
+                    # while `model` contains the actual params that could be updated by meas_crop, meas_pad, or meas_resample
                     save_results(output_path, model_instance, params, optimizer, niter, indices, batch_losses)
                     
                     ## Saving summary
@@ -899,7 +900,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     
     ## Currently only re-initialize the required parts for performance, but once there're too many correlated params need to be re-initialized,
     ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
-    ## For example, re-initialize `dx_spec` would require re-initializing everything including the 4D-STEM data.
+    ## For example, re-initialize `dx` would require re-initializing the measurements if there's meas_crop, meas_pad, meas_resample that involves updating `dx`.
             
     # Batch size
     if tune_params['batch_size']['state']:
@@ -927,7 +928,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     for vname in ['pmode_max', 'conv_angle', 'defocus', 'c3', 'c5']:
         if tune_params[vname]['state']:
             vparams = tune_params[vname]
-            init.init_params['exp_params'][vname] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
+            init.init_params['probe_' + vname] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
             remake_probe = True
     if remake_probe:
         init.init_probe()
@@ -936,13 +937,13 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     if tune_params['dz']['state']:
         vname = 'dz'
         vparams = tune_params[vname]
-        init.init_params['exp_params']['slice_thickness'] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
-        init.init_obj()
+        init.init_params['obj_slice_thickness'] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
+        init.init_obj() # Currently the slice_thickness only modifies the printed obj_extent value, but eventually we'll add obj resampling so let's keep it for now
         init.init_H()
     
     # scan_affine
     scan_affine = []
-    scan_affine_init = params['exp_params']['scan_affine']
+    scan_affine_init = params['init_params']['pos_scan_affine']
     if scan_affine_init is not None:
         default_affine = {'scale':scan_affine_init[0], 'asymmetry':scan_affine_init[1], 'rotation':scan_affine_init[2], 'shear':scan_affine_init[3]}
     else:
@@ -954,7 +955,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         else:
             scan_affine.append(default_affine[vname])
     if scan_affine != [1,0,0,0]:
-        init.init_params['exp_params']['scan_affine'] = scan_affine
+        init.init_params['pos_scan_affine'] = scan_affine
         init.init_pos()
         init.init_obj() # Update obj initialization because the scan range has changed
     
@@ -968,7 +969,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             obj_tilts.append(0)
     obj_tilts = [obj_tilts] # Make it into [[tilt_y, tilt_x]]
     if obj_tilts != [[0,0]]:
-        init.init_variables['obj_tilts'] = obj_tilts
+        init.init_variables['obj_tilts'] = obj_tilts # No need to update init_params['tilt_params'] because the pass-in value is only used when `tilt_params = 'custom'`
    
     # Create the model and optimizer, prepare indices, batches, and output_path
     model         = PtychoAD(init.init_variables, params['model_params'], device=device, verbose=verbose)

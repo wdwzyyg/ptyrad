@@ -41,13 +41,16 @@ class Initializer:
         
     def set_use_cached_flags(self, source):
         """ Set the flags for each field whether we can cache or not """
-        
-        obj_source   = self.init_params['obj_source']
-        obj_params    = self.init_params['obj_params']
-        probe_source = self.init_params['probe_source']
-        probe_params  = self.init_params['probe_params']
-        pos_source   = self.init_params['pos_source']
-        pos_params    = self.init_params['pos_params']
+                # Validate required fields
+        try:
+            obj_source   = self.init_params['obj_source']
+            obj_params   = self.init_params['obj_params']
+            probe_source = self.init_params['probe_source']
+            probe_params = self.init_params['probe_params']
+            pos_source   = self.init_params['pos_source']
+            pos_params   = self.init_params['pos_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
         
         triplets = [
         ('obj', obj_source, obj_params),
@@ -138,27 +141,27 @@ class Initializer:
             N_scan_slow = self.init_params['pos_N_scan_slow']
             N_scan_fast = self.init_params['pos_N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
-            dx          = self.init_params['probe_dx_spec']
+            dx          = self.init_params['probe_dx']
             dk          = 1/(dx*Npix)
             
             # Print some derived values for sanity check
             if self.verbose:
-                vprint("Derived values given input exp_params:")
-                vprint(f'kv          = {voltage} kV')    
-                vprint(f'wavelength  = {wavelength:.4f} Ang')
-                vprint(f'conv_angle  = {conv_angle} mrad')
-                vprint(f'Npix        = {Npix} px')
-                vprint(f'dk          = {dk:.4f} Ang^-1')
-                vprint(f'kMax        = {(Npix*dk/2):.4f} Ang^-1')
-                vprint(f'alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
-                vprint(f'dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-                vprint(f'Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-                vprint(f'Real space probe extent = {dx*Npix:.4f} Ang')
+                vprint("Derived values given input init_params:")
+                vprint(f'  kv          = {voltage} kV')    
+                vprint(f'  wavelength  = {wavelength:.4f} Ang')
+                vprint(f'  conv_angle  = {conv_angle} mrad')
+                vprint(f'  Npix        = {Npix} px')
+                vprint(f'  dk          = {dk:.4f} Ang^-1')
+                vprint(f'  kMax        = {(Npix*dk/2):.4f} Ang^-1')
+                vprint(f'  alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+                vprint(f'  dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+                vprint(f'  Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+                vprint(f'  Real space probe extent = {dx*Npix:.4f} Ang')
 
         elif probe_illum_type == 'xray':
             energy      = self.init_params['probe_energy']
             wavelength  = 1.23984193e-9 / energy
-            dx          = self.init_params['probe_dx_spec']
+            dx          = self.init_params['probe_dx']
             N_scan_slow = self.init_params['probe_N_scan_slow']
             N_scan_fast = self.init_params['probe_N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
@@ -171,16 +174,16 @@ class Initializer:
             dk          = 1/(dx*Npix)
             
             if self.verbose:
-                vprint("Derived values given input exp_params:")
-                vprint(f'x-ray beam energy  = {energy} keV')    
-                vprint(f'wavelength         = {wavelength} m')
-                vprint(f'outmost zone width = {dRn} m')
-                vprint(f'Rn                 = {Rn} m')
-                vprint(f'D_H                = {D_H} m')
-                vprint(f'D_FZP              = {D_FZP} m')
-                vprint(f'Ls                 = {Ls} m')
-                vprint(f'Npix               = {Npix} px')
-                vprint(f'dx                 = {dx} m')
+                vprint("Derived values given input init_params:")
+                vprint(f'  x-ray beam energy  = {energy} keV')    
+                vprint(f'  wavelength         = {wavelength} m')
+                vprint(f'  outmost zone width = {dRn} m')
+                vprint(f'  Rn                 = {Rn} m')
+                vprint(f'  D_H                = {D_H} m')
+                vprint(f'  D_FZP              = {D_FZP} m')
+                vprint(f'  Ls                 = {Ls} m')
+                vprint(f'  Npix               = {Npix} px')
+                vprint(f'  dx                 = {dx} m')
         
         else:
             raise KeyError(f"'probe_illum_type' = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
@@ -193,14 +196,15 @@ class Initializer:
         
         # TODO: May consider use here to centralize the initalizaiton of all useful/derived variables
         self.init_variables['probe_illum_type'] = probe_illum_type
-        self.init_variables['Npix']        = Npix
-        self.init_variables['probe_shape'] = np.array([Npix, Npix]).astype(float) # Keep this at float
-        self.init_variables['N_scan_slow'] = N_scan_slow
-        self.init_variables['N_scan_fast'] = N_scan_fast
-        self.init_variables['N_scans']     = N_scans
-        self.init_variables['scan_step_size'] = self.init_params['pos_scan_step_size']
-        self.init_variables['dx']          = dx #   Ang
-        self.init_variables['dk']          = dk # 1/Ang
+        self.init_variables['Npix']             = Npix
+        self.init_variables['probe_shape']      = np.array([Npix, Npix]).astype(float) # Keep this at float
+        self.init_variables['N_scan_slow']      = N_scan_slow
+        self.init_variables['N_scan_fast']      = N_scan_fast
+        self.init_variables['N_scans']          = N_scans
+        self.init_variables['scan_step_size']   = self.init_params['pos_scan_step_size']
+        self.init_variables['dx']               = dx #   Ang
+        self.init_variables['dk']               = dk # 1/Ang
+        self.init_variables['slice_thickness']  = self.init_params['obj_slice_thickness']
         vprint(" ", verbose=self.verbose)
         
     def init_measurements(self):
@@ -392,8 +396,8 @@ class Initializer:
         vprint(f"Cropped measurements have shape (N_slow, N_fast, ky, kx) = {meas.shape}", verbose=self.verbose)
 
         # Update internal variables and re-init self.init_params / self.init_variables
-        vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
-        self.init_params['probe_dx_spec'] *= self.init_params['meas_Npix'] / meas.shape[-1]
+        vprint("Update (dx, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
+        self.init_params['probe_dx'] *= self.init_params['meas_Npix'] / meas.shape[-1]
         self.init_params['meas_Npix'] = meas.shape[-1]
         self.init_params['pos_N_scans'] = meas.shape[0] * meas.shape[1]
         self.init_params['pos_N_scan_slow'] = meas.shape[0]
@@ -603,8 +607,8 @@ class Initializer:
             raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
 
         # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
-        vprint("Update (dx_spec, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements padding", verbose=self.verbose)
-        self.init_params['probe_dx_spec'] *= self.init_params['meas_Npix'] / meas_padded.shape[-1]
+        vprint("Update (dx, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements padding", verbose=self.verbose)
+        self.init_params['probe_dx'] *= self.init_params['meas_Npix'] / meas_padded.shape[-1]
         self.init_params['meas_Npix'] = meas_padded.shape[-1] # This will update Npix to target_Npix no matter what mode is used
         vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
@@ -741,7 +745,7 @@ class Initializer:
         probe = self._load_probe()
         probe = self._process_probe(probe)
         
-        #
+        # Set the maximum pmode
         pmode_max = self.init_params['probe_pmode_max']
         probe = probe[:pmode_max]
 
@@ -846,9 +850,9 @@ class Initializer:
         # Illumination type is something that can probably live directly under `init_params.probe`
                 
         if simu_params is not None:
-            vprint("Using user-specified parameters in 'init_params['probe_params']' for probe simulation.", verbose=self.verbose)
+            vprint("Using user-specified parameters in 'init_params['probe_params']' for initial probe simulation.", verbose=self.verbose)
         else:
-            vprint("Using experimental parameters specified by 'init_params' for probe simulation.", verbose=self.verbose)
+            vprint("Using experimental parameters specified by 'init_params' for initial probe simulation.", verbose=self.verbose)
             simu_params = get_default_probe_simu_params(self.init_params)
 
         if probe_illum_type == 'electron':
@@ -917,12 +921,12 @@ class Initializer:
         pos = self._process_pos(pos)
 
         probe_shape = self.init_variables['probe_shape']
-        obj_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
+        obj_lateral_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
         crop_pos = np.round(pos).astype('int16')
         probe_pos_shifts = (pos - crop_pos).astype('float32')
         
         # Save the processed positions
-        self.init_variables['obj_extent'] = obj_extent
+        self.init_variables['obj_lateral_extent'] = obj_lateral_extent
         self.init_variables['crop_pos'] = crop_pos
         self.init_variables['probe_pos_shifts'] = probe_pos_shifts
         self.init_variables['scan_affine'] = self.init_params['pos_scan_affine']
@@ -1018,20 +1022,20 @@ class Initializer:
     def _simulate_pos(self, simu_params: dict):
 
         if simu_params is not None:
-            vprint("Using user-specified parameters in 'init_params['pos_params']' for position simulation.", verbose=self.verbose)
+            vprint("Using user-specified parameters in 'init_params['pos_params']' for initial position simulation.", verbose=self.verbose)
         else:
             simu_params = {}
-            vprint("Using experimental parameters specified by 'init_params' for position simulation.", verbose=self.verbose)
+            vprint("Using experimental parameters specified by 'init_params' (dx, scan_step size, N_scan_slow, N_scan_fast) for initial position simulation.", verbose=self.verbose)
 
         # The unspecified parameters will be set to the values specified in self.init_variables
-        dx_spec        = simu_params.get('dx_spec', self.init_variables['dx'])
-        scan_step_size = simu_params.get('scan_step_size', self.init_variables['N_scan_slow'])
+        dx        = simu_params.get('dx', self.init_variables['dx'])
+        scan_step_size = simu_params.get('scan_step_size', self.init_variables['scan_step_size'])
         N_scan_slow    = simu_params.get('N_scan_slow', self.init_variables['N_scan_slow'])
         N_scan_fast    = simu_params.get('N_scan_fast', self.init_variables['N_scan_fast'])
         probe_shape    = simu_params.get('probe_shape', self.init_variables['probe_shape'])
         
-        vprint(f"Simulating probe positions with dx_spec = {dx_spec}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
-        pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
+        vprint(f"Simulating probe positions with dx = {dx}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
+        pos = scan_step_size / dx * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
         pos = pos - pos.mean(0) # Center scan around origin
         obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
         pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
@@ -1049,13 +1053,32 @@ class Initializer:
         return pos
     
     def _pos_scan_flipT(self, pos, flipT_axes):
-        if flipT_axes is not None:
-            flipT_axes = np.nonzero(flipT_axes)[0]
-            if len(flipT_axes) > 0:
-                vprint(f"Flipping scan pattern with [flipup, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
-                pos = pos.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], 2)
-                pos = np.flip(pos, flipT_axes)
-                pos = pos.reshape(-1, 2)
+        """
+        Flip and transpose scan positions.
+        flipT_axes: list of 3 binary/int values [flipud, fliplr, transpose]
+        """
+        
+        if flipT_axes is None:
+            return pos
+
+        # Validate length
+        if not isinstance(flipT_axes, (list, tuple)) or len(flipT_axes) != 3:
+            raise ValueError(f"Expected flipT_axes to be a list of 3 values, got: {flipT_axes}")
+
+        # Safely cast all entries to int
+        try:
+            flipT_axes = [int(v) for v in flipT_axes]
+        except Exception as e:
+            raise ValueError(f"flipT_axes must contain values convertible to int (0 or 1). Got: {flipT_axes}") from e
+        
+        vprint(f"Flipping scan pattern with [flipup, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
+        
+        # Convert the binary code to the indices of non-zero axis. E.g. scan_flipT = [0,1,1] => flip the axes = [1,2]
+        flipT_axes = np.nonzero(flipT_axes)[0] 
+        if len(flipT_axes) > 0:
+            pos = pos.reshape(self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast'], 2)
+            pos = np.flip(pos, flipT_axes)
+            pos = pos.reshape(-1, 2)
         return pos
     
     def _pos_scan_affine_transform(self, pos, scan_affine):
@@ -1074,177 +1097,148 @@ class Initializer:
         pos = pos + scan_rand_std * np.random.randn(*pos.shape)
         return pos
     
-    def init_pos_archive(self):
-        source          = self.init_params['source_params']['pos_source']
-        params          = self.init_params['source_params']['pos_params']
-        dx_spec         = self.init_params['exp_params']['dx_spec']
-        scan_step_size  = self.init_params['exp_params']['scan_step_size']
-        scan_rand_std   = self.init_params['exp_params']['scan_rand_std']
-        N_scan_slow     = self.init_params['exp_params']['N_scan_slow']
-        N_scan_fast     = self.init_params['exp_params']['N_scan_fast']
-        probe_shape     = np.array([self.init_params['exp_params']['Npix']]*2)
-        vprint(f"### Initializing probe pos from '{source}' ###", verbose=self.verbose)
-
-        # Load file
-        if source   == 'custom':
-            pos = params
-        elif source == 'PtyRAD':
-            pt_path = params
-            ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
-            crop_pos         = ckpt['model_attributes']['crop_pos'].detach().cpu().numpy()
-            probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
-            pos = crop_pos + probe_pos_shifts
-        elif source == 'PtyShv':
-            mat_path = params
-            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
-            use_h5py = True if mat_version[0] == 2 else False
-            mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
-            if use_h5py:
-                mat_contents = [arr.transpose(range(arr.ndim)[::-1]) for arr in mat_contents]
-                vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
-            probe_positions = mat_contents[2]
-            probe_shape = mat_contents[1].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp)
-            obj_shape   = mat_contents[0].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
-            pos_offset = np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) - 1 # For Matlab - Python index shift
-            probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
-            pos                  = probe_positions_yx + pos_offset 
-        elif source == 'py4DSTEM':
-            hdf5_path       = params
-            hdf5_contents   = self.cache_contents if self.use_cached_pos else load_hdf5(hdf5_path, 'positions_px')
-            probe_positions = hdf5_contents['positions_px']
-            probe_shape     = hdf5_contents['probe'].shape[-2:] # py4DSTEM probe is (pmode,Ny,Nx)
-            pos             = probe_positions - np.array(probe_shape)/2 
-        elif source == 'simu':
-            vprint(f"Simulating probe positions with dx_spec = {dx_spec}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
-            pos = scan_step_size / dx_spec * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
-            pos = pos - pos.mean(0) # Center scan around origin
-            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
-            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate
-        elif source == 'foldslice_hdf5': # This preprocessing routine is equivalent to `p.src_positions='hdf5_pos';` in `fold_slice` that was used for many APS instruments
-            hdf5_path = params
-            ppY = load_hdf5(hdf5_path, dataset_key='ppY')
-            ppX = load_hdf5(hdf5_path, dataset_key='ppX')
-            pos = np.stack((-ppY, -ppX), axis=1) / dx_spec 
-            pos = np.flipud(pos) # (N,2) in (pos_y_px, pos_x_px)
-            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
-            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift to obj coordinate      
-        else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
-        
-        # Postprocess the scan positions if needed      
-        if self.init_params['exp_params']['scan_flipT'] is not None:
-            flipT_axes = np.nonzero(self.init_params['exp_params']['scan_flipT'])[0]
-            if len(flipT_axes) > 0 :
-                vprint(f"Flipping scan pattern (N_scan_slow, N_scan_fast, 2) with [flipup, fliplr, transpose] = {flipT_axes}", verbose=self.verbose)
-                pos = pos.reshape(N_scan_slow, N_scan_fast, 2)
-                pos = np.flip(pos, flipT_axes)
-                pos = pos.reshape(-1,2)
-            
-        if self.init_params['exp_params']['scan_affine'] is not None:
-            (scale, asymmetry, rotation, shear) = self.init_params['exp_params']['scan_affine']
-            vprint(f"Applying affine transofrmation to scan pattern with (scale, asymmetry, rotation, shear) = {(scale, asymmetry, rotation, shear)}", verbose=self.verbose)
-            pos = pos - pos.mean(0) # Center scan around origin
-            pos = pos @ compose_affine_matrix(scale, asymmetry, rotation, shear)
-            obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape) # Update the obj_shape
-            pos = pos + np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) # Shift back to obj coordinate
-        
-        if scan_rand_std is not None:
-            vprint(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions", verbose=self.verbose)
-            pos = pos + scan_rand_std * np.random.randn(*pos.shape)
-        
-        self.obj_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
-        
-        crop_pos         = np.round(pos)
-        probe_pos_shifts = pos - np.round(pos)
-        crop_pos         = crop_pos.astype('int16')
-        probe_pos_shifts = probe_pos_shifts.astype('float32')
-        
-        # Print summary
-        vprint(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}", verbose=self.verbose)
-        vprint(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}", verbose=self.verbose)
-        vprint(f"crop_pos extent (Ang)                         = {(crop_pos.max(0) - crop_pos.min(0))*dx_spec}", verbose=self.verbose)
-        vprint(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}", verbose=self.verbose)
-        self.init_variables['crop_pos'] = crop_pos
-        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
-        self.init_variables['scan_affine'] = self.init_params['exp_params']['scan_affine']
-        vprint(" ", verbose=self.verbose)
-            
     def init_obj(self):
-        source          = self.init_params['source_params']['obj_source']
-        params          = self.init_params['source_params']['obj_params']
-        dx_spec         = self.init_params['exp_params']['dx_spec']
-        slice_thickness = self.init_params['exp_params']['slice_thickness']
-        vprint(f"### Initializing obj from '{source}' ###", verbose=self.verbose)
+        """
+        Initialize the object by loading and processing it.
+        """
+        vprint("### Initializing object ###", verbose=self.verbose)
+
+        obj = self._load_obj()
+        obj = self._process_obj(obj)
         
-        # Load file
-        if source   == 'custom':
-            obj = params
-        elif source == 'PtyRAD':
-            pt_path = params
-            ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
-            obja, objp = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy(), ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
-            obj = obja * np.exp(1j * objp)
-        elif source == 'PtyShv':
-            mat_path = params
-            mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
-            use_h5py = True if mat_version[0] == 2 else False
-            obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
-            if use_h5py:
-                obj = obj.transpose(range(obj.ndim)[::-1])
-                vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
-            vprint("Expanding PtyShv object dimension", verbose=self.verbose)
-            vprint(f"Input PtyShv obj has original shape {obj.shape}", verbose=self.verbose)
-            if len(obj.shape) == 2: # Single-slice ptycho
-                obj = obj[None,None,:,:]
-            elif len(obj.shape)==3: # MS-ptycho
-                obj = obj[None,].transpose(0,3,1,2)
-        elif source == 'py4DSTEM':
-            hdf5_path = params
-            obj = self.cache_contents['object'] if self.use_cached_obj else load_hdf5(hdf5_path, 'object')
-            vprint("Expanding py4DSTEM object dimension", verbose=self.verbose)
-            vprint(f"Input PtyShv obj has original shape {obj.shape}", verbose=self.verbose)
-            if len(obj.shape) == 2: # Single-slice ptycho
-                obj = obj[None,None,:,:]
-            elif len(obj.shape)==3: # MS-ptycho
-                obj = obj[None,]
-        elif source == 'simu':
-            if params is not None:
-                obj_shape = params
-            else:
-                vprint("obj_shape is not provided, use exp_params, position range, and probe shape for estimated obj_shape (omode, Nz, Ny, Nx)", verbose=self.verbose)
-                omode = self.init_params['exp_params']['omode_max']
-                Nz    = self.init_params['exp_params']['Nlayer']
-                try:
-                    (Ny,Nx) = self.obj_extent
-                except AttributeError:
-                    vprint("Warning: 'obj_extent' field not found. Initializing positions for obj_shape estimation...", verbose=self.verbose)
-                    self.init_pos()
-                    (Ny,Nx) = self.obj_extent
-                obj_shape = (omode, Nz, Ny, Nx)
-            if len(obj_shape) != 4:
-                raise ValueError(f"Input `obj_shape` = {obj_shape}, please provide a total dimension of 4 with (omode, Nz, Ny, Nx) instead!")
-            else:
-                obj = np.exp(1j * 1e-8*np.random.rand(*obj_shape))
-        else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', 'PtyShv', or 'simu'!")
-        
-        # Select omode range and print summary
-        omode_max = self.init_params['exp_params']['omode_max']
+        # Set the maximum omode
+        omode_max = self.init_params['obj_omode_max']
         obj = obj[:omode_max].astype('complex64')
-        vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
-        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*slice_thickness, obj.shape[2]*dx_spec, obj.shape[3]*dx_spec),4)}", verbose=self.verbose)
+        
         self.init_variables['obj'] = obj
+
+        # Print summary
+        dz = self.init_variables['slice_thickness']
+        dx = self.init_variables['dx']
+        vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
+        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*dz, obj.shape[2]*dx, obj.shape[3]*dx),4)}", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
-                    
+
+    def _load_obj(self):
+        """
+        Load the object from the specified source.
+        """
+        
+        # Validate required fields
+        try:
+            obj_source = self.init_params['obj_source']
+            obj_params = self.init_params['obj_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        vprint(f"Loading object from source = '{obj_source}'", verbose=self.verbose)
+
+        if obj_source == 'custom':
+            obj = obj_params
+        elif obj_source == 'PtyRAD':
+            obj = self._load_obj_from_ptyrad(obj_params)
+        elif obj_source == 'PtyShv':
+            obj = self._load_obj_from_ptyshv(obj_params)
+        elif obj_source == 'py4DSTEM':
+            obj = self._load_obj_from_py4dstem(obj_params)
+        elif obj_source == 'simu':
+            obj = self._simulate_obj(obj_params)
+        else:
+            raise KeyError(f"Unsupported object source '{obj_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
+
+        return obj
+    
+    def _load_obj_from_ptyrad(self, params: str):
+        pt_path = params
+        ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
+        obja = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy()
+        objp = ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
+        obj = obja * np.exp(1j * objp)
+        return obj
+    
+    def _load_obj_from_ptyshv(self, params: str):
+        mat_path = params
+        mat_version = get_matfile_version(mat_path)
+        use_h5py = (mat_version[0] == 2)
+        obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
+    
+        if use_h5py:
+            obj = obj.transpose(range(obj.ndim)[::-1])
+            vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
+    
+        vprint(f"Input PtyShv object has original shape {obj.shape}", verbose=self.verbose)
+        vprint("Expanding PtyShv object dimension to (omode, Nz, Ny, Nx)", verbose=self.verbose)
+        
+        if len(obj.shape) == 2:  # Single-slice ptycho
+            obj = obj[None, None, :, :]
+        elif len(obj.shape) == 3:  # Multi-slice ptycho
+            obj = obj[None,].transpose(0, 3, 1, 2)
+    
+        return obj
+    
+    def _load_obj_from_py4dstem(self, params: str):
+        hdf5_path = params
+        obj = self.cache_contents['object'] if self.use_cached_obj else load_hdf5(hdf5_path, 'object')
+    
+        vprint(f"Input py4DSTEM object has original shape {obj.shape}", verbose=self.verbose)
+        vprint("Expanding py4DSTEM object dimension to (omode, Nz, Ny, Nx)", verbose=self.verbose)
+
+        if len(obj.shape) == 2:  # Single-slice ptycho
+            obj = obj[None, None, :, :]
+        elif len(obj.shape) == 3:  # Multi-slice ptycho
+            obj = obj[None,]
+    
+        return obj
+    
+    def _simulate_obj(self, simu_params):
+        
+        if simu_params is not None:
+            vprint("Using user-specified parameters in 'init_params['obj_params']' for initial object simulation.", verbose=self.verbose)
+            obj_shape = simu_params
+            if len(obj_shape) != 4:
+                raise ValueError(f"Input `obj_shape` = {obj_shape}, please provide a total dimension of 4 with (omode, Nz, Ny, Nx).")
+            
+        else:
+            vprint("Using experimental parameters specified by 'init_params' for initial object simulation.", verbose=self.verbose)
+            omode = self.init_params['obj_omode_max']
+            Nz = self.init_params['obj_Nlayer']
+            
+            try:
+                Ny, Nx = self.init_variables['obj_lateral_extent']
+            except KeyError:
+                vprint("Warning: 'obj_lateral_extent' not found. Initializing positions first for obj_shape estimation...", verbose=self.verbose)
+                vprint(" ", verbose=self.verbose)
+                self.init_pos()
+                Ny, Nx = self.init_variables['obj_lateral_extent']
+                
+        obj_shape = (omode, Nz, Ny, Nx)
+        obj = np.exp(1j * 1e-8 * np.random.rand(*obj_shape))
+        return obj
+    
+    def _process_obj(self, obj):
+        
+        # TODO: Add resampling, padding, for multislice obj
+        # Note that these methods would need to update `init_params`` and then call `init_params_dict`` for the `init_variables``
+
+        return obj
+
     def init_omode_occu(self):
-        occu_type = self.init_params['exp_params']['omode_init_occu']['occu_type']
-        init_occu = self.init_params['exp_params']['omode_init_occu']['init_occu']
+        """
+        Initialize the mixed-state object mode occupancy so each mode has a fixed weight
+        """
+        # Note: Initially I tried to make it optimizable, but then I noticed the AD algorithm
+        # tended to entirely shut off the mode by reducing the omode_occu rather than improving the mode
+        # So I decided to keep it as fixed values for now
+        
+        omode_occu_params = self.init_params.get('obj_omode_init_occu') or {}
+        occu_type = omode_occu_params.get('occu_type', 'uniform')
+        init_occu = omode_occu_params.get('init_occu')
         vprint(f"### Initializing omode_occu from '{occu_type}' ###", verbose=self.verbose)
 
         if occu_type   == 'custom':
-            omode_occu = init_occu
+            omode_occu = np.array(init_occu)
         elif occu_type == 'uniform':
-            omode = self.init_params['exp_params']['omode_max']
+            omode = self.init_params['obj_omode_max']
             omode_occu = np.ones(omode)/omode
         else:
             raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
@@ -1255,44 +1249,60 @@ class Initializer:
         vprint(" ", verbose=self.verbose)
         
     def init_H(self):
+        """
+        Initialize the near-field Fresnel propagator for multislice ptychography
+        """
+        
         vprint("### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
-        probe_shape = np.array([self.init_params['exp_params']['Npix']]*2) 
-        slice_thickness = self.init_params['exp_params']['slice_thickness']
-        dx_spec = self.init_params['exp_params']['dx_spec']
+        probe_shape = self.init_variables['probe_shape']
+        dx = self.init_variables['dx']
+        slice_thickness = self.init_variables['slice_thickness']
+        probe_illum_type = self.init_variables['probe_illum_type']
         
-        if self.init_params['exp_params']['probe_illum_type'] == 'electron':
-            lambd = get_EM_constants(self.init_params['exp_params']['kv'], 'wavelength')
-            vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec:.4f} Ang, slice_thickness = {slice_thickness:.4f} Ang, lambd = {lambd:.4f} Ang", verbose=self.verbose)
-        elif self.init_params['exp_params']['probe_illum_type'] == 'xray':
-            lambd = 1.23984193e-9 / (self.init_params['exp_params']['energy'])
-            vprint(f"Calculating H with probe_shape = {probe_shape}, dx_spec = {dx_spec} m, slice_thickness = {slice_thickness} m, lambd = {lambd} m", verbose=self.verbose)
+        if probe_illum_type == 'electron':
+            lambd = get_EM_constants(self.init_params['probe_kv'], 'wavelength')
+            unit_str = 'Ang'
+        elif probe_illum_type == 'xray':
+            lambd = 1.23984193e-9 / (self.init_params['probe_energy'])
+            unit_str = 'm'
         else:
-            raise KeyError(f"exp_params['probe_illum_type'] = {self.init_params['exp_params']['probe_illum_type']} not implemented yet, please use either 'electron' or 'xray'!")
+            raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
         
-        H = near_field_evolution(probe_shape, dx_spec, slice_thickness, lambd)
+        vprint(f"Calculating H with probe_shape = {probe_shape} px, dx = {dx:.4f} {unit_str}, slice_thickness = {slice_thickness:.4f} {unit_str}, lambd = {lambd:.4f} {unit_str}", verbose=self.verbose)
+        
+        H = near_field_evolution(probe_shape, dx, slice_thickness, lambd)
         H = H.astype('complex64')
         vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
         self.init_variables['lambd'] = lambd
-        self.init_variables['slice_thickness'] = slice_thickness
         self.init_variables['H'] = H
         vprint(" ", verbose=self.verbose)
     
     def init_obj_tilts(self):
-        source     = self.init_params['source_params']['tilt_source']
-        params     = self.init_params['source_params']['tilt_params']
-        vprint(f"### Initializing obj tilts from = '{source}' ###", verbose=self.verbose)
+        """
+        Initialize the object crystal tilts. Tilts can be global tilt (1,2) or pos-dependent tilt (N,2)
+        """
+        try:
+            tilt_source     = self.init_params['tilt_source']
+            tilt_params     = self.init_params['tilt_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        vprint(f"### Initializing obj tilts from = '{tilt_source}' ###", verbose=self.verbose)
         
-        if source == 'custom':
-            obj_tilts = params
-        elif source == 'PtyRAD':
-            pt_path = params
+        if tilt_source == 'custom':
+            obj_tilts = tilt_params # (1,2) or (N,2) array in unit of mrad
+
+        elif tilt_source == 'PtyRAD':
+            pt_path = tilt_params
             ckpt = self.cache_contents if pt_path == self.cache_path else load_pt(pt_path)            
             obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
             vprint(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad", verbose=self.verbose)
-        elif source == 'simu':
-            N_scans    = self.init_params['exp_params']['N_scans']
-            tilt_type  = params.get('tilt_type')
-            init_tilts = params.get('init_tilts') 
+
+        elif tilt_source == 'simu':
+            N_scans    = self.init_variables['N_scans']
+            tilt_type  = tilt_params.get('tilt_type') or 'all' # Use the specified tilt_type when specified, fall back to 'all' for unspecified or None
+            init_tilts = tilt_params.get('init_tilts') or [[0,0]] # (1,2) array in unit of mrad
+
             if tilt_type == 'each':
                 obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
                 vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
@@ -1301,8 +1311,9 @@ class Initializer:
                 vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
             else:
                 raise KeyError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
+
         else:
-            raise KeyError(f"File type {source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
+            raise KeyError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
         
         # Print summary
         self.init_variables['obj_tilts'] = obj_tilts
@@ -1317,13 +1328,13 @@ class Initializer:
         
         vprint("### Checking consistency between input params with the initialized variables ###", verbose=self.verbose)
         
-        # Check the consistency of input params with the initialized variables
-        exp_params  = self.init_params['exp_params']
-        Npix        = exp_params['Npix']
-        Nlayer      = exp_params['Nlayer']
-        N_scans     = exp_params['N_scans']
-        N_scan_slow = exp_params['N_scan_slow']
-        N_scan_fast = exp_params['N_scan_fast']
+        # Check the consistency of init params with the initialized variables
+        init_params  = self.init_params
+        Npix        = init_params['meas_Npix']
+        Nlayer      = init_params['obj_Nlayer']
+        N_scans     = init_params['pos_N_scans']
+        N_scan_slow = init_params['pos_N_scan_slow']
+        N_scan_fast = init_params['pos_N_scan_fast']
         
         # Initialized variables
         meas             = self.init_variables['measurements']
@@ -1334,11 +1345,11 @@ class Initializer:
         omode_occu       = self.init_variables['omode_occu'] 
         H                = self.init_variables['H']
         obj_tilts        = self.init_variables['obj_tilts']
-        if self.init_variables.get('on_the_fly_meas_padded', None) is not None:
+        if self.init_variables.get('on_the_fly_meas_padded') is not None:
             target_Npix  = self.init_variables['on_the_fly_meas_padded'].shape[-1]
         else:
             target_Npix  = meas.shape[-1]
-        if self.init_variables.get('on_the_fly_meas_scale_factors', None) is not None:
+        if self.init_variables.get('on_the_fly_meas_scale_factors') is not None:
             scale_factors = self.init_variables['on_the_fly_meas_scale_factors']
         else:
             scale_factors = [1,1]   
@@ -1354,6 +1365,7 @@ class Initializer:
             vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding and then resampling", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
+
         # Check scan pattern
         if N_scans == len(meas) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
             vprint(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'", verbose=self.verbose)
