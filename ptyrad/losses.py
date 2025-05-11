@@ -158,6 +158,7 @@ class CombinedLoss(torch.nn.Module):
         total_loss = sum(losses)
         return total_loss, losses
     
+# This constrast function is currently only used for Hypertune objective
 def get_objp_contrast(model, indices):
     """ Calculate the contrast from objp zsum imgage for Hypertune purpose"""
     with torch.no_grad():

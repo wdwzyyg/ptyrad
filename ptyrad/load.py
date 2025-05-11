@@ -6,6 +6,9 @@ import scipy.io as sio
 
 from ptyrad.utils import vprint
 
+
+###### These are data loading functions ######
+
 def load_raw(file_path, shape, dtype=np.float32, offset=0, gap=1024):
     # shape = (N, height, width)
     # np.fromfile with custom dtype is faster than the np.read and np.frombuffer
@@ -38,52 +41,6 @@ def load_raw(file_path, shape, dtype=np.float32, offset=0, gap=1024):
     vprint("Imported .raw data type =", data.dtype)
     return data
 
-def load_hdf5(file_path, dataset_key="ds"):
-    """
-    Load data from an HDF5 file.
-    
-    Parameters:
-    
-    file_path (str): The full path to the HDF5 data file.
-    dataset_key (str, optional): The key of the dataset to load from the HDF5 file.
-    
-    Returns:
-    data (numpy.ndarray): The loaded data.
-    
-    Raises:
-    FileNotFoundError: If the specified file does not exist.
-    
-    Example:
-    file_path = 'data.h5'
-    data, data_source = load_hdf5(file_path, dataset_key='ds')
-    """
-    # Check if the file exists
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
-
-    with h5py.File(file_path, "r") as hf:
-        if dataset_key is None:
-            vprint("Imported entire .hdf5 as a dict:", file_path)
-            f = dict()
-            for key in hf.keys():
-                data = np.array(hf[key])
-                if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                    vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
-                    data = data.view('complex128')
-                f[key] = data
-            vprint("Success! Loaded .hdf5 file path =", file_path)
-            return f
-            
-        else:
-            data = np.array(hf[dataset_key])
-            if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
-                data = data.view('complex128')
-            vprint("Success! Loaded .hdf5 file path =", file_path)
-            vprint("Imported .hdf5 data shape =", data.shape)
-            vprint("Imported .hdf5 data type =", data.dtype)
-            return data
-
 def load_tif(file_path):
     from tifffile import imread
 
@@ -107,112 +64,8 @@ def load_npy(file_path):
     vprint("Imported .npy data shape =", data.shape)
     return data
 
-def load_pt(file_path, weights_only=False):
-    import torch
-
-    # Check if the file exists
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
-
-    data = torch.load(file_path, weights_only=weights_only) 
-    # The default behavior of torch.load is `weights_only=True` since PyTorch 2.6 (2025.01.29)
-    # https://dev-discuss.pytorch.org/t/bc-breaking-change-torch-load-is-being-flipped-to-use-weights-only-true-by-default-in-the-nightlies-after-137602/2573
-    # Because PtyRAD .pt isn't a true PyTorch model, so `weights_only=True` would break this critical loading function.
-    # However, `weights_only=False` has potential risk if the .pt file contains malicious code, so please only use this `load_pt` for PtyRAD-generated .pt file.
-    
-    vprint("Success! Loaded .pt file path =", file_path)
-    return data
-
-def load_params(file_path):
-    
-    # Check if the file exists
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
-    
-    vprint("### Loading params file ###")
-    param_path, param_type = os.path.splitext(file_path)
-    if param_type in (".yml", ".yaml"):
-        params_dict = load_yml_params(file_path)
-    elif param_type == ".toml":
-        params_dict = load_toml_params(file_path)
-    elif param_type == ".json":
-        params_dict = load_json_params(file_path)
-    elif param_type == ".py":
-        params_dict =  load_py_params(param_path)
-    else:
-        raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
-    
-    # Add the file path to the params_dict while we save the params file to output folder
-    params_dict['params_path'] = file_path
-    
-    vprint(" ")
-    return params_dict
-
-def load_json_params(file_path):
-    import json
-    
-    with open(file_path, "r", encoding='utf-8') as file:
-        params_dict = json.load(file)
-    vprint("Success! Loaded .json file path =", file_path)
-    return params_dict
-
-def load_toml_params(file_path):
-    """
-    Load parameters from a TOML file.
-    
-    Parameters:
-    file_path (str): The path to the TOML file to be loaded.
-    
-    Returns:
-    dict: A dictionary containing the parameters loaded from the TOML file.
-    
-    Raises:
-    FileNotFoundError: If the specified file does not exist.
-    ImportError: If the tomli package is not installed for Python < 3.11.
-    """
-
-    try:
-        # Read the file with utf-8
-        # Note that "A TOML file must be a valid UTF-8 encoded Unicode document." per documentation.
-        # Therefore, the toml file is read in binary mode ("rb") and the encoding is handled internally.
-        # But I've observed some encoding mismatch when people run the script with terminal that has different default encoding.
-        # Therefore, it is safer to read it with utf-8 encoding first and pass it to tomllib.
-        with open(file_path, "r", encoding='utf-8') as file:
-            content = file.read()
-        
-        try:
-            # For Python 3.11+
-            import tomllib
-            params_dict = tomllib.loads(content)
-        except ImportError:
-            # For Python < 3.11
-            import tomli # type: ignore
-            params_dict = tomli.loads(content)
-    except ImportError:
-        raise ImportError("TOML support requires 'tomli' package for Python < 3.11 or built-in 'tomllib' for Python 3.11+. ")
-    
-    vprint("Success! Loaded .toml file path =", file_path)
-    return params_dict
-
-def load_yml_params(file_path):
-    import yaml
-
-    with open(file_path, "r", encoding='utf-8') as file:
-        params_dict = yaml.safe_load(file)
-    vprint("Success! Loaded .yml file path =", file_path)
-    return params_dict
-
-def load_py_params(file_path):
-    import importlib
-
-    params_module = importlib.import_module(file_path)
-    params_dict = {
-        name: getattr(params_module, name)
-        for name in dir(params_module)
-        if not name.startswith("__")
-    }
-    vprint("Success! Loaded .py file path =", file_path)
-    return params_dict
+###### These are reconstruction file loading functions ######
+# Note that .mat and .hdf5 are also used for normal data
 
 def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplify_cells=True):
     """
@@ -320,3 +173,158 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             result_list.append(data)
     vprint("Success! Loaded .mat file path =", file_path)
     return result_list
+
+def load_hdf5(file_path, dataset_key="ds"):
+    """
+    Load data from an HDF5 file.
+    
+    Parameters:
+    
+    file_path (str): The full path to the HDF5 data file.
+    dataset_key (str, optional): The key of the dataset to load from the HDF5 file.
+    
+    Returns:
+    data (numpy.ndarray): The loaded data.
+    
+    Raises:
+    FileNotFoundError: If the specified file does not exist.
+    
+    Example:
+    file_path = 'data.h5'
+    data, data_source = load_hdf5(file_path, dataset_key='ds')
+    """
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+
+    with h5py.File(file_path, "r") as hf:
+        if dataset_key is None:
+            vprint("Imported entire .hdf5 as a dict:", file_path)
+            f = dict()
+            for key in hf.keys():
+                data = np.array(hf[key])
+                if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+                    vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                    data = data.view('complex128')
+                f[key] = data
+            vprint("Success! Loaded .hdf5 file path =", file_path)
+            return f
+            
+        else:
+            data = np.array(hf[dataset_key])
+            if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+                vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
+                data = data.view('complex128')
+            vprint("Success! Loaded .hdf5 file path =", file_path)
+            vprint("Imported .hdf5 data shape =", data.shape)
+            vprint("Imported .hdf5 data type =", data.dtype)
+            return data
+
+def load_pt(file_path, weights_only=False):
+    import torch
+
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+
+    data = torch.load(file_path, weights_only=weights_only) 
+    # The default behavior of torch.load is `weights_only=True` since PyTorch 2.6 (2025.01.29)
+    # https://dev-discuss.pytorch.org/t/bc-breaking-change-torch-load-is-being-flipped-to-use-weights-only-true-by-default-in-the-nightlies-after-137602/2573
+    # Because PtyRAD .pt isn't a true PyTorch model, so `weights_only=True` would break this critical loading function.
+    # However, `weights_only=False` has potential risk if the .pt file contains malicious code, so please only use this `load_pt` for PtyRAD-generated .pt file.
+    
+    vprint("Success! Loaded .pt file path =", file_path)
+    return data
+
+###### These are params loading functions ######
+
+def load_params(file_path):
+    
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
+    vprint("### Loading params file ###")
+    param_path, param_type = os.path.splitext(file_path)
+    if param_type in (".yml", ".yaml"):
+        params_dict = load_yml_params(file_path)
+    elif param_type == ".toml":
+        params_dict = load_toml_params(file_path)
+    elif param_type == ".json":
+        params_dict = load_json_params(file_path)
+    elif param_type == ".py":
+        params_dict =  load_py_params(param_path)
+    else:
+        raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
+    
+    # Add the file path to the params_dict while we save the params file to output folder
+    params_dict['params_path'] = file_path
+    
+    vprint(" ")
+    return params_dict
+
+def load_json_params(file_path):
+    import json
+    
+    with open(file_path, "r", encoding='utf-8') as file:
+        params_dict = json.load(file)
+    vprint("Success! Loaded .json file path =", file_path)
+    return params_dict
+
+def load_toml_params(file_path):
+    """
+    Load parameters from a TOML file.
+    
+    Parameters:
+    file_path (str): The path to the TOML file to be loaded.
+    
+    Returns:
+    dict: A dictionary containing the parameters loaded from the TOML file.
+    
+    Raises:
+    FileNotFoundError: If the specified file does not exist.
+    ImportError: If the tomli package is not installed for Python < 3.11.
+    """
+
+    try:
+        # Read the file with utf-8
+        # Note that "A TOML file must be a valid UTF-8 encoded Unicode document." per documentation.
+        # Therefore, the toml file is read in binary mode ("rb") and the encoding is handled internally.
+        # But I've observed some encoding mismatch when people run the script with terminal that has different default encoding.
+        # Therefore, it is safer to read it with utf-8 encoding first and pass it to tomllib.
+        with open(file_path, "r", encoding='utf-8') as file:
+            content = file.read()
+        
+        try:
+            # For Python 3.11+
+            import tomllib
+            params_dict = tomllib.loads(content)
+        except ImportError:
+            # For Python < 3.11
+            import tomli # type: ignore
+            params_dict = tomli.loads(content)
+    except ImportError:
+        raise ImportError("TOML support requires 'tomli' package for Python < 3.11 or built-in 'tomllib' for Python 3.11+. ")
+    
+    vprint("Success! Loaded .toml file path =", file_path)
+    return params_dict
+
+def load_yml_params(file_path):
+    import yaml
+
+    with open(file_path, "r", encoding='utf-8') as file:
+        params_dict = yaml.safe_load(file)
+    vprint("Success! Loaded .yml file path =", file_path)
+    return params_dict
+
+def load_py_params(file_path):
+    import importlib
+
+    params_module = importlib.import_module(file_path)
+    params_dict = {
+        name: getattr(params_module, name)
+        for name in dir(params_module)
+        if not name.startswith("__")
+    }
+    vprint("Success! Loaded .py file path =", file_path)
+    return params_dict

@@ -272,6 +272,53 @@ class CombinedConstraint(torch.nn.Module):
             # Local tilt constraint
             self.apply_tilt_smooth  (model, niter)
 
+###### Filter and helper functions for constraints ######
+def sort_by_mode_int(modes):
+    modes_int =  modes.abs().pow(2).sum(tuple(range(1,modes.ndim))) # Sum every but 1st dimension
+    _, indices = torch.sort(modes_int, descending=True)
+    modes = modes[indices]
+    return modes
+
+def orthogonalize_modes_vec(modes, sort = False):
+    ''' orthogonalize the modes using SVD'''
+    # Input:
+    #   modes: input function with multiple modes
+    # Output:
+    #   ortho_modes: 
+    # Note:
+    #   This function is a highly vectorized PyTorch implementation of `ptycho\+core\probe_modes_ortho.m` from PtychoShelves
+    #   It's numerically equivalent with the following for-loop version but is ~ 10x faster on small complex64 tensors (10,164,164) 
+    #   Most indexings arr converted from Matlab (start from 1) to Python (start from 0)
+    #   The expected shape of `modes` input is modified into (pmode, Ny, Nx) to be consistent with ptyrad
+    #   If you check the orthoganality of each mode, make sure to change the input into complex128 or to modify the default tolerance of torch.allclose.
+    #   Lastly, this operation could probably be so much faster with some proper vectorization
+    
+    # # Execute iter-wise constraints
+    # if model.opt_probe.size(0) >1 and model.optimizable_tensors['probe'].requires_grad:
+    #     with torch.no_grad():
+    #         print("Orthogonalizing probe modes")
+    #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
+
+    #input_shape = modes.shape # input_shape could be either (N,Y,X) or (N,Z,Y,X)
+    
+    orig_modes_dtype = modes.dtype
+    if orig_modes_dtype != torch.complex64:
+        modes = torch.complex(modes, torch.zeros_like(modes))
+    input_shape = modes.shape
+    modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
+    A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
+
+    _, evecs = torch.linalg.eig(A)
+   
+    # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
+    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(input_shape)
+
+    # sort modes by their contribution
+    if sort:
+        ortho_modes = sort_by_mode_int(ortho_modes)
+        
+    return ortho_modes.to(orig_modes_dtype)
+
 def kr_filter(obj, radius, width):
     ''' Apply kr_filter using the 2D sigmoid filter '''
     
@@ -339,49 +386,3 @@ def complex_ratio_constraint(model, alpha1, alpha2):
     # Compute updated phase, note the negative sign for the second term!
     objpc = (1 - alpha2) * objp - alpha2 / (Cbar + 1e-8) * log_obja # Avoid division by zero
     return objac, objpc, Cbar
-
-def sort_by_mode_int(modes):
-    modes_int =  modes.abs().pow(2).sum(tuple(range(1,modes.ndim))) # Sum every but 1st dimension
-    _, indices = torch.sort(modes_int, descending=True)
-    modes = modes[indices]
-    return modes
-
-def orthogonalize_modes_vec(modes, sort = False):
-    ''' orthogonalize the modes using SVD'''
-    # Input:
-    #   modes: input function with multiple modes
-    # Output:
-    #   ortho_modes: 
-    # Note:
-    #   This function is a highly vectorized PyTorch implementation of `ptycho\+core\probe_modes_ortho.m` from PtychoShelves
-    #   It's numerically equivalent with the following for-loop version but is ~ 10x faster on small complex64 tensors (10,164,164) 
-    #   Most indexings arr converted from Matlab (start from 1) to Python (start from 0)
-    #   The expected shape of `modes` input is modified into (pmode, Ny, Nx) to be consistent with ptyrad
-    #   If you check the orthoganality of each mode, make sure to change the input into complex128 or to modify the default tolerance of torch.allclose.
-    #   Lastly, this operation could probably be so much faster with some proper vectorization
-    
-    # # Execute iter-wise constraints
-    # if model.opt_probe.size(0) >1 and model.optimizable_tensors['probe'].requires_grad:
-    #     with torch.no_grad():
-    #         print("Orthogonalizing probe modes")
-    #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
-
-    #input_shape = modes.shape # input_shape could be either (N,Y,X) or (N,Z,Y,X)
-    
-    orig_modes_dtype = modes.dtype
-    if orig_modes_dtype != torch.complex64:
-        modes = torch.complex(modes, torch.zeros_like(modes))
-    input_shape = modes.shape
-    modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
-    A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
-
-    _, evecs = torch.linalg.eig(A)
-   
-    # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
-    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(input_shape)
-
-    # sort modes by their contribution
-    if sort:
-        ortho_modes = sort_by_mode_int(ortho_modes)
-        
-    return ortho_modes.to(orig_modes_dtype)

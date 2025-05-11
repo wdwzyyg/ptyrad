@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from tifffile import imwrite
 
-from ptyrad.utils import get_date, normalize_from_zero_to_one, vprint
+from ptyrad.utils import get_date, normalize_by_bit_depth, vprint
 
 
 def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses):
@@ -295,22 +295,6 @@ def copy_params_to_dir(params_path, output_dir, params=None, verbose=True):
         # If neither a file nor params are provided, skip with a warning
         vprint(" ")
         vprint("### Warning: No params file found and no params dictionary provided. Skipping. ###", verbose=verbose)
-            
-def normalize_by_bit_depth(arr, bit_depth):
-
-    if bit_depth == '8':
-        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(arr))
-    elif bit_depth == '16':
-        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(arr))
-    elif bit_depth == '32':
-        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(arr))
-    elif bit_depth == 'raw':
-        norm_arr_in_bit_depth = np.float32(arr)
-    else:
-        print(f'Unsuported bit_depth :{bit_depth} was passed into `result_modes`, `raw` is used instead')
-        norm_arr_in_bit_depth = np.float32(arr)
-    
-    return norm_arr_in_bit_depth
 
 def save_results(output_path, model, params, optimizer, niter, indices, batch_losses, collate_str=''):
     

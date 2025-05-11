@@ -317,10 +317,28 @@ def center_crop(image, crop_height, crop_width, offset = (0,0)):
 
     return image[..., start_y:start_y + crop_height, start_x:start_x + crop_width]
 
+# These are called during save.save_results()
 def normalize_from_zero_to_one(arr):
     norm_arr = (arr - arr.min())/(arr.max()-arr.min())
     return norm_arr
 
+def normalize_by_bit_depth(arr, bit_depth):
+
+    if bit_depth == '8':
+        norm_arr_in_bit_depth = np.uint8(255*normalize_from_zero_to_one(arr))
+    elif bit_depth == '16':
+        norm_arr_in_bit_depth = np.uint16(65535*normalize_from_zero_to_one(arr))
+    elif bit_depth == '32':
+        norm_arr_in_bit_depth = np.float32(normalize_from_zero_to_one(arr))
+    elif bit_depth == 'raw':
+        norm_arr_in_bit_depth = np.float32(arr)
+    else:
+        print(f'Unsuported bit_depth :{bit_depth} was passed into `result_modes`, `raw` is used instead')
+        norm_arr_in_bit_depth = np.float32(arr)
+    
+    return norm_arr_in_bit_depth
+
+# These are called inside constraints.py / CombinedConstraint > apply_obj_zblur
 def get_gaussian1d(size, std, norm=False):
     from scipy.signal.windows import gaussian as gaussian1d
 
@@ -343,7 +361,7 @@ def gaussian_blur_1d(tensor, kernel_size=5, sigma=0.5):
     tensor_blur = gaussian1d(tensor.reshape(-1, 1, tensor.size(-1))).view(*tensor.shape)
     return tensor_blur
 
-# These are used for meas_padd
+# These are used for meas_pad
 def create_one_hot_mask(image, percentile):
     threshold = np.percentile(image, percentile)
     mask = image <= threshold

@@ -24,7 +24,7 @@ from .common import (  # noqa: F401
     set_gpu_device,
     time_sync,
     vprint,
-    vprint_nested_dict
+    vprint_nested_dict,
 )
 from .image_proc import (  # noqa: F401
     create_one_hot_mask,
@@ -33,6 +33,7 @@ from .image_proc import (  # noqa: F401
     get_blob_size,
     get_rbf,
     imshift_batch,
+    normalize_by_bit_depth,
     normalize_from_zero_to_one,
 )
 from .math_ops import (  # noqa: F401

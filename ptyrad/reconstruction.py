@@ -234,7 +234,8 @@ class PtyRADSolver(object):
         vprint("Best hypertune params:")
         for key, value in study.best_params.items():
             vprint(f"\t{key}: {value}")
-        
+    
+    # Wrapper function to run either "reconstruction" or "hypertune" modes    
     def run(self):
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
@@ -260,6 +261,9 @@ class PtyRADSolver(object):
             dist.destroy_process_group()
         
 class IndicesDataset(Dataset):
+    """
+    The Dataset class used specifically for the multiGPU mode for DDP
+    """
     def __init__(self, indices):
         self.indices = indices
 
@@ -269,6 +273,9 @@ class IndicesDataset(Dataset):
     def __getitem__(self, idx):
         return self.indices[idx]
 
+###### Reconstruction workflow related functions ######
+# These are called within PtyRADSolver, and the detailed walkthrough notebook
+ 
 def create_optimizer(optimizer_params, optimizable_params, verbose=True):
     # Extract the optimizer name and configs
     optimizer_name = optimizer_params['name']
@@ -303,6 +310,77 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
             raise KeyError(f"Missing 'optim_state_dict' in loaded checkpoint from {pt_path}")
     vprint(" ", verbose=verbose)
     return optimizer
+
+def prepare_recon(model, init, params):
+    """
+    Prepares the indices, batches, and output path for ptychographic reconstruction.
+
+    This function parses the necessary parameters and generates the indices for scanning, 
+    creates batches based on the probe positions, and sets up the output directory for 
+    saving results. It also plots and saves a figure illustrating the grouping of probe 
+    positions.
+
+    Args:
+        model (PtychoAD): The ptychographic model containing the object, probe, 
+            probe positions, and other relevant parameters.
+        init (Initializer): The initializer object containing the initialized variables 
+            needed for reconstruction.
+        params (dict): A dictionary containing various parameters needed for the 
+            reconstruction process, including experimental parameters, loss parameters, 
+            constraint parameters, and reconstruction settings.
+
+    Returns:
+        tuple: A tuple containing the following:
+            - indices (numpy.ndarray): Array of indices for scanning positions.
+            - batches (list of numpy.ndarray): List of batches where each batch contains 
+              indices grouped according to the selected grouping mode.
+            - output_path (str): The path to the directory where reconstruction results 
+              and figures will be saved.
+    """
+    verbose = not params['recon_params']['if_quiet']
+    vprint("### Generating indices, batches, and output_path ###", verbose=verbose)
+    # Parse the variables
+    init_variables = init.init_variables
+    init_params = init.init_params # These could be modified by Optuna, hence can be different from params['init_params]
+    params_path = params.get('params_path')
+    loss_params = params.get('loss_params')
+    constraint_params = params.get('constraint_params')
+    recon_params = params.get('recon_params')
+    INDICES_MODE = recon_params['INDICES_MODE'].get("mode")
+    subscan_slow = recon_params['INDICES_MODE'].get("subscan_slow")
+    subscan_fast = recon_params['INDICES_MODE'].get("subscan_fast")
+    GROUP_MODE = recon_params['GROUP_MODE']
+    SAVE_ITERS = recon_params['SAVE_ITERS']
+    batch_size = recon_params['BATCH_SIZE'].get("size")
+    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation")
+    output_dir = recon_params['output_dir']
+    recon_dir_affixes = recon_params['recon_dir_affixes']
+    copy_params = recon_params['copy_params']
+    if_hypertune = params.get('hypertune_params', {}).get('if_hypertune', False)
+    
+    # Generate the indices, batches, and fig_grouping
+    pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
+    probe_int    = model.get_complex_probe_view().abs().pow(2).sum(0).detach().cpu().numpy()
+    dx           = init_variables['dx']
+    d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
+    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
+    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=verbose)
+    fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
+    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=verbose)
+
+    # Create the output path, save fig_grouping, and copy params file
+    if SAVE_ITERS is not None:
+        output_path = make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
+        fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
+        if copy_params and not if_hypertune:
+            # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
+            copy_params_to_dir(params_path, output_path, params, verbose=verbose)
+    else:
+        output_path = None
+    
+    plt.close(fig_grouping)
+    vprint(" ", verbose=verbose)
+    return indices, batches, output_path
 
 def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fast=None, mode='full', verbose=True):
     
@@ -451,77 +529,6 @@ def make_batches(indices, pos, batch_size, mode='random', verbose=True):
             # Final process to make batches a list of arrays
             sparse_batches = [np.array(batch) for batch in sparse_batches]
             return sparse_batches
-
-def prepare_recon(model, init, params):
-    """
-    Prepares the indices, batches, and output path for ptychographic reconstruction.
-
-    This function parses the necessary parameters and generates the indices for scanning, 
-    creates batches based on the probe positions, and sets up the output directory for 
-    saving results. It also plots and saves a figure illustrating the grouping of probe 
-    positions.
-
-    Args:
-        model (PtychoAD): The ptychographic model containing the object, probe, 
-            probe positions, and other relevant parameters.
-        init (Initializer): The initializer object containing the initialized variables 
-            needed for reconstruction.
-        params (dict): A dictionary containing various parameters needed for the 
-            reconstruction process, including experimental parameters, loss parameters, 
-            constraint parameters, and reconstruction settings.
-
-    Returns:
-        tuple: A tuple containing the following:
-            - indices (numpy.ndarray): Array of indices for scanning positions.
-            - batches (list of numpy.ndarray): List of batches where each batch contains 
-              indices grouped according to the selected grouping mode.
-            - output_path (str): The path to the directory where reconstruction results 
-              and figures will be saved.
-    """
-    verbose = not params['recon_params']['if_quiet']
-    vprint("### Generating indices, batches, and output_path ###", verbose=verbose)
-    # Parse the variables
-    init_variables = init.init_variables
-    init_params = init.init_params # These could be modified by Optuna, hence can be different from params['init_params]
-    params_path = params.get('params_path')
-    loss_params = params.get('loss_params')
-    constraint_params = params.get('constraint_params')
-    recon_params = params.get('recon_params')
-    INDICES_MODE = recon_params['INDICES_MODE'].get("mode")
-    subscan_slow = recon_params['INDICES_MODE'].get("subscan_slow")
-    subscan_fast = recon_params['INDICES_MODE'].get("subscan_fast")
-    GROUP_MODE = recon_params['GROUP_MODE']
-    SAVE_ITERS = recon_params['SAVE_ITERS']
-    batch_size = recon_params['BATCH_SIZE'].get("size")
-    grad_accumulation = recon_params['BATCH_SIZE'].get("grad_accumulation")
-    output_dir = recon_params['output_dir']
-    recon_dir_affixes = recon_params['recon_dir_affixes']
-    copy_params = recon_params['copy_params']
-    if_hypertune = params.get('hypertune_params', {}).get('if_hypertune', False)
-    
-    # Generate the indices, batches, and fig_grouping
-    pos          = (model.crop_pos + model.opt_probe_pos_shifts).detach().cpu().numpy()
-    probe_int    = model.get_complex_probe_view().abs().pow(2).sum(0).detach().cpu().numpy()
-    dx           = init_variables['dx']
-    d_out        = get_blob_size(dx, probe_int, output='d90', verbose=verbose) # d_out unit is in Ang
-    indices      = select_scan_indices(init_variables['N_scan_slow'], init_variables['N_scan_fast'], subscan_slow=subscan_slow, subscan_fast=subscan_fast, mode=INDICES_MODE, verbose=verbose)
-    batches      = make_batches(indices, pos, batch_size, mode=GROUP_MODE, verbose=verbose)
-    fig_grouping = plot_pos_grouping(pos, batches, circle_diameter=d_out/dx, diameter_type='90%', dot_scale=1, show_fig=False, pass_fig=True)
-    vprint(f"The effective batch size (i.e., how many probe positions are simultaneously used for 1 update of ptychographic parameters) is batch_size * grad_accumulation = {batch_size} * {grad_accumulation} = {batch_size*grad_accumulation}", verbose=verbose)
-
-    # Create the output path, save fig_grouping, and copy params file
-    if SAVE_ITERS is not None:
-        output_path = make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
-        fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
-        if copy_params and not if_hypertune:
-            # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
-            copy_params_to_dir(params_path, output_path, params, verbose=verbose)
-    else:
-        output_path = None
-    
-    plt.close(fig_grouping)
-    vprint(" ", verbose=verbose)
-    return indices, batches, output_path
 
 def recon_loop(model, init, params, optimizer, loss_fn, constraint_fn, indices, batches, output_path, acc=None):
     """
@@ -761,16 +768,8 @@ def loss_logger(batch_losses, niter, iter_t, verbose=True):
     loss_iter = sum(avg_losses.values())
     return loss_iter
 
-def get_optuna_suggest(trial, suggest, name, kwargs):
-    
-    if suggest == 'cat':
-        return trial.suggest_categorical(name, **kwargs)
-    elif suggest == 'int':
-        return trial.suggest_int(name, **kwargs)
-    elif suggest == 'float':
-        return trial.suggest_float(name, **kwargs)        
-    else:
-        raise (f"Optuna trail.suggest method '{suggest}' is not supported.")
+###### Hypertune / Optuna related functions ######
+# These are called inside PtyRADSolver.hypertune
 
 def create_optuna_sampler(sampler_params, verbose=True):
     # Note that this function supports all Optuna samplers except "PartialFixedSampler" because it requires a sequential sampler setup
@@ -839,15 +838,7 @@ def create_optuna_pruner(pruner_params, verbose=True):
         vprint(" ", verbose=verbose)
         return pruner
 
-# Helper function to compute the current error
-def compute_optuna_error(model, indices, metric):
-    if metric == 'contrast':
-        return get_objp_contrast(model, indices)
-    elif metric == 'loss':
-        return model.loss_iters[-1][-1]
-    else:
-        raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")
-
+# Major Optuna routine
 def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda', verbose=False):
     """
     Objective function for Optuna hyperparameter tuning in ptychographic reconstruction.
@@ -1016,3 +1007,25 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     vprint(f"### Finished {NITER} iterations, averaged iter_t = {np.mean(model.iter_times):.3g} sec ###", verbose=verbose)
     vprint(" ", verbose=verbose)
     return optuna_error
+
+def get_optuna_suggest(trial, suggest, name, kwargs):
+    
+    if suggest == 'cat':
+        return trial.suggest_categorical(name, **kwargs)
+    elif suggest == 'int':
+        return trial.suggest_int(name, **kwargs)
+    elif suggest == 'float':
+        return trial.suggest_float(name, **kwargs)        
+    else:
+        raise (f"Optuna trail.suggest method '{suggest}' is not supported.")
+
+def compute_optuna_error(model, indices, metric):
+    """
+    Helper function to compute the current error for Optuna
+    """
+    if metric == 'contrast':
+        return get_objp_contrast(model, indices)
+    elif metric == 'loss':
+        return model.loss_iters[-1][-1]
+    else:
+        raise ValueError(f"Unsupported hypertune error metric: '{metric}'. Expected 'contrast' or 'loss'.")
