@@ -1,6 +1,6 @@
 ## Define the ptycho reconstruction solver class and functions
 
-import copy
+from copy import deepcopy
 import logging
 from random import shuffle
 
@@ -62,7 +62,7 @@ class PtyRADSolver(object):
             tuning mode based on the if_hypertune flag.
     """
     def __init__(self, params, device=None, acc=None, logger=None):
-        self.params          = params
+        self.params          = deepcopy(params)
         self.if_hypertune    = self.params.get('hypertune_params', {}).get('if_hypertune', False)
         self.verbose         = not self.params['recon_params']['if_quiet']
         self.accelerator     = acc
@@ -145,6 +145,7 @@ class PtyRADSolver(object):
     def hypertune(self):
         import optuna
         hypertune_params = self.params['hypertune_params']
+        params_path      = self.params.get('params_path')
         n_trials         = hypertune_params.get('n_trials')
         timeout          = hypertune_params.get('timeout')
         study_name       = hypertune_params.get('study_name')
@@ -216,7 +217,7 @@ class PtyRADSolver(object):
         self.params['recon_params']['postfix'] = ''
         
         if copy_params:
-            copy_params_to_dir(self.params['params_path'], output_dir)
+            copy_params_to_dir(params_path, output_dir, self.params)
 
         # Set output_dir to None if the user doesn't want to create the output_dir at all
         if not copy_params and self.params['recon_params']['SAVE_ITERS'] is None and not hypertune_params['collate_results']:
@@ -514,7 +515,7 @@ def prepare_recon(model, init, params):
         fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
         if copy_params and not if_hypertune:
             # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
-            copy_params_to_dir(params_path, output_path, verbose=verbose)
+            copy_params_to_dir(params_path, output_path, params, verbose=verbose)
     else:
         output_path = None
     
@@ -880,7 +881,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     import optuna
     
     init.verbose = False
-    params = copy.deepcopy(params)
+    params = deepcopy(params)
         
     # Parse the recon_params
     recon_params      = params.get('recon_params')
