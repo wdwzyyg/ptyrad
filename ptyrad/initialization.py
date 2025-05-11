@@ -38,87 +38,9 @@ class Initializer:
         self.init_variables = {} # This dict stores all the variables that will be used for the later ptychography reconstruction
         self.verbose=verbose
         self.init_params_dict()
-        
-    def set_use_cached_flags(self, source):
-        """ Set the flags for each field whether we can cache or not """
-                # Validate required fields
-        try:
-            obj_source   = self.init_params['obj_source']
-            obj_params   = self.init_params['obj_params']
-            probe_source = self.init_params['probe_source']
-            probe_params = self.init_params['probe_params']
-            pos_source   = self.init_params['pos_source']
-            pos_params   = self.init_params['pos_params']
-        except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
-        
-        triplets = [
-        ('obj', obj_source, obj_params),
-        ('probe', probe_source, probe_params),
-        ('pos', pos_source, pos_params)]
-        
-        # Helper for comparison
-        def same_source_and_params(a, b):
-            return a[1] == b[1] == source and a[2] == b[2]
-        
-        # Check if obj, probe, and pos sources are the same
-        if same_source_and_params(triplets[0], triplets[1]) and same_source_and_params(triplets[1], triplets[2]):
-            self.use_cached_obj = self.use_cached_probe = self.use_cached_pos = True
-            self.cache_path = obj_params
-            self.cache_source = obj_source
-            return
-
-        if same_source_and_params(triplets[0], triplets[1]):
-            self.use_cached_obj = self.use_cached_probe = True
-            self.cache_path = obj_params
-            self.cache_source = obj_source
-
-        if same_source_and_params(triplets[0], triplets[2]):
-            self.use_cached_obj = self.use_cached_pos = True
-            self.cache_path = obj_params
-            self.cache_source = obj_source
-
-        if same_source_and_params(triplets[1], triplets[2]):
-            self.use_cached_probe = self.use_cached_pos = True
-            self.cache_path = probe_params
-            self.cache_source = probe_source
     
-    def init_cache(self):
-        """ Check if the source paths are the same, if so, we may cache that field to reduce file loading time """
-        # Note:
-        # For caching, at least 2 out of 3 fields are using the same file path
-        # Therefore, there's only one possible source for the self.cache_contents
-        # With 2 file source posibilities, the self.cache_contents is either caching from 'PtyRAD' or 'PtyShv'
-        # Even we add more file type supports in the future (py4dstem or ptypy), the cache would still be a single file type
-        
-        vprint("### Initializing cache ###", verbose=self.verbose)
-        
-        # Initialize flags for cached fields
-        self.use_cached_obj = False
-        self.use_cached_probe = False
-        self.use_cached_pos = False
-        
-        for source in ['PtyRAD', 'PtyShv', 'py4DSTEM']:
-            self.set_use_cached_flags(source)
-            
-        if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
-            if self.cache_source == 'PtyRAD':
-                vprint(f"Loading 'PtyRAD' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_pt(self.cache_path)
-            elif self.cache_source == 'PtyShv':
-                vprint(f"Loading 'PtyShv' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
-            elif self.cache_source == 'py4DSTEM':
-                vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_hdf5(self.cache_path, dataset_key=None)
-            else:
-                raise KeyError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
-        vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
-        vprint(f"use_cached_probe = {self.use_cached_probe}", verbose=self.verbose)
-        vprint(f"use_cached_pos   = {self.use_cached_pos}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
+    ##### Public methods for initializing everything #####
     
-    # TODO Move this method to the top of the class later
     def init_params_dict(self):
         vprint("### Initializing init_params ###", verbose=self.verbose)
         
@@ -206,6 +128,41 @@ class Initializer:
         self.init_variables['dk']               = dk # 1/Ang
         self.init_variables['slice_thickness']  = self.init_params['obj_slice_thickness']
         vprint(" ", verbose=self.verbose)
+
+    def init_cache(self):
+        """ Check if the source paths are the same, if so, we may cache that field to reduce file loading time """
+        # Note:
+        # For caching, at least 2 out of 3 fields are using the same file path
+        # Therefore, there's only one possible source for the self.cache_contents
+        # With 2 file source posibilities, the self.cache_contents is either caching from 'PtyRAD' or 'PtyShv'
+        # Even we add more file type supports in the future (py4dstem or ptypy), the cache would still be a single file type
+        
+        vprint("### Initializing cache ###", verbose=self.verbose)
+        
+        # Initialize flags for cached fields
+        self.use_cached_obj = False
+        self.use_cached_probe = False
+        self.use_cached_pos = False
+        
+        for source in ['PtyRAD', 'PtyShv', 'py4DSTEM']:
+            self._set_use_cached_flags(source)
+            
+        if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
+            if self.cache_source == 'PtyRAD':
+                vprint(f"Loading 'PtyRAD' file from {self.cache_path} for caching", verbose=self.verbose)
+                self.cache_contents = load_pt(self.cache_path)
+            elif self.cache_source == 'PtyShv':
+                vprint(f"Loading 'PtyShv' file from {self.cache_path} for caching", verbose=self.verbose)
+                self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
+            elif self.cache_source == 'py4DSTEM':
+                vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
+                self.cache_contents = load_hdf5(self.cache_path, dataset_key=None)
+            else:
+                raise KeyError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
+        vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
+        vprint(f"use_cached_probe = {self.use_cached_probe}", verbose=self.verbose)
+        vprint(f"use_cached_pos   = {self.use_cached_pos}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
         
     def init_measurements(self):
         vprint("### Initializing measurements ###", verbose=self.verbose)
@@ -241,6 +198,305 @@ class Initializer:
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
         vprint(" ", verbose=self.verbose)
+
+    def init_probe(self):
+        """
+        Initialize the probe by loading or simulating and then processing it.
+        """
+        vprint("### Initializing probe ###", verbose=self.verbose)
+
+        probe = self._load_probe()
+        probe = self._process_probe(probe)
+        
+        # Set the maximum pmode
+        pmode_max = self.init_params['probe_pmode_max']
+        probe = probe[:pmode_max]
+
+        # Print summary
+        vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
+        self.init_variables['probe'] = probe
+        vprint(" ", verbose=self.verbose)
+
+    def init_pos(self):
+        """
+        Initialize the probe positions by loading and processing them.
+        """
+        vprint("### Initializing probe positions ###", verbose=self.verbose)
+    
+        pos = self._load_pos()
+        pos = self._process_pos(pos)
+
+        probe_shape = self.init_variables['probe_shape']
+        obj_lateral_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
+        crop_pos = np.round(pos).astype('int16')
+        probe_pos_shifts = (pos - crop_pos).astype('float32')
+        
+        # Save the processed positions
+        self.init_variables['obj_lateral_extent'] = obj_lateral_extent
+        self.init_variables['crop_pos'] = crop_pos
+        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
+        self.init_variables['scan_affine'] = self.init_params['pos_scan_affine']
+    
+        # Print summary
+        vprint(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}", verbose=self.verbose)
+        vprint(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}", verbose=self.verbose)
+        vprint(f"crop_pos extent (Ang)                         = {(crop_pos.max(0) - crop_pos.min(0))*self.init_variables['dx']}", verbose=self.verbose)
+        vprint(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+
+    def init_obj(self):
+        """
+        Initialize the object by loading and processing it.
+        """
+        vprint("### Initializing object ###", verbose=self.verbose)
+
+        obj = self._load_obj()
+        obj = self._process_obj(obj)
+        
+        # Set the maximum omode
+        omode_max = self.init_params['obj_omode_max']
+        obj = obj[:omode_max].astype('complex64')
+        
+        self.init_variables['obj'] = obj
+
+        # Print summary
+        dz = self.init_variables['slice_thickness']
+        dx = self.init_variables['dx']
+        vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
+        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*dz, obj.shape[2]*dx, obj.shape[3]*dx),4)}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+
+    def init_omode_occu(self):
+        """
+        Initialize the mixed-state object mode occupancy so each mode has a fixed weight
+        """
+        # Note: Initially I tried to make it optimizable, but then I noticed the AD algorithm
+        # tended to entirely shut off the mode by reducing the omode_occu rather than improving the mode
+        # So I decided to keep it as fixed values for now
+        
+        omode_occu_params = self.init_params.get('obj_omode_init_occu') or {}
+        occu_type = omode_occu_params.get('occu_type', 'uniform')
+        init_occu = omode_occu_params.get('init_occu')
+        vprint(f"### Initializing omode_occu from '{occu_type}' ###", verbose=self.verbose)
+
+        if occu_type   == 'custom':
+            omode_occu = np.array(init_occu)
+        elif occu_type == 'uniform':
+            omode = self.init_params['obj_omode_max']
+            omode_occu = np.ones(omode)/omode
+        else:
+            raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
+        
+        omode_occu = omode_occu.astype('float32')
+        vprint(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}", verbose=self.verbose)
+        self.init_variables['omode_occu'] = omode_occu
+        vprint(" ", verbose=self.verbose)
+
+    def init_H(self):
+        """
+        Initialize the near-field Fresnel propagator for multislice ptychography
+        """
+        
+        vprint("### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
+        probe_shape = self.init_variables['probe_shape']
+        dx = self.init_variables['dx']
+        slice_thickness = self.init_variables['slice_thickness']
+        probe_illum_type = self.init_variables['probe_illum_type']
+        
+        if probe_illum_type == 'electron':
+            lambd = get_EM_constants(self.init_params['probe_kv'], 'wavelength')
+            unit_str = 'Ang'
+        elif probe_illum_type == 'xray':
+            lambd = 1.23984193e-9 / (self.init_params['probe_energy'])
+            unit_str = 'm'
+        else:
+            raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        
+        vprint(f"Calculating H with probe_shape = {probe_shape} px, dx = {dx:.4f} {unit_str}, slice_thickness = {slice_thickness:.4f} {unit_str}, lambd = {lambd:.4f} {unit_str}", verbose=self.verbose)
+        
+        H = near_field_evolution(probe_shape, dx, slice_thickness, lambd)
+        H = H.astype('complex64')
+        vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
+        self.init_variables['lambd'] = lambd
+        self.init_variables['H'] = H
+        vprint(" ", verbose=self.verbose)
+    
+    def init_obj_tilts(self):
+        """
+        Initialize the object crystal tilts. Tilts can be global tilt (1,2) or pos-dependent tilt (N,2)
+        """
+        try:
+            tilt_source     = self.init_params['tilt_source']
+            tilt_params     = self.init_params['tilt_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+
+        vprint(f"### Initializing obj tilts from = '{tilt_source}' ###", verbose=self.verbose)
+        
+        if tilt_source == 'custom':
+            obj_tilts = tilt_params # (1,2) or (N,2) array in unit of mrad
+
+        elif tilt_source == 'PtyRAD':
+            pt_path = tilt_params
+            ckpt = self.cache_contents if pt_path == self.cache_path else load_pt(pt_path)            
+            obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
+            vprint(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad", verbose=self.verbose)
+
+        elif tilt_source == 'simu':
+            N_scans    = self.init_variables['N_scans']
+            tilt_type  = tilt_params.get('tilt_type') or 'all' # Use the specified tilt_type when specified, fall back to 'all' for unspecified or None
+            init_tilts = tilt_params.get('init_tilts') or [[0,0]] # (1,2) array in unit of mrad
+
+            if tilt_type == 'each':
+                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
+                vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
+            elif tilt_type == 'all':
+                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
+                vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
+            else:
+                raise KeyError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
+
+        else:
+            raise KeyError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
+        
+        # Print summary
+        self.init_variables['obj_tilts'] = obj_tilts
+        vprint(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+    
+    def init_check(self):
+        # Although some of the input experimental parameters might not be used directly by the package
+        # I think it's a good practice to check for overall consistency and remind the user to check carefully
+        # While these check could be performed within the init methods and achieve early return
+        # It's more readable to separate the initializaiton logic with the checking logic in this way
+        
+        vprint("### Checking consistency between input params with the initialized variables ###", verbose=self.verbose)
+        
+        # Check the consistency of init params with the initialized variables
+        init_params  = self.init_params
+        Npix        = init_params['meas_Npix']
+        Nlayer      = init_params['obj_Nlayer']
+        N_scans     = init_params['pos_N_scans']
+        N_scan_slow = init_params['pos_N_scan_slow']
+        N_scan_fast = init_params['pos_N_scan_fast']
+        
+        # Initialized variables
+        meas             = self.init_variables['measurements']
+        probe            = self.init_variables['probe']
+        crop_pos         = self.init_variables['crop_pos']
+        probe_pos_shifts = self.init_variables['probe_pos_shifts']
+        obj              = self.init_variables['obj']
+        omode_occu       = self.init_variables['omode_occu'] 
+        H                = self.init_variables['H']
+        obj_tilts        = self.init_variables['obj_tilts']
+        if self.init_variables.get('on_the_fly_meas_padded') is not None:
+            target_Npix  = self.init_variables['on_the_fly_meas_padded'].shape[-1]
+        else:
+            target_Npix  = meas.shape[-1]
+        if self.init_variables.get('on_the_fly_meas_scale_factors') is not None:
+            scale_factors = self.init_variables['on_the_fly_meas_scale_factors']
+        else:
+            scale_factors = [1,1]   
+        
+        # Check DP shape
+        if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'", verbose=self.verbose)
+        elif Npix == target_Npix == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding", verbose=self.verbose)
+        elif Npix == meas.shape[-2]*scale_factors[-2] == meas.shape[-1]*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement resampling", verbose=self.verbose)
+        elif Npix == target_Npix*scale_factors[-2] == target_Npix*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding and then resampling", verbose=self.verbose)
+        else:
+            raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
+
+        # Check scan pattern
+        if N_scans == len(meas) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
+            vprint(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'", verbose=self.verbose)
+        else:
+            raise ValueError(f"Found inconstency between N_scans({N_scans}), len(meas)({len(meas)}), N_scan_slow({N_scan_slow})*N_scan_fast({N_scan_fast}), len(crop_pos)({len(crop_pos)}), and len(probe_pos_shifts)({len(probe_pos_shifts)})")
+        
+        # Check object shape
+        if obj.shape[0] == len(omode_occu):
+            vprint(f"obj.shape[0] is consistent with len(omode_occu) as '{obj.shape[0]}'", verbose=self.verbose)
+        else:
+            raise ValueError(f"Found inconsistency between obj.shape[0]({obj.shape[0]}) and len(omode_occu)({len(omode_occu)})")
+        
+        if obj.shape[1] == Nlayer:        
+            vprint(f"obj.shape[1] is consistent with Nlayer as '{Nlayer}'", verbose=self.verbose)
+        else:
+            raise ValueError(f"Found inconsistency between obj.shape[1]({obj.shape[1]}) and Nlayer({Nlayer})")
+
+        # Check obj tilts
+        if len(obj_tilts) in [1, N_scans]:
+            vprint("obj_tilts is consistent with either 1 or N_scans", verbose=self.verbose)
+        else:
+            raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
+        
+        vprint("Pass the consistency check of initialized variables, initialization is done!", verbose=self.verbose)
+    
+    def init_all(self):
+        # Run this method to initialize all
+        
+        self.init_cache()
+        self.init_measurements()
+        self.init_probe()
+        self.init_pos()
+        self.init_obj()
+        self.init_omode_occu()
+        self.init_H()
+        self.init_obj_tilts()
+        self.init_check()
+        
+        return self
+    
+    ###### Private methods for setting the cache ######
+
+    def _set_use_cached_flags(self, source):
+        """ Set the flags for each field whether we can cache or not """
+        # Validate required fields
+        try:
+            obj_source   = self.init_params['obj_source']
+            obj_params   = self.init_params['obj_params']
+            probe_source = self.init_params['probe_source']
+            probe_params = self.init_params['probe_params']
+            pos_source   = self.init_params['pos_source']
+            pos_params   = self.init_params['pos_params']
+        except KeyError as e:
+            raise ValueError(f"Missing required configuration field: {e}")
+        
+        triplets = [
+        ('obj', obj_source, obj_params),
+        ('probe', probe_source, probe_params),
+        ('pos', pos_source, pos_params)]
+        
+        # Helper for comparison
+        def same_source_and_params(a, b):
+            return a[1] == b[1] == source and a[2] == b[2]
+        
+        # Check if obj, probe, and pos sources are the same
+        if same_source_and_params(triplets[0], triplets[1]) and same_source_and_params(triplets[1], triplets[2]):
+            self.use_cached_obj = self.use_cached_probe = self.use_cached_pos = True
+            self.cache_path = obj_params
+            self.cache_source = obj_source
+            return
+
+        if same_source_and_params(triplets[0], triplets[1]):
+            self.use_cached_obj = self.use_cached_probe = True
+            self.cache_path = obj_params
+            self.cache_source = obj_source
+
+        if same_source_and_params(triplets[0], triplets[2]):
+            self.use_cached_obj = self.use_cached_pos = True
+            self.cache_path = obj_params
+            self.cache_source = obj_source
+
+        if same_source_and_params(triplets[1], triplets[2]):
+            self.use_cached_probe = self.use_cached_pos = True
+            self.cache_path = probe_params
+            self.cache_source = probe_source
+
+    ###### Private methods for initializing measurements ######
     
     def _load_meas(self):
         """Load diffraction data from file or memory according to init_params['meas']."""
@@ -736,23 +992,7 @@ class Initializer:
         
         return meas
 
-    def init_probe(self):
-        """
-        Initialize the probe by loading or simulating and then processing it.
-        """
-        vprint("### Initializing probe ###", verbose=self.verbose)
-
-        probe = self._load_probe()
-        probe = self._process_probe(probe)
-        
-        # Set the maximum pmode
-        pmode_max = self.init_params['probe_pmode_max']
-        probe = probe[:pmode_max]
-
-        # Print summary
-        vprint(f"probe                         (pmode, Ny, Nx) = {probe.dtype}, {probe.shape}", verbose=self.verbose)
-        self.init_variables['probe'] = probe
-        vprint(" ", verbose=self.verbose)
+    ###### Private methods for initializing probe ######
         
     def _load_probe(self):
         """
@@ -911,32 +1151,7 @@ class Initializer:
         vprint(f"sum(|probe_data|**2) = {np.sum(np.abs(probe)**2):.2f}, while meas.mean(0).sum() = {meas_avg_sum:.2f}", verbose=self.verbose)
         return probe.astype('complex64')
    
-    def init_pos(self):
-        """
-        Initialize the probe positions by loading and processing them.
-        """
-        vprint("### Initializing probe positions ###", verbose=self.verbose)
-    
-        pos = self._load_pos()
-        pos = self._process_pos(pos)
-
-        probe_shape = self.init_variables['probe_shape']
-        obj_lateral_extent = (1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)).astype(int)
-        crop_pos = np.round(pos).astype('int16')
-        probe_pos_shifts = (pos - crop_pos).astype('float32')
-        
-        # Save the processed positions
-        self.init_variables['obj_lateral_extent'] = obj_lateral_extent
-        self.init_variables['crop_pos'] = crop_pos
-        self.init_variables['probe_pos_shifts'] = probe_pos_shifts
-        self.init_variables['scan_affine'] = self.init_params['pos_scan_affine']
-    
-        # Print summary
-        vprint(f"crop_pos                                (N,2) = {crop_pos.dtype}, {crop_pos.shape}", verbose=self.verbose)
-        vprint(f"crop_pos 1st and last px coords (y,x)         = {crop_pos[0].tolist(), crop_pos[-1].tolist()}", verbose=self.verbose)
-        vprint(f"crop_pos extent (Ang)                         = {(crop_pos.max(0) - crop_pos.min(0))*self.init_variables['dx']}", verbose=self.verbose)
-        vprint(f"probe_pos_shifts                        (N,2) = {probe_pos_shifts.dtype}, {probe_pos_shifts.shape}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
+    ###### Private methods for initializing positions ######
     
     def _load_pos(self):
         """
@@ -1097,27 +1312,7 @@ class Initializer:
         pos = pos + scan_rand_std * np.random.randn(*pos.shape)
         return pos
     
-    def init_obj(self):
-        """
-        Initialize the object by loading and processing it.
-        """
-        vprint("### Initializing object ###", verbose=self.verbose)
-
-        obj = self._load_obj()
-        obj = self._process_obj(obj)
-        
-        # Set the maximum omode
-        omode_max = self.init_params['obj_omode_max']
-        obj = obj[:omode_max].astype('complex64')
-        
-        self.init_variables['obj'] = obj
-
-        # Print summary
-        dz = self.init_variables['slice_thickness']
-        dx = self.init_variables['dx']
-        vprint(f"object                    (omode, Nz, Ny, Nx) = {obj.dtype}, {obj.shape}", verbose=self.verbose)
-        vprint(f"object extent                 (Z, Y, X) (Ang) = {np.round((obj.shape[1]*dz, obj.shape[2]*dx, obj.shape[3]*dx),4)}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
+    ###### Private methods for initializing object ######
 
     def _load_obj(self):
         """
@@ -1221,187 +1416,3 @@ class Initializer:
         # Note that these methods would need to update `init_params`` and then call `init_params_dict`` for the `init_variables``
 
         return obj
-
-    def init_omode_occu(self):
-        """
-        Initialize the mixed-state object mode occupancy so each mode has a fixed weight
-        """
-        # Note: Initially I tried to make it optimizable, but then I noticed the AD algorithm
-        # tended to entirely shut off the mode by reducing the omode_occu rather than improving the mode
-        # So I decided to keep it as fixed values for now
-        
-        omode_occu_params = self.init_params.get('obj_omode_init_occu') or {}
-        occu_type = omode_occu_params.get('occu_type', 'uniform')
-        init_occu = omode_occu_params.get('init_occu')
-        vprint(f"### Initializing omode_occu from '{occu_type}' ###", verbose=self.verbose)
-
-        if occu_type   == 'custom':
-            omode_occu = np.array(init_occu)
-        elif occu_type == 'uniform':
-            omode = self.init_params['obj_omode_max']
-            omode_occu = np.ones(omode)/omode
-        else:
-            raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
-        
-        omode_occu = omode_occu.astype('float32')
-        vprint(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}", verbose=self.verbose)
-        self.init_variables['omode_occu'] = omode_occu
-        vprint(" ", verbose=self.verbose)
-        
-    def init_H(self):
-        """
-        Initialize the near-field Fresnel propagator for multislice ptychography
-        """
-        
-        vprint("### Initializing H (Fresnel propagator) ###", verbose=self.verbose)
-        probe_shape = self.init_variables['probe_shape']
-        dx = self.init_variables['dx']
-        slice_thickness = self.init_variables['slice_thickness']
-        probe_illum_type = self.init_variables['probe_illum_type']
-        
-        if probe_illum_type == 'electron':
-            lambd = get_EM_constants(self.init_params['probe_kv'], 'wavelength')
-            unit_str = 'Ang'
-        elif probe_illum_type == 'xray':
-            lambd = 1.23984193e-9 / (self.init_params['probe_energy'])
-            unit_str = 'm'
-        else:
-            raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
-        
-        vprint(f"Calculating H with probe_shape = {probe_shape} px, dx = {dx:.4f} {unit_str}, slice_thickness = {slice_thickness:.4f} {unit_str}, lambd = {lambd:.4f} {unit_str}", verbose=self.verbose)
-        
-        H = near_field_evolution(probe_shape, dx, slice_thickness, lambd)
-        H = H.astype('complex64')
-        vprint(f"H                                    (Ky, Kx) = {H.dtype}, {H.shape}", verbose=self.verbose)
-        self.init_variables['lambd'] = lambd
-        self.init_variables['H'] = H
-        vprint(" ", verbose=self.verbose)
-    
-    def init_obj_tilts(self):
-        """
-        Initialize the object crystal tilts. Tilts can be global tilt (1,2) or pos-dependent tilt (N,2)
-        """
-        try:
-            tilt_source     = self.init_params['tilt_source']
-            tilt_params     = self.init_params['tilt_params']
-        except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
-
-        vprint(f"### Initializing obj tilts from = '{tilt_source}' ###", verbose=self.verbose)
-        
-        if tilt_source == 'custom':
-            obj_tilts = tilt_params # (1,2) or (N,2) array in unit of mrad
-
-        elif tilt_source == 'PtyRAD':
-            pt_path = tilt_params
-            ckpt = self.cache_contents if pt_path == self.cache_path else load_pt(pt_path)            
-            obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
-            vprint(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad", verbose=self.verbose)
-
-        elif tilt_source == 'simu':
-            N_scans    = self.init_variables['N_scans']
-            tilt_type  = tilt_params.get('tilt_type') or 'all' # Use the specified tilt_type when specified, fall back to 'all' for unspecified or None
-            init_tilts = tilt_params.get('init_tilts') or [[0,0]] # (1,2) array in unit of mrad
-
-            if tilt_type == 'each':
-                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(N_scans,2))
-                vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
-            elif tilt_type == 'all':
-                obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
-                vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
-            else:
-                raise KeyError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
-
-        else:
-            raise KeyError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
-        
-        # Print summary
-        self.init_variables['obj_tilts'] = obj_tilts
-        vprint(f"obj_tilts                              (N, 2) = {obj_tilts.dtype}, {obj_tilts.shape}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
-    
-    def init_check(self):
-        # Although some of the input experimental parameters might not be used directly by the package
-        # I think it's a good practice to check for overall consistency and remind the user to check carefully
-        # While these check could be performed within the init methods and achieve early return
-        # It's more readable to separate the initializaiton logic with the checking logic in this way
-        
-        vprint("### Checking consistency between input params with the initialized variables ###", verbose=self.verbose)
-        
-        # Check the consistency of init params with the initialized variables
-        init_params  = self.init_params
-        Npix        = init_params['meas_Npix']
-        Nlayer      = init_params['obj_Nlayer']
-        N_scans     = init_params['pos_N_scans']
-        N_scan_slow = init_params['pos_N_scan_slow']
-        N_scan_fast = init_params['pos_N_scan_fast']
-        
-        # Initialized variables
-        meas             = self.init_variables['measurements']
-        probe            = self.init_variables['probe']
-        crop_pos         = self.init_variables['crop_pos']
-        probe_pos_shifts = self.init_variables['probe_pos_shifts']
-        obj              = self.init_variables['obj']
-        omode_occu       = self.init_variables['omode_occu'] 
-        H                = self.init_variables['H']
-        obj_tilts        = self.init_variables['obj_tilts']
-        if self.init_variables.get('on_the_fly_meas_padded') is not None:
-            target_Npix  = self.init_variables['on_the_fly_meas_padded'].shape[-1]
-        else:
-            target_Npix  = meas.shape[-1]
-        if self.init_variables.get('on_the_fly_meas_scale_factors') is not None:
-            scale_factors = self.init_variables['on_the_fly_meas_scale_factors']
-        else:
-            scale_factors = [1,1]   
-        
-        # Check DP shape
-        if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
-            vprint(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'", verbose=self.verbose)
-        elif Npix == target_Npix == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
-            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding", verbose=self.verbose)
-        elif Npix == meas.shape[-2]*scale_factors[-2] == meas.shape[-1]*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
-            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement resampling", verbose=self.verbose)
-        elif Npix == target_Npix*scale_factors[-2] == target_Npix*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
-            vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding and then resampling", verbose=self.verbose)
-        else:
-            raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
-
-        # Check scan pattern
-        if N_scans == len(meas) == N_scan_slow*N_scan_fast == len(crop_pos) == len(probe_pos_shifts):
-            vprint(f"N_scans, len(meas), N_scan_slow*N_scan_fast, len(crop_pos), and len(probe_pos_shifts) are consistent as '{N_scans}'", verbose=self.verbose)
-        else:
-            raise ValueError(f"Found inconstency between N_scans({N_scans}), len(meas)({len(meas)}), N_scan_slow({N_scan_slow})*N_scan_fast({N_scan_fast}), len(crop_pos)({len(crop_pos)}), and len(probe_pos_shifts)({len(probe_pos_shifts)})")
-        
-        # Check object shape
-        if obj.shape[0] == len(omode_occu):
-            vprint(f"obj.shape[0] is consistent with len(omode_occu) as '{obj.shape[0]}'", verbose=self.verbose)
-        else:
-            raise ValueError(f"Found inconsistency between obj.shape[0]({obj.shape[0]}) and len(omode_occu)({len(omode_occu)})")
-        
-        if obj.shape[1] == Nlayer:        
-            vprint(f"obj.shape[1] is consistent with Nlayer as '{Nlayer}'", verbose=self.verbose)
-        else:
-            raise ValueError(f"Found inconsistency between obj.shape[1]({obj.shape[1]}) and Nlayer({Nlayer})")
-
-        # Check obj tilts
-        if len(obj_tilts) in [1, N_scans]:
-            vprint("obj_tilts is consistent with either 1 or N_scans", verbose=self.verbose)
-        else:
-            raise ValueError(f"Found inconsistency between len(obj_tilts) ({len(obj_tilts)}), 1, and N_scans({N_scans})")
-        
-        vprint("Pass the consistency check of initialized variables, initialization is done!", verbose=self.verbose)
-    
-    def init_all(self):
-        # Run this method to initialize all
-        
-        self.init_cache()
-        self.init_measurements()
-        self.init_probe()
-        self.init_pos()
-        self.init_obj()
-        self.init_omode_occu()
-        self.init_H()
-        self.init_obj_tilts()
-        self.init_check()
-        
-        return self
