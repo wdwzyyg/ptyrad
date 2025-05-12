@@ -560,6 +560,7 @@ class Initializer:
         # Operations that may change the shape of the measurements
         meas = self._meas_crop(meas, self.init_params.get('meas_crop'))
         meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) # meas need to be positive before the padding with background fitting mode
+        meas = self._meas_normalization(meas, self.init_params.get('meas_normalization')) # The normalization is needed because the background is calculated now and it needs to match the level of the final normalized meas
         meas = self._meas_pad(meas, self.init_params.get('meas_pad'))
         meas = self._meas_resample(meas, self.init_params.get('meas_resample'))
         
@@ -750,15 +751,15 @@ class Initializer:
 
         if norm_mode == 'max_at_one':
             normalization_const = meas.mean(0).max()
-            vprint(f"Normalizing by max of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+            vprint(f"Normalizing by max of the 2D mean pattern intensity: {normalization_const:.8g}", verbose=self.verbose)
 
         elif norm_mode == 'mean_at_one':
             normalization_const = meas.mean(0).mean()
-            vprint(f"Normalizing by mean of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+            vprint(f"Normalizing by mean of the 2D mean pattern intensity: {normalization_const:.8g}", verbose=self.verbose)
 
         elif norm_mode == 'sum_to_one':
             normalization_const = meas.mean(0).sum()
-            vprint(f"Normalizing by sum of the 2D mean pattern: {normalization_const:.8g}", verbose=self.verbose)
+            vprint(f"Normalizing by sum of the 2D mean pattern intensity: {normalization_const:.8g}", verbose=self.verbose)
 
         elif norm_mode == 'divide_const':
             if norm_const is None:
@@ -772,6 +773,8 @@ class Initializer:
         # Normalize the measurements
         meas = meas / normalization_const
         meas = meas.astype('float32')
+        vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
+
         return meas
     
     def _meas_pad(self, meas, pad_cfg):
@@ -884,7 +887,7 @@ class Initializer:
         # Validate required fields
         try:
             mode = resample_cfg['mode']
-            Npix = self.init_params['meas']['Npix']
+            Npix = self.init_params['meas_Npix']
             scale_factors = resample_cfg['scale_factors']
         except KeyError as e:
             raise ValueError(f"Missing required configuration field: {e}")

@@ -246,6 +246,10 @@ class CombinedConstraint(torch.nn.Module):
         tilt_smooth_std  = self.constraint_params['tilt_smooth']['std']
         N_scan_slow = model.N_scan_slow
         N_scan_fast = model.N_scan_fast
+        if model.opt_obj_tilts.shape[0] == 1: # obj_tilts.shape = (1,2) for tilt_type: 'all', and (N,2) for 'each'
+            vprint("`tilt_smooth` constraint requires `tilt_type':'each'`, skip this constraint")
+            return 
+        
         if tilt_smooth_freq is not None and niter % tilt_smooth_freq == 0 and tilt_smooth_std !=0:
             obj_tilts = (model.opt_obj_tilts.reshape(N_scan_slow, N_scan_fast, 2)).permute(2,0,1)
             model.opt_obj_tilts.data = gaussian_blur(obj_tilts, kernel_size=5, sigma=tilt_smooth_std).permute(1,2,0).reshape(-1,2).contiguous() # contiguous() returns a contiguous memory layout so that DDP wouldn't complain about the stride mismatch of grad and params
