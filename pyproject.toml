@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ptyrad"
-version = "0.1.0b3.dev3"
+version = "0.1.0b4"
 authors = [
   { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
 ]
@@ -26,3 +26,4 @@ dependencies = []
 
 [tool.setuptools]
 packages = ["ptyrad"]
+package-dir = {"" = "src"}
