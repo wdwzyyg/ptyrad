@@ -1,6 +1,6 @@
 # Directories that don't need to backup
-data/*
-!data/demo_data_instruction.txt
+demo/data/*
+!demo/data/data_url.txt
 logs/
 output/
 __pycache__
