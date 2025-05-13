@@ -1,100 +1,184 @@
-## PtyRAD is now in internal beta test so it's limited to only the Muller group and invited people
-*** Please do NOT share any part of the package to anyone else! ***
-
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
 
-This package performs ptychographic reconstruction using an automatic differation approach.
-
-## Introduction
-
-Ptychographic reconstruciton is often solved as an optimization problem using gradient descent methods. Typical ptychographic reconstruction packages (e.g. PtychoShelves, PtyPy, py4DSTEM) use an analytically derived or approximated gradients and apply them for the updates, while `ptyrad` utilizes [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) to automatically calculate the needed gradients. 
-
-The main difference is that automatic differentiation allows simpler implementation for adding and modifying new optimizable variables. For typcial packages utilize analytical gradients, adding a new optimizable variable (like adding probe position correction or adaptive beam tilt) requires deriving the corresponding gradient with respect to the objective (loss) funciton. Manually deriving the gradients for new variables can be a tedious and daunting task. On the other hand, automatic differentiation provides instant gradients as long as a differentialble forward model is provided, and flexible control over the optimizable variables including optimizing the amplitude and phase of the object individually.
-
-Additionally, automatic differentiation is the backbone of [backpropagation](https://en.wikipedia.org/wiki/Backpropagation), which is the enabling training algorithm for all modern deep learning networks. `PtyRAD` uses [PyTorch](https://pytorch.org/)'s `autograd` for its AD architecture, which allows us to take advantages from the active PyTorch community for potentially extended capabilities and improved performance over the time. 
+*PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [arXiv paper](https://arxiv.org/abs/2505.07814) for more information.
 
 ## Getting Started
 
-### PtyRAD Major dependencies:
+### Major dependencies
 
 * Python 3.10 or above
-* CUDA-supported GPU that supports CUDA 11 or above
 * PyTorch 2.1 or above
+* While *PtyRAD* can run on CPU, GPU is strongly suggested for high-speed ptychographic reconstructions. 
+    - *PtyRAD* supports both NVIDIA GPUs with CUDA and Apple Silicon (MPS)
+* *PtyRAD* was tested on Windows, MacOS, and Linux
 
-> **Choose one of the following that matches your need. Installation via spec-file.txt is recommended.**
+### Recommended Tool (Optional)
 
-### 1. Install [miniconda](https://docs.anaconda.com/miniconda/) or [Anaconda](https://docs.anaconda.com/anaconda/install/) so we can create environments with `conda`
+If you're not comfortable using the terminal, we suggest installing [*Visual Studio Code*](https://code.visualstudio.com/Download).
+*VS Code* makes it easier to manage Python environments, open terminals in the correct folder, and run Jupyter notebooks — all in one interface.
+After installing *VS Code*, you can:
 
-### 2a. Create Conda environment on Windows via spec-file.txt 
-```bash
-conda create -n ptyrad --file ./envs/spec-file_ptyrad_windows.txt
-```
+- Open the `ptyrad/` folder in *VS Code*
 
-### 2b. Create Conda environment on Linux via spec-file.txt
-```bash
-conda create -n ptyrad --file ./envs/spec-file_ptyrad_linux.txt
-```
+- Seamlessly switch between different created Python environments
 
-If you want to create an environment for PtyRAD with multi-GPU capability, use
-```bash
-conda create -n ptyrad_acc --file ./envs/spec-file_ptyrad_acc_linux.txt
-```
+- Easily launch the notebook or run scripts inside the same window
 
-Note: `ptyrad` can be changed into your preferred conda environment name, and `./envs/spec-file_xxx.txt` refers to the path to the spec-file.txt.
+## Step-by-Step Guide 
+> 💡 **Note:** All the commands in this `README.md` are single-line commands — copy and paste them as-is, even if they wrap in your PDF viewer.
 
-### 2c. Create Conda environment on Windows via specified package
-```bash
-conda create -n ptyrad python=3.11 matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
-```
-
-### 2d. Create Conda environment on Linux via specified package
-```bash
-conda create -n ptyrad python matplotlib scikit-learn scipy h5py tifffile pytorch torchvision optuna=3.6.1 pytorch-cuda=11.8 -c pytorch -c nvidia -c conda-forge
-```
-Note: `pytorch-cuda` is limited to 11.8 because our private cluster at Cornell only supports up to this version.
-
-*** Other Note ***
-- PyTorch on Windows only supports Python 3.8-3.11 as of Sept. 2024.
-- Creating environment with `spec-file_ptyrad.txt` (2a, 2b) is suggested. The spec-file.txt uses Python 3.11 and PyTorch 2.1.
-- If you go with option 2c or 2d, `conda` could be taking ~ 10-30 min to solve the environment for package versions. You might get a Python 3.11.9 (Windows) or 3.12.5 (Linux) environment with pytorch 2.4.0 and numpy 2.1.0 as of Sept. 2024.
--  The `pytorch-cuda` must match your CUDA installation, check it with `nvidia-smi` from the terminal
-
-
-### 3. Installing PtyRAD
-
-Option 1: Clone from this github repo (It's currently a private repo so you need to [generate a personal access token instead of password](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens))
+### Step 1. Download or clone the *PtyRAD* GitHub repo
+You can directly download the repo as a zip file and unzip it at desired location, or run
 
 ```bash
-git clone https://github.com/chiahao3/ptyrad.git
+# For Windows users, you'll need to install Git first
+git clone https://github.com/chiahao3/ptyrad.git ptyrad
 ```
 
-Option 2: Download the [zip file](https://github.com/chiahao3/ptyrad/archive/refs/heads/main.zip) from this repo and unzip to your desired directory (easier)
+This will clone the repo into a folder named `ptyrad` under your current working directory.
 
-Note: For multi-GPU capability, you'll need to setup corresponding python environment with HuggingFace `accelerate` package in Linux to use NCCL and PyTorch DDP. `envs/spec-file_ptyrad_acc_linux.txt` is available. For more information, please see `docs/Notes_of_multiGPU_for_ptychography.md`
+### Step 2. Install a Python environment management software
+We recommend [*Miniforge*](https://github.com/conda-forge/miniforge), a lightweight and open-source alternative to [*Anaconda*](https://www.anaconda.com/download). It provides the conda ecosystem, while solving environments much faster and taking up much less disk space.
 
-### 4. Trying the demo in /scripts
+Once *Miniforge* is installed:
 
-> **Download the demo experimental data from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo) before running the demo notebooks/scripts**
+1. Open the *"Miniforge Prompt"* on Windows, or a new terminal window on MacOS/Linux.
 
-- `run_ptyrad_quick_example.ipynb` provides the easiest interfact to run ptyrad with a specified .yml params file
-- `run_ptyrad_detailed_walkthrough.ipynb` gives a gentle walkthrough from initialization, model, loss function, constraints, and to the final reconstruciton.
+    > 💡 **Tip:** On Windows, use the Start menu to search for *"Miniforge Prompt"*. 
+    >
+    > If you prefer to use *cmd* or *PowerShell* on your Windows machine, you can optionally run the following command in your *Miniforge Prompt*:
+    >    ```bash
+    >   # This command will allow other terminals like *cmd* or *PowerShell* to directly access `conda`
+    >    conda init
+    >    ```
+    >   This command only need to be executed once.
+    
+    > 💡 **Tip:** For macOS and Linux, `conda` should be automatically available after installing *Miniforge* when you open a new terminal. If not, try restarting your terminal, or manually activate it with:
+    >    ```bash
+    >   # Adjust the path if you installed Miniforge elsewhere
+    >    source ~/miniforge3/bin/activate
+    >    ```
 
-## Support
-If you run into problems, have questions or suggested features / modifications, please create an issue [here](https://github.com/chiahao3/ptyrad/issues/new/choose).
+2. Navigate into the `ptyrad/` folder that contains this `README.md`
 
-## Learning resource
-You can find previous tutorial recordings and slides from this [Box link](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo)
+    You can do this using the `cd` command, which means **changing directory**:
 
-## Authors
+    ```bash
+    cd path/to/ptyrad
+    ```
+
+    Replace `path/to/ptyrad` with the actual path to this folder.
+    This step is required so that all the example scripts and paths work correctly.
+
+3. You can check that you're in the right folder by running:
+
+    ```bash
+    ls  # or `dir` on Windows
+    ```
+
+    You should see files like `README.md`, and other folders like `demo/`, `scripts/`, and `src/` which keeps the main codebase.
+
+You're now ready to set up a dedicated Python environment for *PtyRAD*.
+Creating separate environments for each project is strongly recommended — it helps avoid version conflicts and keeps your setup clean and reproducible.
+
+### Step 3. Create the Python environment required for *PtyRAD*
+
+Based on your system and whether you have GPU support, choose the appropriate installation command below and run it in your terminal.
+
+- **3a. For Windows and Linux system with CUDA-supported GPUs**
+
+    - Option 1 (Recommended): Create the environment using the provided YAML file
+
+        ```bash
+        # Ensure you are inside the `ptyrad/` directory so the environment YAML file is visible
+        conda env create -f environment_ptyrad.yml
+        ```
+
+    - Option 2: Manually specifying the packages for more control
+        
+        ```bash
+        conda create -n ptyrad python pytorch pytorch-cuda accelerate torchvision optuna matplotlib scikit-learn scipy h5py tifffile jupyter -c nvidia -c pytorch -c conda-forge
+        ```
+
+- **3b. For MacOS users, or Windows/Linux without a GPU**
+
+    ```bash
+    conda create -n ptyrad python pytorch accelerate torchvision optuna matplotlib scikit-learn scipy h5py tifffile jupyter -c pytorch -c conda-forge
+    ```
+
+    >💡 **Note:** It’s completely fine to use the GPU install options even on systems without a GPU. Packages like `pytorch-cuda` will simply remain inactive and unused. If your *PyTorch* installation isn’t built with CUDA support, or if *PtyRAD* can't detect a compatible GPU, it will automatically fall back to running on the CPU.
+
+The created Python environment will be named `(ptyrad)` and stored under `miniforge3/envs/ptyrad/`. Throughout this guide, we use `(ptyrad)` to refer to the Python environment, and `ptyrad/` to refer to the repository folder. The parentheses `(...)` help keep them distinct.
+
+### Step 4. Install the *PtyRAD* package
+
+Once the Python environment `(ptyrad)` is created:
+
+1. Activate the `(ptyrad)` environment:
+
+    In your terminal, run the following command:
+
+    ```bash
+    conda activate ptyrad
+    ```
+
+    Your prompt should now begin with `(ptyrad)` to indicate the environment has been activated.
+
+2. Navigate to the `ptyrad/` folder if you haven't done so.
+   
+   You can confirm you're in the right place by listing the contents and you will need `pyproject.toml` for the installation of *PtyRAD*.
+   ```bash
+    ls  # or `dir` on Windows
+    ```
+3. Install *PtyRAD* as an editable Python package inside the `(ptyrad)` environment
+   ```bash
+   # Note that there is a space and period after "-e"
+    pip install -e .
+    ```
+    >💡 **Note:** This editable install registers *PtyRAD* as a Python package, so you can import it from anywhere — without worrying about your working directory or `sys.path`.
+    >
+    > This command also creates a `ptyrad.egg-info/` folder for storing metadata. You can safely ignore or delete this folder — it won't affect the installed package.
+
+### Step 5. Try the demo script / notebook
+
+Once your `(ptyrad)` environment is activated, and you've installed *PtyRAD*, you're ready to run a quick demo using one of two interfaces:
+
+ - Interactive interface (Recommended):
+ 
+    Use `run_ptyrad_quick_example.ipynb` to quickly reconstruct the demo dataset in a [*Jupyter notebook*](https://docs.jupyter.org/en/latest/running.html)
+
+ - Command-line interface:
+  
+    Use `run_ptyrad.py` to run *PtyRAD* directly from your *Miniforge Prompt* terminal:
+
+    ```bash
+    # Here we assume working directory is set at demo/
+    python ../scripts/run_ptyrad.py --params_path "params/tBL_WSe2_reconstruct.yml" --gpuid 0
+    ```
+
+We've included two example datasets (PSO, tBL_WSe2) in the `demo/data/` folder and three preconfigured parameter files in `demo/params/` to get you started. The full datasets and all parameter files used in the manuscript will be released on Zenodo.
+
+## Beyond the Demo: Using *PtyRAD* with Your Own Data
+
+*PtyRAD* is designed to be **fully driven and specified by configuration files** — no code editing required. Each reconstruction is specified using a YAML params file, which includes the location of your data, preprocessing options, experimental parameters, and all other relevant reconstruction parameters (e.g., optimizer algorithm, constraints, loss, output files, etc).
+
+To reconstruct your own dataset:
+
+1. Prepare your data and place it in any folder of your choosing (e.g., a `data/` directory in your workspace).
+
+2. Create or edit a YAML params file with the appropriate paths and settings for your data. You can keep this file anywhere — as long as your script or notebook knows where to find it.
+
+3. Run *PtyRAD* using the same notebook or script provided in this repo, but pointing it to your customized params file. Note that the `output/` folder will be automatically generated under your current working directory.
+
+## Author
 
 Chia-Hao Lee (cl2696@cornell.edu)
 
-## License
-(I haven't decided which license to go with, but it's likely to be fully open just like `py4dstem`)
-
+Developed at the Muller Group, Cornell University.
 
 ## Acknowledgments
-This package gets inspiration from lots of community efforts, and specifically from the following packages. Some of the functions in `ptyrad` are directly translated or modified from these packages as noted in their comments to give explicit acknowledgment.
+
+Besides great support from the entire Muller group, this package gets inspiration from lots of community efforts, and specifically from the following packages. Some of the functions in *PtyRAD* are directly translated or modified from these packages as noted in their docstrings/comments to give explicit acknowledgment.
 * [PtychoShelves](https://journals.iucr.org/j/issues/2020/02/00/zy5001/index.html)
 * [fold_slice](https://github.com/yijiang1/fold_slice)
 * [py4dstem](https://github.com/py4dstem/py4DSTEM)

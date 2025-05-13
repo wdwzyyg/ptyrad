@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b4] - 2025-05-12 (soft public release)
+### Added
+- Add `demo/` folder to organize demo-specific data, params, and notebooks
+- Add `LICENSE`, `CONTRIBUTING`, and `WISHLIST.md`
+- Add `load_toml` for supporting .toml params file
+- Add `environment_ptyrad.yml` for ease of creating Python environment
+### Changed
+- Slight restructure of the params file format of `init_params`, this will cause BREAKING CHANGES so all users need to update their current params files
+- Major refactoring of the `initialization.py` module internally for clarity and future extensibility
+- Change the repo to `src/` layout for more install and import robustness
+- Change the `utils.py` into a `utils/` module for better organization, split off the `save.py` module
+- Change the `data_io.py` into `load.py`
+- Split `optimizaiton.py` module into `losses.py` and `constraints.py`
+- Refine `README.md` for more comprehensive step-by-step guide
+### Removed
+- Remove `notes/` and `scripts/analysis/` for clarity in the soft public release
+- Remove paper related figure notebooks as they'll be included in final Zenodo record and another repo
+
 ## [0.1.0b3.dev3] - 2025-04-26
 ### Added
 - Add `Git_workflow.md`, `CONTRIBUTING.md`, and `WISHLIST.md` drafts
@@ -12,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Modify `set_gpu_device` to add automatic support for Apple Silicon (MPS) GPUs.
 - Fix `UnicodeDecodeError` by specifying UTF-8 encoding when loading YAML / JSON params files on non-UTF8 terminals
 - Add paper figure saving as pdf and png with 600 DPI
-- Fix hypertune when no pruner. The final optuna_error should only be calculated when pruner = None.
+- Fix hypertune when no pruner. The final optuna_error should only be calculated when pruner = None. Thanks to @noahschnitzer
 - Update `pyproject.toml` with the PEP 440 valid versioning and installation setup for `pip install -e .`
 - Change the versioning `v0.1.0-beta3.3` -> `0.1.0b3.dev3` to get `pyproject.toml` install working. 
 

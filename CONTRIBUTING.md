@@ -26,7 +26,7 @@ Thanks for being here and helping make PtyRAD better!
 
 ## 🚦 Development Workflow Overview
 
-We follow a [**cycle-based Git workflow**](./docs/GIT_WORKFLOW.md) using temporary dev branches and squash/rebase merges:
+We follow a *cycle-based Git workflow* using temporary dev branches and squash/rebase merges:
 
 ### 🔁 General Flow
 1. The permanent branch is `main`, containing only stable, tagged releases.
@@ -46,7 +46,7 @@ We follow a [**cycle-based Git workflow**](./docs/GIT_WORKFLOW.md) using tempora
 ## ✅ How to Contribute
 
 ### 1. Pick a Feature
-Check out the [Feature Wishlist](./docs/WISHLIST.md) in the repo. These are tasks I’ve curated and scoped out. Feel free to comment or reach out to say which one you’d like to work on.
+Check out the [Feature Wishlist](./WISHLIST.md) in the repo. These are tasks I’ve curated and scoped out. Feel free to comment or reach out to say which one you’d like to work on.
 
 If you have an idea that isn’t listed, feel free to open an issue or start a conversation.
 
