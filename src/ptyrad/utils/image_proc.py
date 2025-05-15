@@ -1,9 +1,10 @@
 import numpy as np
 import torch
+from scipy.optimize import minimize
 from torch.fft import fft2, fftfreq, ifft2
 
 from .common import vprint
-from .math_ops import fftshift2, ifftshift2
+from .math_ops import fftshift2, ifftshift2, make_gaussian_mask
 
 
 # Some quick estimation analysis tools
@@ -141,15 +142,103 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
         vprint(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')
     return out
 
-def get_rbf(meas, thresh=0.5):
-    """ Utility function that returns an estimate of the radius of rbf from CBEDs """
-    # meas: 3D array of (N,ky,kx) so that we can take an average 
+def guess_radius_of_bright_field_disk(image: np.ndarray, thresh: float=0.5):
+    """ Utility function that returns an estimate of the radius of rbf from CBED """
+    # meas: 2D array of (ky,kx)
     # thresh: 0.5 for FWHM, 0.1 for Full-width at 10th maximum
-    dp      = meas.sum(0)
-    line    = dp.max(0)
-    indices = np.where(line > line.max()*thresh)[0]
-    rbf     = 0.5*(indices[-1]-indices[0]) # Return rbf in px
+    max_val = np.max(image)
+    binary_img = image > (max_val * thresh)
+    area = np.sum(binary_img)
+    rbf = np.sqrt(area / np.pi) # Assume the region is circular
     return rbf
+
+# Use in initial estimation of CBED geometry (center, radius, and edge blur)
+def fit_cbed_pattern(image: np.ndarray, initial_guess=None, verbose=False):
+    """
+    Estimate the center, radius, and std of a CBED pattern by minimizing
+    the difference between the observed image and a synthetic model.
+    
+    Args:
+        image (np.ndarray): The input image to fit.
+        initial_guess (dict, optional): Dictionary with initial guess parameters.
+        verbose (bool): Whether to print detailed information during fitting.
+        
+    Returns:
+        dict: Dictionary containing the fitted parameters as dict['center', 'radius', 'std'].
+    """
+    Npix = image.shape[0]
+    assert image.shape[0] == image.shape[1], "Only square images supported for now."
+
+    def loss(params):
+        y0, x0, r, std = params  # Note: y0, x0 order to match center=(y,x) in make_gaussian_mask
+        if not (0 <= y0 < Npix and 0 <= x0 < Npix and 1 <= r <= Npix/2 and 0.1 <= std <= 20):
+            return np.inf  # outside valid parameter space
+        model = make_gaussian_mask(Npix, radius=r, std=std, center=(y0, x0))
+        return np.mean((image - model) ** 2)  # Mean Squared Error
+
+    # Set initial guess
+    if initial_guess is None:
+        # Try to estimate initial parameters from the image
+        # Find approximate center by calculating the center of mass
+        y_indices, x_indices = np.indices(image.shape)
+        total_mass = np.sum(image)
+        if total_mass > 0:
+            y0_guess = np.sum(y_indices * image) / total_mass
+            x0_guess = np.sum(x_indices * image) / total_mass
+        else:
+            y0_guess, x0_guess = Npix / 2, Npix / 2
+            
+        r_guess = guess_radius_of_bright_field_disk(image)
+        std_guess = 1.0  # Start with a reasonable Gaussian blur
+    else:
+        # Use provided initial guess
+        center = initial_guess.get("center", (Npix / 2, Npix / 2))
+        y0_guess, x0_guess = center
+        r_guess = initial_guess.get("radius", Npix / 4)
+        std_guess = initial_guess.get("std", 2.0)
+    
+    p0 = [y0_guess, x0_guess, r_guess, std_guess]
+    
+    if verbose:
+        vprint(f"Initial guess: center=({y0_guess:.1f}, {x0_guess:.1f}), radius={r_guess:.1f}, std={std_guess:.1f}")
+        
+    # Use tighter bounds for optimization
+    bounds = [(0, Npix-1), (0, Npix-1), (1, Npix/2), (0.1, 5)]
+
+    # Run optimization with more iterations and a higher tolerance
+    options = {'maxiter': 1000, 'disp': verbose}
+    result = minimize(loss, p0, bounds=bounds, method='L-BFGS-B', options=options)
+
+    # Try multiple starting points if the first optimization doesn't succeed
+    if not result.success or result.fun > 0.01:
+        if verbose:
+            vprint("First optimization attempt didn't converge well, trying different starting points")
+        
+        # Try a few different starting points
+        best_result = result
+        for shift_y in [-Npix/10, 0, Npix/10]:
+            for shift_x in [-Npix/10, 0, Npix/10]:
+                if shift_y == 0 and shift_x == 0:
+                    continue  # Skip the case we already tried
+                
+                new_p0 = [y0_guess + shift_y, x0_guess + shift_x, r_guess, std_guess]
+                new_result = minimize(loss, new_p0, bounds=bounds, method='L-BFGS-B', options=options)
+                
+                if new_result.fun < best_result.fun:
+                    best_result = new_result
+                    if verbose:
+                        vprint(f"Found better solution with starting point at ({new_p0[0]:.1f}, {new_p0[1]:.1f})")
+        
+        result = best_result
+
+    y0, x0, r, std = result.x
+    return {
+        "center": (y0, x0),
+        "radius": r,
+        "std": std,
+        "success": result.success,
+        "fun": result.fun
+    }
 
 def get_local_obj_tilts(pos, objp, dx, slice_thickness, slice_indices, blob_params, window_size=9):
     """ Estimate the local obj tilts from relative atomic column shifts """

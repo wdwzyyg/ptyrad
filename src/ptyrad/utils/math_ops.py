@@ -1,4 +1,4 @@
-from math import ceil, floor
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -44,24 +44,85 @@ def mfft2(im):
     P = np.fft.fft2(im) - S  # FFT of periodic component
     return P, S
 
-def make_sigmoid_mask(Npix, relative_radius=2/3, relative_width=0.2):
-    ''' Make a mask from circular sigmoid function '''    
-    # relative_radius = 0.67 # This is the relative Nyquist frequency where the sigmoid = 0.5
-    # relative_width  = 0.2 # This is the relative width (compared to full image) that y drops from 1 to 0
+def make_sigmoid_mask(Npix: int, relative_radius: float = 2/3, relative_width: float = 0.2, center: Optional[Tuple[float, float]] = None):
+    """
+    Create a 2D circular mask with a sigmoid transition.
+
+    Args:
+        Npix (int): Size of the square mask (Npix x Npix).
+        relative_radius (float): Relative radius of the circular mask where the sigmoid equals 0.5, 
+            as a fraction of the image size.
+        relative_width (float): Relative width of the sigmoid transition, as a fraction of the image size.
+        center (Optional[Tuple[float, float]]): (y, x) coordinates of the center of the circle. 
+            Defaults to the center of the image.
+
+    Returns:
+        torch.Tensor: A 2D circular mask with a sigmoid transition.
     
+    Notes:
+        - The default `relative_radius=2/3` is inspired by its use in abTEM to reduce edge artifacts 
+          in diffraction patterns. It sets an antialias cutoff frequency at 2/3 of the simulated kMax. 
+          https://abtem.readthedocs.io/en/latest/user_guide/appendix/antialiasing.html
+        - The `relative_width` controls the steepness of the sigmoid transition. Smaller values result 
+          in sharper transitions, while larger values produce smoother transitions.
+    """
+
     def scaled_sigmoid(x, offset=0, scale=1):
         # If scale =  1, y drops from 1 to 0 between (-0.5,0.5), or effectively 1 px
         # If scale = 10, it takes roughly 10 px for y to drop from 1 to 0
-        scaled_sigmoid = 1 / (1 + torch.exp((x-offset)/scale*10))
-        return scaled_sigmoid
-    
-    ky = torch.linspace(-floor(Npix/2),ceil(Npix/2)-1,Npix)
-    kx = torch.linspace(-floor(Npix/2),ceil(Npix/2)-1,Npix)
+        return 1 / (1 + torch.exp((x - offset) / scale * 10))
+
+    # Set default center if not provided
+    if center is None:
+        center = (Npix // 2, Npix // 2)  # Use integer division for consistency
+
+    # Create a grid of coordinates
+    ky = torch.arange(Npix, dtype=torch.float32)
+    kx = torch.arange(Npix, dtype=torch.float32)
     grid_ky, grid_kx = torch.meshgrid(ky, kx, indexing='ij')
-    kR = torch.sqrt(grid_ky**2+grid_kx**2) # centered already
-    sigmoid_mask = scaled_sigmoid(kR, offset=Npix/2*relative_radius, scale=relative_width*Npix)
-    
+
+    # Compute the distance from the specified center
+    kR = torch.sqrt((grid_ky - center[0])**2 + (grid_kx - center[1])**2)
+
+    # Apply the scaled sigmoid function
+    sigmoid_mask = scaled_sigmoid(kR, offset=Npix * relative_radius / 2, scale=relative_width * Npix)
+
     return sigmoid_mask
+
+def make_gaussian_mask(Npix: int, radius: float, std: float, center: Optional[Tuple[float, float]] = None):
+    """
+    Create a 2D Gaussian-blurred circular mask.
+
+    Args:
+        Npix (int): Size of the square mask (Npix x Npix).
+        radius (float): Radius of the circular mask.
+        std (float): Standard deviation of the Gaussian blur.
+        center (tuple): (y, x) coordinates of the center of the circle.
+
+    Returns:
+        np.ndarray: A 2D Gaussian-blurred circular mask.
+    """
+    from scipy.ndimage import gaussian_filter
+
+    # Set default center if not provided
+    if center is None:
+        center = (Npix / 2, Npix / 2)
+    
+    # Create a grid of coordinates
+    y = np.linspace(0, Npix - 1, Npix)
+    x = np.linspace(0, Npix - 1, Npix)
+    grid_y, grid_x = np.meshgrid(y, x, indexing='ij')
+
+    # Compute the distance from the center
+    dist_from_center = np.sqrt((grid_y - center[0])**2 + (grid_x - center[1])**2)
+
+    # Create a binary circular mask
+    circular_mask = (dist_from_center <= radius).astype(float)
+
+    # Apply Gaussian blur to the circular mask
+    gaussian_mask = gaussian_filter(circular_mask, sigma=std)
+
+    return gaussian_mask
 
 # Affine
 def compose_affine_matrix(scale, asymmetry, rotation, shear):

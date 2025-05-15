@@ -1,9 +1,90 @@
+from typing import Optional
+
 import numpy as np
 import torch
 from torch.fft import fftfreq
 
 from .common import vprint
 
+
+def infer_dx_from_params(
+    dx: Optional[float] = None,
+    dk: Optional[float] = None,
+    kMax: Optional[float] = None,
+    da: Optional[float] = None,
+    angleMax: Optional[float] = None,
+    RBF: Optional[float] = None,
+    n_alpha: Optional[float] = None,
+    conv_angle: Optional[float] = None,
+    wavelength: Optional[float] = None,
+    Npix: Optional[int] = None,
+) -> float:
+    """
+    Infer the real-space pixel size (dx) based on available unit-related parameters.
+    Accepts keyword arguments directly, or a dictionary via **params.
+
+    Args:
+        dx (Optional[float], optional): Real space pixel size for object, probe, and scan position coordinates in unit of Ang (electron) or m (X-ray).
+            This is used as the unified unit for calibration. Defaults to None.
+            
+        dk (Optional[float], optional): k-space pixel size for the measurments in unit of 1/Ang (electron) or 1/m (X-ray). Defaults to None.
+        
+        kMax (Optional[float], optional): Maximum collection angle in unit of 1/Ang for electron, or 1/m for X-ray. Defaults to None.
+        
+        da (Optional[float], optional): k-space pixel size for the measurments in unit of mrad. Defaults to None.
+        
+        angleMax (Optional[float], optional): Maximum collection angle in unit of mrad. Defaults to None.
+        
+        RBF (Optional[float], optional): Number of pixels within the bright field disk of the electron diffraction pattern. Defaults to None.
+        
+        n_alpha (Optional[float], optional): Collection angle in unit of convergence angles of the elctron probe (usually called "n-alpha"). Defaults to None.
+        
+        conv_angle (Optional[float], optional): Convergence angles of the electron probe. Unit: Ang. Defaults to None.
+        
+        wavelength (Optional[float], optional): Wavelength of the wave. Unit should be Ang (electron) or m (X-ray). Defaults to None.
+        
+        Npix (Optional[int], optional): Number of detector pixel. Defaults to None.
+
+    Raises:
+        ValueError: if required parameters are missing or input is ambiguous
+
+    Returns:
+        float: inferred dx (real-space pixel size)
+    """    
+
+    if dx is not None:
+        return dx
+
+    if dk is not None and Npix is not None:
+        return 1 / (Npix * dk)
+
+    if kMax is not None:
+        return 1 / (2 * kMax)
+
+    if da is not None and wavelength is not None and Npix is not None:
+        dk = da / wavelength / 1e3  # mrad to rad
+        return 1 / (Npix * dk)
+
+    if angleMax is not None and wavelength is not None:
+        kMax = angleMax / wavelength / 1e3  # mrad to rad
+        return 1 / (2 * kMax)
+
+    if all(v is not None for v in (RBF, conv_angle, wavelength, Npix)):
+        da = conv_angle / RBF / 1e3  # radians
+        dk = da / wavelength
+        return 1 / (Npix * dk)
+
+    if n_alpha is not None and wavelength is not None:
+        angleMax = n_alpha * conv_angle
+        kMax = angleMax / wavelength / 1e3  # mrad to rad
+        return 1 / (2 * kMax)
+    
+    raise ValueError(
+        "Insufficient or unrecognized parameters to infer dx. "
+        "Please provide one of the following: "
+        "'dx', or 'dk'+'Npix', or 'da'+'wavelength'+'Npix', or 'kMax', or "
+        "'aMax'+'wavelength', or 'RBF'+'conv_angle'+'wavelength'+'Npix'."
+    )
 
 def get_EM_constants(acceleration_voltage, output_type):
     
@@ -116,7 +197,7 @@ def get_default_probe_simu_params(init_params):
     elif probe_illum_type == 'xray':
         probe_simu_params = {
                         ## Basic params
-                        "beam_energy"    : init_params['probe_energy'],
+                        "beam_kev"       : init_params['beam_kev'],
                         "Npix"           : init_params['meas_Npix'],
                         "dx"             : init_params['probe_dx'],
                         "pmodes"         : init_params['probe_pmode_max'], # These pmodes specific entries might be used in `make_mixed_probe` during initialization
@@ -237,7 +318,7 @@ def make_fzp_probe(probe_params, verbose=True):
         ndarray: Calculated probe field in the sample plane.
     """
     N        = int(probe_params['Npix'])
-    energy   = int(probe_params['beam_energy'])
+    energy   = int(probe_params['beam_kev'])
     dx       = float(probe_params['dx'])
     Ls       = float(probe_params['Ls'])
     Rn       = float(probe_params['Rn'])
@@ -245,7 +326,7 @@ def make_fzp_probe(probe_params, verbose=True):
     D_FZP    = float(probe_params['D_FZP'])
     D_H      = float(probe_params['D_H'])
 
-    lambda_ = 1.23984193e-9 / energy
+    lambda_ = 1.23984193e-9 / energy # lambda_: m; energy: keV
     fl = 2 * Rn * dRn / lambda_  # focal length corresponding to central wavelength
 
     vprint("Start simulating FZP probe", verbose=verbose)

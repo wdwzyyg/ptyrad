@@ -29,9 +29,10 @@ from .common import (  # noqa: F401
 from .image_proc import (  # noqa: F401
     create_one_hot_mask,
     fit_background,
+    fit_cbed_pattern,
     gaussian_blur_1d,
     get_blob_size,
-    get_rbf,
+    guess_radius_of_bright_field_disk,
     imshift_batch,
     normalize_by_bit_depth,
     normalize_from_zero_to_one,
@@ -41,12 +42,14 @@ from .math_ops import (  # noqa: F401
     exponential_decay,
     fftshift2,
     ifftshift2,
+    make_gaussian_mask,
     make_sigmoid_mask,
     power_law,
 )
 from .physics import (  # noqa: F401
     get_default_probe_simu_params,
     get_EM_constants,
+    infer_dx_from_params,
     make_fzp_probe,
     make_mixed_probe,
     make_stem_probe,

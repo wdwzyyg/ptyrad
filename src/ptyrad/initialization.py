@@ -14,7 +14,8 @@ from ptyrad.utils import (
     fit_background,
     get_default_probe_simu_params,
     get_EM_constants,
-    get_rbf,
+    guess_radius_of_bright_field_disk,
+    infer_dx_from_params,
     make_fzp_probe,
     make_mixed_probe,
     make_stem_probe,
@@ -37,10 +38,68 @@ class Initializer:
         self.init_params_original = deepcopy(init_params)
         self.init_variables = {} # This dict stores all the variables that will be used for the later ptychography reconstruction
         self.verbose=verbose
+        
+        self.init_calibration()
         self.init_params_dict()
     
     ##### Public methods for initializing everything #####
-    
+    def init_calibration(self):
+        vprint("### Setting up calibration ###", verbose=self.verbose)
+
+        calib_dict  = self.init_params['meas_calibration']
+        calib_mode  = calib_dict['mode'] # One of 'dx', 'dk', 'kMax', 'da', 'angleMax', 'RBF', 'n_alpha', or 'fitRBF'
+        calib_value = calib_dict.get('value') # fitRBF doesn't need a value here
+        Npix        = self.init_params.get('meas_Npix')
+        conv_angle  = self.init_params.get('probe_conv_angle')
+        illum_type  = self.init_params.get('probe_illum_type') or 'electron'
+        
+        # Get wavelength
+        if illum_type == 'electron':
+            energy  = self.init_params.get('probe_kv') # kV
+            wavelength = get_EM_constants(energy, output_type='wavelength') # wavelength in Ang
+            unit_str = 'Ang'
+            
+        elif illum_type == 'xray':
+            if calib_mode in ['RBF', 'fitRBF']:
+                    raise KeyError(f"Calibration mode '{calib_mode}' is not supported for xray. Use 'dx', 'dk', 'kMax', 'da', 'angleMax', 'n_alpha'.") 
+            energy  = self.init_params.get('beam_kev') # keV
+            wavelength = 1.23984193e-9 / energy # wavelength in m, energy in keV
+            unit_str = 'm'
+            
+        else:
+            raise KeyError(f"'probe_illum_type' = {illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        
+        # Load the meas to fit RBF, note that later we'll call init_meas for the proper initialization after we've determined the dx.
+        # dx is needed to properly prepare meas due to the on-the-fly cropping / padding / resampling
+        if calib_mode == 'fitRBF' and illum_type != 'xray':
+            vprint("Loading measurement to fit RBF for the meas calibration", verbose=self.verbose)
+            vprint("")
+            
+            # Load meas and do needed geometric transformation before fitting RBF
+            meas = self._load_meas() # Might want to setup some flag to reduce redundant loading if possible
+            meas = self._meas_permute(meas, self.init_params.get('meas_permute'))
+            meas = self._meas_reshape(meas, self.init_params.get('meas_reshape'))
+            meas = self._meas_flipT(meas, self.init_params.get('meas_flipT'))   
+
+            fitRBF = guess_radius_of_bright_field_disk(meas.sum(0), thresh=calib_dict.get('thresh', 0.5))
+            vprint(f"Radius of fitted bright field disk (RBF) = {fitRBF:.2f} px")
+            calib_mode = 'RBF'
+            calib_value = fitRBF
+            
+        # Setup params to infer dx
+        params = {
+            calib_mode: calib_value,
+            'Npix': Npix,
+            'wavelength': wavelength,
+            'conv_angle': conv_angle # None if it's 'xray' mode
+        }
+        dx = infer_dx_from_params(**params)
+        
+        # Set the inferred dx
+        self.init_params['probe_dx'] = dx
+        vprint(f"Initial calibration dx (real space pixel size) set to {dx:.4f} {unit_str} with meas_calibration mode = '{calib_mode}', value = {calib_value}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+        
     def init_params_dict(self):
         vprint("### Initializing init_params ###", verbose=self.verbose)
         
@@ -64,7 +123,12 @@ class Initializer:
             N_scan_fast = self.init_params['pos_N_scan_fast']
             N_scans     = N_scan_slow * N_scan_fast
             dx          = self.init_params['probe_dx']
-            dk          = 1/(dx*Npix)
+            dk          = 1 / (dx * Npix)
+            kMax        = Npix * dk / 2
+            da          = dk * wavelength * 1e3
+            angleMax    = Npix * da / 2
+            RBF         = conv_angle / da 
+            n_alpha     = angleMax / conv_angle
             
             # Print some derived values for sanity check
             if self.verbose:
@@ -74,14 +138,17 @@ class Initializer:
                 vprint(f'  conv_angle  = {conv_angle} mrad')
                 vprint(f'  Npix        = {Npix} px')
                 vprint(f'  dk          = {dk:.4f} Ang^-1')
-                vprint(f'  kMax        = {(Npix*dk/2):.4f} Ang^-1')
-                vprint(f'  alpha_max   = {(Npix*dk/2*wavelength*1000):.4f} mrad')
+                vprint(f'  kMax        = {kMax:.4f} Ang^-1')
+                vprint(f'  da          = {da:.4f} mrad')
+                vprint(f'  angleMax    = {angleMax:.4f} mrad')
+                vprint(f'  RBF         = {RBF:.4f} px (Estimated from the given calibration, NOT from the actual measurement)')
+                vprint(f'  n_alpha     = {n_alpha:.4f} (# conv_angle)')
                 vprint(f'  dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
                 vprint(f'  Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
                 vprint(f'  Real space probe extent = {dx*Npix:.4f} Ang')
 
         elif probe_illum_type == 'xray':
-            energy      = self.init_params['probe_energy']
+            energy      = self.init_params['beam_kev']
             wavelength  = 1.23984193e-9 / energy
             dx          = self.init_params['probe_dx']
             N_scan_slow = self.init_params['probe_N_scan_slow']
@@ -106,9 +173,6 @@ class Initializer:
                 vprint(f'  Ls                 = {Ls} m')
                 vprint(f'  Npix               = {Npix} px')
                 vprint(f'  dx                 = {dx} m')
-        
-        else:
-            raise KeyError(f"'probe_illum_type' = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
         
         # Save general values into init_variables
         # While they aren't necessarily "critical" for all initialization scenarios (like some variables aren't needed when we load things),
@@ -171,14 +235,14 @@ class Initializer:
         meas = self._process_meas(meas)
 
         ## We can combine these estimations into self._analyze_meas() in the future
-        # For example, get_rbf, get_detector_blur, get_meas_shifts, get_conv_angle, etc.
+        # For example, guess_radius_of_bright_field_disk, fit_cbed_pattern, get_conv_angle, etc.
         
-        # Get rbf related values (for electron ptychography only)
+        # Get RBF related values (for electron ptychography only)
         if self.init_variables.get('probe_illum_type') == 'electron':
-            rbf = get_rbf(meas)
-            suggested_probe_mask_k_radius = 2 * rbf / meas.shape[-1]
-            vprint(f"Radius of bright field disk (rbf) = {rbf:.1f} px, "
-                f"suggested probe_mask_k radius (rbf*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
+            RBF = guess_radius_of_bright_field_disk(meas.sum(0))
+            suggested_probe_mask_k_radius = 2 * RBF / meas.shape[-1]
+            vprint(f"Radius of fitted bright field disk (RBF) = {RBF:.2f} px, "
+                f"suggested probe_mask_k radius (RBF*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
 
         meas_avg_sum = meas.mean(0).sum()
         
@@ -307,7 +371,7 @@ class Initializer:
             lambd = get_EM_constants(self.init_params['probe_kv'], 'wavelength')
             unit_str = 'Ang'
         elif probe_illum_type == 'xray':
-            lambd = 1.23984193e-9 / (self.init_params['probe_energy'])
+            lambd = 1.23984193e-9 / (self.init_params['beam_kev'])
             unit_str = 'm'
         else:
             raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
@@ -522,9 +586,9 @@ class Initializer:
             meas = load_npy(meas_params['path']).astype('float32')
         elif meas_source == 'raw':
             default_shape = (
-                self.init_variables['N_scans'],
-                self.init_variables['Npix'],
-                self.init_variables['Npix'],
+                self.init_params['pos_N_scans'],
+                self.init_params['meas_Npix'],
+                self.init_params['meas_Npix'],
             )
             meas = load_raw(
                 meas_params['path'],
