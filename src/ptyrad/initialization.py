@@ -1,6 +1,7 @@
 ## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
 
 from copy import deepcopy
+from math import floor
 
 import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
@@ -12,6 +13,7 @@ from ptyrad.utils import (
     create_one_hot_mask,
     exponential_decay,
     fit_background,
+    fit_cbed_pattern,
     get_default_probe_simu_params,
     get_EM_constants,
     guess_radius_of_bright_field_disk,
@@ -38,159 +40,15 @@ class Initializer:
         self.init_params_original = deepcopy(init_params)
         self.init_variables = {} # This dict stores all the variables that will be used for the later ptychography reconstruction
         self.verbose=verbose
-        
-        self.init_calibration()
-        self.init_params_dict()
+        self.print_init_params()
     
     ##### Public methods for initializing everything #####
-    def init_calibration(self):
-        vprint("### Setting up calibration ###", verbose=self.verbose)
-
-        calib_dict  = self.init_params['meas_calibration']
-        calib_mode  = calib_dict['mode'] # One of 'dx', 'dk', 'kMax', 'da', 'angleMax', 'RBF', 'n_alpha', or 'fitRBF'
-        calib_value = calib_dict.get('value') # fitRBF doesn't need a value here
-        Npix        = self.init_params.get('meas_Npix')
-        conv_angle  = self.init_params.get('probe_conv_angle')
-        illum_type  = self.init_params.get('probe_illum_type') or 'electron'
+    def print_init_params(self):
+        ''' Print the current init_params in the Initialzier object '''
         
-        # Get wavelength
-        if illum_type == 'electron':
-            energy  = self.init_params.get('probe_kv') # kV
-            wavelength = get_EM_constants(energy, output_type='wavelength') # wavelength in Ang
-            unit_str = 'Ang'
-            
-        elif illum_type == 'xray':
-            if calib_mode in ['RBF', 'fitRBF']:
-                    raise KeyError(f"Calibration mode '{calib_mode}' is not supported for xray. Use 'dx', 'dk', 'kMax', 'da', 'angleMax', 'n_alpha'.") 
-            energy  = self.init_params.get('beam_kev') # keV
-            wavelength = 1.23984193e-9 / energy # wavelength in m, energy in keV
-            unit_str = 'm'
-            
-        else:
-            raise KeyError(f"'probe_illum_type' = {illum_type} not implemented yet, please use either 'electron' or 'xray'!")
-        
-        # Load the meas to fit RBF, note that later we'll call init_meas for the proper initialization after we've determined the dx.
-        # dx is needed to properly prepare meas due to the on-the-fly cropping / padding / resampling
-        if calib_mode == 'fitRBF' and illum_type != 'xray':
-            vprint("Loading measurement to fit RBF for the meas calibration", verbose=self.verbose)
-            vprint("")
-            
-            # Load meas and do needed geometric transformation before fitting RBF
-            meas = self._load_meas() # Might want to setup some flag to reduce redundant loading if possible
-            meas = self._meas_permute(meas, self.init_params.get('meas_permute'))
-            meas = self._meas_reshape(meas, self.init_params.get('meas_reshape'))
-            meas = self._meas_flipT(meas, self.init_params.get('meas_flipT'))   
-
-            fitRBF = guess_radius_of_bright_field_disk(meas.sum(0), thresh=calib_dict.get('thresh', 0.5))
-            vprint(f"Radius of fitted bright field disk (RBF) = {fitRBF:.2f} px")
-            calib_mode = 'RBF'
-            calib_value = fitRBF
-            
-        # Setup params to infer dx
-        params = {
-            calib_mode: calib_value,
-            'Npix': Npix,
-            'wavelength': wavelength,
-            'conv_angle': conv_angle # None if it's 'xray' mode
-        }
-        dx = infer_dx_from_params(**params)
-        
-        # Set the inferred dx
-        self.init_params['probe_dx'] = dx
-        vprint(f"Initial calibration dx (real space pixel size) set to {dx:.4f} {unit_str} with meas_calibration mode = '{calib_mode}', value = {calib_value}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
-        
-    def init_params_dict(self):
-        vprint("### Initializing init_params ###", verbose=self.verbose)
-        
-        # Note that the self.init_params can be modified by _meas_crop and other methods
-        # So we need to call this method to re-initialize the self.init_variables
-        
-        vprint("Input values are displayed below:", verbose=self.verbose)
+        vprint("init_params are displayed below:", verbose=self.verbose)
         for key, value in self.init_params.items():
             vprint(f"  {key}: {value}", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
-        
-        # TODO: The assignment and printing are a bit messy, we can improve this later
-        
-        probe_illum_type = self.init_params.get('probe_illum_type') or 'electron'
-        if  probe_illum_type == 'electron':
-            voltage     = self.init_params['probe_kv']
-            wavelength  = get_EM_constants(voltage, output_type='wavelength')
-            conv_angle  = self.init_params['probe_conv_angle']
-            Npix        = self.init_params['meas_Npix']
-            N_scan_slow = self.init_params['pos_N_scan_slow']
-            N_scan_fast = self.init_params['pos_N_scan_fast']
-            N_scans     = N_scan_slow * N_scan_fast
-            dx          = self.init_params['probe_dx']
-            dk          = 1 / (dx * Npix)
-            kMax        = Npix * dk / 2
-            da          = dk * wavelength * 1e3
-            angleMax    = Npix * da / 2
-            RBF         = conv_angle / da 
-            n_alpha     = angleMax / conv_angle
-            
-            # Print some derived values for sanity check
-            if self.verbose:
-                vprint("Derived values given input init_params:")
-                vprint(f'  kv          = {voltage} kV')    
-                vprint(f'  wavelength  = {wavelength:.4f} Ang')
-                vprint(f'  conv_angle  = {conv_angle} mrad')
-                vprint(f'  Npix        = {Npix} px')
-                vprint(f'  dk          = {dk:.4f} Ang^-1')
-                vprint(f'  kMax        = {kMax:.4f} Ang^-1')
-                vprint(f'  da          = {da:.4f} mrad')
-                vprint(f'  angleMax    = {angleMax:.4f} mrad')
-                vprint(f'  RBF         = {RBF:.4f} px (Estimated from the given calibration, NOT from the actual measurement)')
-                vprint(f'  n_alpha     = {n_alpha:.4f} (# conv_angle)')
-                vprint(f'  dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
-                vprint(f'  Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
-                vprint(f'  Real space probe extent = {dx*Npix:.4f} Ang')
-
-        elif probe_illum_type == 'xray':
-            energy      = self.init_params['beam_kev']
-            wavelength  = 1.23984193e-9 / energy
-            dx          = self.init_params['probe_dx']
-            N_scan_slow = self.init_params['probe_N_scan_slow']
-            N_scan_fast = self.init_params['probe_N_scan_fast']
-            N_scans     = N_scan_slow * N_scan_fast
-            Npix        = self.init_params['meas_Npix']
-            dRn         = self.init_params['probe_dRn']
-            Rn          = self.init_params['probe_Rn']
-            D_H         = self.init_params['probe_D_H']
-            D_FZP       = self.init_params['probe_D_FZP']
-            Ls          = self.init_params['probe_Ls']
-            dk          = 1/(dx*Npix)
-            
-            if self.verbose:
-                vprint("Derived values given input init_params:")
-                vprint(f'  x-ray beam energy  = {energy} keV')    
-                vprint(f'  wavelength         = {wavelength} m')
-                vprint(f'  outmost zone width = {dRn} m')
-                vprint(f'  Rn                 = {Rn} m')
-                vprint(f'  D_H                = {D_H} m')
-                vprint(f'  D_FZP              = {D_FZP} m')
-                vprint(f'  Ls                 = {Ls} m')
-                vprint(f'  Npix               = {Npix} px')
-                vprint(f'  dx                 = {dx} m')
-        
-        # Save general values into init_variables
-        # While they aren't necessarily "critical" for all initialization scenarios (like some variables aren't needed when we load things),
-        # But it's better to request these experimental parameters from users, since most of them should come with the measurements.
-        # We should collect all available experimental parameteres needed for minimal reconstruction from scratch
-        # And keep them with useful derived values in self.init_variables dict
-        
-        # TODO: May consider use here to centralize the initalizaiton of all useful/derived variables
-        self.init_variables['probe_illum_type'] = probe_illum_type
-        self.init_variables['Npix']             = Npix
-        self.init_variables['probe_shape']      = np.array([Npix, Npix]).astype(float) # Keep this at float
-        self.init_variables['N_scan_slow']      = N_scan_slow
-        self.init_variables['N_scan_fast']      = N_scan_fast
-        self.init_variables['N_scans']          = N_scans
-        self.init_variables['scan_step_size']   = self.init_params['pos_scan_step_size']
-        self.init_variables['dx']               = dx #   Ang
-        self.init_variables['dk']               = dk # 1/Ang
-        self.init_variables['slice_thickness']  = self.init_params['obj_slice_thickness']
         vprint(" ", verbose=self.verbose)
 
     def init_cache(self):
@@ -234,17 +92,8 @@ class Initializer:
         meas = self._load_meas()
         meas = self._process_meas(meas)
 
-        ## We can combine these estimations into self._analyze_meas() in the future
-        # For example, guess_radius_of_bright_field_disk, fit_cbed_pattern, get_conv_angle, etc.
-        
-        # Get RBF related values (for electron ptychography only)
-        if self.init_variables.get('probe_illum_type') == 'electron':
-            RBF = guess_radius_of_bright_field_disk(meas.sum(0))
-            suggested_probe_mask_k_radius = 2 * RBF / meas.shape[-1]
-            vprint(f"Radius of fitted bright field disk (RBF) = {RBF:.2f} px, "
-                f"suggested probe_mask_k radius (RBF*2/Npix) > {suggested_probe_mask_k_radius:.2f}", verbose=self.verbose)
-
-        meas_avg_sum = meas.mean(0).sum()
+        meas_avg = meas.mean(0) # This is equivalent to PACBED in electron microscopy. Note that if pad/resample are set to "on_the_fly", this would be different from the final one used for reconstruction.
+        meas_avg_sum = meas_avg.sum() # This is the total integrated intensity of the averaged diffraction pattern
         
         pad_mode = safe_get_nested(self.init_params, ['meas_pad', 'mode'])
         if pad_mode == 'on_the_fly':
@@ -254,13 +103,208 @@ class Initializer:
             meas_avg_sum += padded_int_sum # meas_avg_sum is used to normalize the probe intensity. 
             # Because the meas could gain intensity during on_the_fly padding, 
             # we need to consider the extra intensity from the padded region here. 
-            
+        
+        self.init_variables['meas_avg']     = meas_avg
         self.init_variables['meas_avg_sum'] = meas_avg_sum
         self.init_variables['measurements'] = meas
 
         # Print out some measurements statistics
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
+        vprint(" ", verbose=self.verbose)
+
+    def init_calibration(self):
+        vprint("### Setting up calibration ###", verbose=self.verbose)
+
+        calib_dict  = self.init_params['meas_calibration']
+        calib_mode  = calib_dict['mode'] # One of 'dx', 'dk', 'kMax', 'da', 'angleMax', 'RBF', 'n_alpha', or 'fitRBF'
+        calib_value = calib_dict.get('value') # fitRBF doesn't need a value here
+        Npix        = self.init_params_original.get('meas_Npix') # Load the original Npix because init_params['meas_Npix'] could have been modified in init_measurements
+        conv_angle  = self.init_params.get('probe_conv_angle')
+        illum_type  = self.init_params.get('probe_illum_type') or 'electron'
+        vprint(f"meas_calibration mode = '{calib_mode}', value = {calib_value}", verbose=self.verbose) # No need to add :.4f to value because it could be None, also it's user input so won't have too many digits
+        
+        # Load the meas_raw_avg first to ensure measurement is initialized
+        try: 
+            meas_raw_avg = self.init_variables['meas_raw_avg'] # This is the averaged measurements with only simple permuting/reshaping/flipping
+        except KeyError:
+            vprint("Warning: 'init_variables['meas_raw_avg]' not found. Initializing measurements first for calibration...", verbose=self.verbose)
+            vprint(" ", verbose=self.verbose)
+            self.init_measurements()
+            meas_raw_avg = self.init_variables['meas_raw_avg']
+        
+        if illum_type == 'electron':
+            # Get wavelength
+            energy  = self.init_params.get('probe_kv') # kV
+            wavelength = get_EM_constants(energy, output_type='wavelength') # wavelength in Ang
+            unit_str = 'Ang'
+            
+            # Run fitRBF routine for electron ptychography
+            vprint("Using loaded raw averaged measurement (before crop/pad/resample) to fit RBF as a part of the meas calibration", verbose=self.verbose)
+            fitRBF = guess_radius_of_bright_field_disk(meas_raw_avg, thresh=calib_dict.get('thresh', 0.5))
+            
+            vprint(f"Radius of fitted bright field disk (RBF) = {fitRBF:.2f} px with Npix = {meas_raw_avg.shape[-1]}")
+            vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) > {(fitRBF * 2 / Npix):.4f}", verbose=self.verbose)
+            
+            vprint("Fitting raw averaged measurement with center, radius, and Gaussian blur std as a sanity check", verbose=self.verbose)
+            vprint("Note that the fitted Gaussian blur std (detector blur) would be affected by overlapping Bragg disks", verbose=self.verbose)
+            _ = fit_cbed_pattern(meas_raw_avg, verbose=self.verbose)
+            
+            # Actually calculating dx for each calib_mode
+            if calib_mode == 'fitRBF':
+                dx = infer_dx_from_params(**{'RBF': fitRBF, 'Npix': Npix, 'wavelength': wavelength, 'conv_angle': conv_angle})
+            else:
+                dx = infer_dx_from_params(**{calib_mode: calib_value, 'Npix': Npix, 'wavelength': wavelength, 'conv_angle': conv_angle})
+                if calib_mode != 'RBF': 
+                    inferRBF = conv_angle / 1e3 * Npix * dx / wavelength # We can still infer RBF using the user provided calib value
+                    vprint(f"Using init_params, the inferred RBF (conv_angle / 1e3 * Npix * dx / wavelength) = {inferRBF:.2f} px with Npix = {meas_raw_avg.shape[-1]}", verbose=self.verbose)
+
+            if calib_mode in ['fitRBF', 'RBF']:
+                vprint("WARNING: The 'fitRBF' and 'RBF' calibration methods are highly dependent on the accuracy of user-provided experimental parameters and acquisition conditions,",verbose=self.verbose)
+                vprint("         including convergence angle, kV, dose, specimen thickness, and collection angle for the estimation of RBF.", verbose=self.verbose)
+                vprint("         For example, a 5-10% error in convergence angle is fairly common.", verbose=self.verbose)
+                vprint("         Users are strongly advised to perform proper microscope calibration to ensure accurate results.", verbose=self.verbose)
+                vprint("         These method should only be used as a rough estimate and not as a substitute for proper experimental calibration.", verbose=self.verbose)
+                
+        elif illum_type == 'xray':
+            if calib_mode in ['RBF', 'fitRBF', 'n_alpha']:
+                raise KeyError(f"Calibration mode '{calib_mode}' is not supported for xray. Use 'dx', 'dk', 'kMax', 'da', 'angleMax'.")
+            # Get wavelength
+            energy  = self.init_params.get('beam_kev') # keV
+            wavelength = 1.23984193e-9 / energy # wavelength in m, energy in keV
+            unit_str = 'm'
+            
+            # Infer dx calibration from provided values
+            dx = infer_dx_from_params(**{calib_mode: calib_value,
+                                        'Npix': Npix,
+                                        'wavelength': wavelength})
+            
+        else:
+            raise KeyError(f"'probe_illum_type' = {illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        
+        # Print the information
+
+        vprint(f"dx (real space pixel size of probe and object) set to {dx:.4f} {unit_str} with Npix = {meas_raw_avg.shape[-1]}", verbose=self.verbose)
+        
+        Npix_is_modified = False
+        
+        # Handle additional changes to dx if there's meas_crop
+        crop_ranges = self.init_params.get('meas_crop')
+        if crop_ranges is not None and len(crop_ranges) == 4:
+            if crop_ranges[-1] is not None and len(crop_ranges[-1]) == 2:
+                kx_i, kx_f = crop_ranges[-1]
+                Npix_new = kx_f - kx_i
+                dx = dx * Npix / Npix_new
+                Npix_is_modified = True
+                Npix_modified = Npix_new
+                vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_crop, Npix = {Npix_modified}")
+                if illum_type == 'electron':
+                    vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF * 2 / Npix_modified):.4f}", verbose=self.verbose)
+        
+        # Handle additional changes to dx if there's meas_pad
+        pad_cfg = self.init_params.get('meas_pad')
+        if pad_cfg is not None and pad_cfg.get('mode') is not None:
+            mode = pad_cfg['mode']  # 'precompute' or 'on_the_fly'
+            padding_type = pad_cfg['padding_type']
+            target_Npix = pad_cfg['target_Npix']
+            if Npix_is_modified:
+                Npix = Npix_modified
+            dx = dx * Npix / target_Npix
+            vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_pad (mode = {mode}, padding_type = {padding_type}), Npix = {target_Npix}")
+            if illum_type == 'electron':
+                vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF * 2 / target_Npix):.4f}", verbose=self.verbose)
+
+        # Set the final dx for internal calibration, this dx would be used for probe, pos, object_extent, H
+        self.init_params['probe_dx'] = dx
+        vprint(" ", verbose=self.verbose)
+
+    def set_variables_dict(self):
+        vprint("### Setting init_variables dict ###", verbose=self.verbose)
+        
+        # Note that the self.init_params can be modified by _meas_crop and other methods
+        # So this method is called after the entire init_measurements is done
+        # Keep in mind that crop could modify dx, Npix, scans
+        # pad could modify dx, Npix
+        # resample would only modify Npix
+        
+        probe_illum_type = self.init_params.get('probe_illum_type') or 'electron'
+        if  probe_illum_type == 'electron':
+            voltage     = self.init_params['probe_kv']
+            wavelength  = get_EM_constants(voltage, output_type='wavelength')
+            conv_angle  = self.init_params['probe_conv_angle']
+            Npix        = self.init_params['meas_Npix']
+            N_scan_slow = self.init_params['pos_N_scan_slow']
+            N_scan_fast = self.init_params['pos_N_scan_fast']
+            N_scans     = N_scan_slow * N_scan_fast
+            dx          = self.init_params['probe_dx']
+            dk          = 1 / (dx * Npix)
+            kMax        = Npix * dk / 2
+            da          = dk * wavelength * 1e3
+            angleMax    = Npix * da / 2
+            inferRBF    = conv_angle / da 
+            n_alpha     = angleMax / conv_angle
+            
+            # Print some derived values for sanity check
+            if self.verbose:
+                vprint("Derived values given input init_params:")
+                vprint(f'  kv          = {voltage} kV')    
+                vprint(f'  wavelength  = {wavelength:.4f} Ang')
+                vprint(f'  conv_angle  = {conv_angle} mrad')
+                vprint(f'  Npix        = {Npix} px')
+                vprint(f'  dk          = {dk:.4f} Ang^-1')
+                vprint(f'  kMax        = {kMax:.4f} Ang^-1')
+                vprint(f'  da          = {da:.4f} mrad')
+                vprint(f'  angleMax    = {angleMax:.4f} mrad')
+                vprint(f'  RBF         = {inferRBF:.4f} px (Inferred from the given calibration, NOT necessarily from the loaded measurement data)')
+                vprint(f'  n_alpha     = {n_alpha:.4f} (# conv_angle)')
+                vprint(f'  dx          = {dx:.4f} Ang, Nyquist-limited dmin = 2*dx = {2*dx:.4f} Ang')
+                vprint(f'  Rayleigh-limited resolution  = {(0.61*wavelength/conv_angle*1e3):.4f} Ang (0.61*lambda/alpha for focused probe )')
+                vprint(f'  Real space probe extent = {dx*Npix:.4f} Ang')
+
+        elif probe_illum_type == 'xray':
+            energy      = self.init_params['beam_kev']
+            wavelength  = 1.23984193e-9 / energy
+            dx          = self.init_params['probe_dx']
+            N_scan_slow = self.init_params['probe_N_scan_slow']
+            N_scan_fast = self.init_params['probe_N_scan_fast']
+            N_scans     = N_scan_slow * N_scan_fast
+            Npix        = self.init_params['meas_Npix']
+            dRn         = self.init_params['probe_dRn']
+            Rn          = self.init_params['probe_Rn']
+            D_H         = self.init_params['probe_D_H']
+            D_FZP       = self.init_params['probe_D_FZP']
+            Ls          = self.init_params['probe_Ls']
+            dk          = 1/(dx*Npix)
+            
+            if self.verbose:
+                vprint("Derived values given input init_params:")
+                vprint(f'  x-ray beam energy  = {energy} keV')    
+                vprint(f'  wavelength         = {wavelength} m')
+                vprint(f'  outmost zone width = {dRn} m')
+                vprint(f'  Rn                 = {Rn} m')
+                vprint(f'  D_H                = {D_H} m')
+                vprint(f'  D_FZP              = {D_FZP} m')
+                vprint(f'  Ls                 = {Ls} m')
+                vprint(f'  Npix               = {Npix} px')
+                vprint(f'  dx                 = {dx} m')
+        
+        # Save general values into init_variables
+        # While they aren't necessarily "critical" for all initialization scenarios (like some variables aren't needed when we load things),
+        # But it's better to request these experimental parameters from users, since most of them should come with the measurements.
+        # We should collect all available experimental parameteres needed for minimal reconstruction from scratch
+        # And keep them with useful derived values in self.init_variables dict
+        
+        # TODO: May consider use here to centralize the initalizaiton of all useful/derived variables
+        self.init_variables['probe_illum_type'] = probe_illum_type
+        self.init_variables['Npix']             = Npix
+        self.init_variables['probe_shape']      = np.array([Npix, Npix]).astype(float) # Keep this at float for later init_pos
+        self.init_variables['N_scan_slow']      = N_scan_slow
+        self.init_variables['N_scan_fast']      = N_scan_fast
+        self.init_variables['N_scans']          = N_scans
+        self.init_variables['scan_step_size']   = self.init_params['pos_scan_step_size']
+        self.init_variables['dx']               = dx #   Ang
+        self.init_variables['dk']               = dk # 1/Ang
+        self.init_variables['slice_thickness']  = self.init_params['obj_slice_thickness']
         vprint(" ", verbose=self.verbose)
 
     def init_probe(self):
@@ -467,9 +511,9 @@ class Initializer:
             vprint(f"Npix, DP measurements, probe, and H shapes are consistent as '{Npix}'", verbose=self.verbose)
         elif Npix == target_Npix == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding", verbose=self.verbose)
-        elif Npix == meas.shape[-2]*scale_factors[-2] == meas.shape[-1]*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+        elif Npix == floor(meas.shape[-2]*scale_factors[-2]) == floor(meas.shape[-1]*scale_factors[-1]) == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement resampling", verbose=self.verbose)
-        elif Npix == target_Npix*scale_factors[-2] == target_Npix*scale_factors[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
+        elif Npix == floor(target_Npix*scale_factors[-2]) == floor(target_Npix*scale_factors[-1]) == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
             vprint(f"Npix, DP measurements, probe, and H shapes will be consistent as '{Npix}' during on-the-fly measurement padding and then resampling", verbose=self.verbose)
         else:
             raise ValueError(f"Found inconsistency between Npix({Npix}), DP measurements({meas.shape[-2:]}), probe({probe.shape[-2:]}), and H({H.shape[-2:]}) shape")
@@ -504,6 +548,8 @@ class Initializer:
         
         self.init_cache()
         self.init_measurements()
+        self.init_calibration()
+        self.set_variables_dict()
         self.init_probe()
         self.init_pos()
         self.init_obj()
@@ -620,6 +666,7 @@ class Initializer:
         meas = self._meas_permute(meas, self.init_params.get('meas_permute'))
         meas = self._meas_reshape(meas, self.init_params.get('meas_reshape'))
         meas = self._meas_flipT(meas, self.init_params.get('meas_flipT'))
+        self.init_variables['meas_raw_avg'] = meas.mean(0) # Save this for initial dx calibration. The crop/pad/resample effect would be accounted accordingly in `init_calibration`
         
         # Operations that may change the shape of the measurements
         meas = self._meas_crop(meas, self.init_params.get('meas_crop'))
@@ -686,7 +733,7 @@ class Initializer:
         Crop measurements across 4 dimensions:
         [[slow_i, slow_f], [fast_i, fast_f], [ky_i, ky_f], [kx_i, kx_f]]
         Allows any entry to be `None` to skip cropping that axis.
-        Note that this method would also update the `self.init_params` and `self.init_variables`
+        Note that this method would also update the `self.init_params`
         """
         if crop_ranges is None:
             return meas
@@ -695,7 +742,7 @@ class Initializer:
             raise ValueError(f"Expected 4 crop ranges [N_slow, N_fast, ky, kx], got {crop_ranges}")
 
         # Reshape (N, ky, kx) -> (N_slow, N_fast, ky, kx)
-        Nslow, Nfast = self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast']
+        Nslow, Nfast = self.init_params['pos_N_scan_slow'], self.init_params['pos_N_scan_fast']
         meas = meas.reshape(Nslow, Nfast, *meas.shape[-2:])
         vprint(f"Reshaping measurements into {meas.shape} for cropping", verbose=self.verbose)
 
@@ -716,16 +763,12 @@ class Initializer:
         meas = meas[slices[0], slices[1], slices[2], slices[3]]
         vprint(f"Cropped measurements have shape (N_slow, N_fast, ky, kx) = {meas.shape}", verbose=self.verbose)
 
-        # Update internal variables and re-init self.init_params / self.init_variables
-        vprint("Update (dx, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
-        self.init_params['probe_dx'] *= self.init_params['meas_Npix'] / meas.shape[-1]
+        # Update self.init_params
+        vprint("Update (Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements cropping", verbose=self.verbose)
         self.init_params['meas_Npix'] = meas.shape[-1]
         self.init_params['pos_N_scans'] = meas.shape[0] * meas.shape[1]
         self.init_params['pos_N_scan_slow'] = meas.shape[0]
         self.init_params['pos_N_scan_fast'] = meas.shape[1]
-        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
-        self.init_params_dict()
-        vprint(" ", verbose=self.verbose)
         meas = meas.reshape(-1, meas.shape[-2], meas.shape[-1])
         vprint(f"Reshape measurements back to (N, ky, kx) = {meas.shape}", verbose=self.verbose)
 
@@ -929,13 +972,9 @@ class Initializer:
         else:
             raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
 
-        # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
-        vprint("Update (dx, Npix, N_scans, N_scan_slow, N_scan_fast) after the measurements padding", verbose=self.verbose)
-        self.init_params['probe_dx'] *= self.init_params['meas_Npix'] / meas_padded.shape[-1]
+        # Update iself.init_params similar to _meas_crop
+        vprint("Update Npix after the measurements padding", verbose=self.verbose)
         self.init_params['meas_Npix'] = meas_padded.shape[-1] # This will update Npix to target_Npix no matter what mode is used
-        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
-        self.init_params_dict()
 
         return meas
 
@@ -980,19 +1019,16 @@ class Initializer:
 
         elif mode == 'on_the_fly':
             # Don't change `meas`, just update Npix
-            Npix = int(Npix * scale_factors[-1])
+            Npix = floor(Npix * scale_factors[-1]) # To match the rounding logic with torch.nn.functional.interpolate()
             self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
 
         else:
             raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
 
-        # Update internal variables and re-init self.init_params / self.init_variables similar to _meas_crop
+        # Update self.init_params similar to _meas_crop
         self.init_params['meas_Npix'] = Npix
         vprint(f"Update Npix into '{Npix}' after the measurements resampling", verbose=self.verbose)
         vprint(f"Resampled measurements have shape (N_scans, ky, kx) = {meas.shape}", verbose=self.verbose)
-        vprint("Calling `init_params_dict()` again to update init_params", verbose=self.verbose)
-        vprint(" ", verbose=self.verbose)
-        self.init_params_dict()
 
         return meas
 
@@ -1000,7 +1036,7 @@ class Initializer:
         if source_size_std_ang is None or source_size_std_ang == 0:
             return meas
 
-        Nslow, Nfast = self.init_variables['N_scan_slow'], self.init_variables['N_scan_fast']
+        Nslow, Nfast = self.init_params['pos_N_scan_slow'], self.init_params['pos_N_scan_fast']
         meas = meas.reshape(Nslow, Nfast, *meas.shape[-2:])
         vprint(f"Reshaping measurements into {meas.shape} for adding partial spatial coherence (source size) induced blurring on measurements", verbose=self.verbose)
 
@@ -1316,7 +1352,7 @@ class Initializer:
         N_scan_fast    = simu_params.get('N_scan_fast', self.init_variables['N_scan_fast'])
         probe_shape    = simu_params.get('probe_shape', self.init_variables['probe_shape'])
         
-        vprint(f"Simulating probe positions with dx = {dx}, scan_step_size = {scan_step_size}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
+        vprint(f"Simulating probe positions with dx = {dx:.4f}, scan_step_size = {scan_step_size:.4f}, N_scan_fast = {N_scan_fast}, N_scan_slow = {N_scan_slow}", verbose=self.verbose)
         pos = scan_step_size / dx * np.array([(y, x) for y in range(N_scan_slow) for x in range(N_scan_fast)]) # (N,2), each row is (y,x)
         pos = pos - pos.mean(0) # Center scan around origin
         obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
@@ -1480,6 +1516,6 @@ class Initializer:
     def _process_obj(self, obj):
         
         # TODO: Add resampling, padding, for multislice obj
-        # Note that these methods would need to update `init_params`` and then call `init_params_dict`` for the `init_variables``
+        # Note that these methods would need to update `init_params`` and then call `set_variables_dict`` for the `init_variables``
 
         return obj

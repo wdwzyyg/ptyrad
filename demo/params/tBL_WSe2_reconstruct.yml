@@ -5,7 +5,6 @@ init_params : {
     'probe_illum_type'       : 'electron', # type: str. Choose between 'electron' or 'xray'
     'probe_kv'               : 80, # type: float, unit: kV. Acceleration voltage for relativistic electron wavelength calculation
     'probe_conv_angle'       : 24.9, # type: float, unit: mrad. Semi-convergence angle for probe-forming aperture
-    # 'probe_dx'               : 0.1494, # type: float, unit: Ang. Real space pixel size calibration at specimen plane (object, probe, and probe positions share the same pixel size)
     'probe_defocus'          : 0, # type: float, unit: Ang. Defocus (-C1) aberration coefficient for the probe. Positive defocus here refers to actual underfocus or weaker lens strength following Kirkland/abtem/ptychoshelves convention
     'probe_c3'               : 0, # type: float, unit: Ang. 3rd-order spherical aberration coefficient (C3) for the simulated probe
     'probe_c5'               : 0, # type: float, unit: Ang. 5th-order spherical aberration coefficient (C5) for the simulated probe
@@ -14,7 +13,7 @@ init_params : {
     'pos_N_scan_slow'        : 128, # type: int, unit: #. Number of scan position along slow scan direction. Usually it's the vertical direction of acquisition GUI
     'pos_N_scan_fast'        : 128, # type: int, unit: #. Number of scan position along fast scan direction. usually it's the horizontal direction of acquisition GUI
     'pos_scan_step_size'     : 0.4290, # type: float, unit: Ang. Step size between probe positions in a rectangular raster scan pattern
-    'meas_calibration'       : {'mode': 'fitRBF'}, # type: dict. 
+    'meas_calibration'       : {'mode': 'fitRBF', 'value': null}, # {'mode': 'dx', 'value': 0.1494}, # type: dict. 'mode' can be 'dx', 'dk', 'kMax', 'da', 'angleMax', 'n_alpha', 'RBF', and 'fitRBF'. All modes requires a scalar 'value' input except 'fitRBF'. The units are Ang, 1/Ang and mrad for electron.
     # Model complexity
     'probe_pmode_max'        : 6, # type: int, unit: #. Maximum number of mixed probe modes. Set to pmode_max = 1 for single probe state, pmode_max > 1 for mixed-state probe during initialization. For simulated initial object, it'll be generated with the specified number of probe modes. For loaded probe, the pmode dimension would be capped at this number
     'probe_pmode_init_pows'  : [0.02], # type: list of 1 or a few (pmode_max) floats. Initial power for each additional probe modes. If set at [0.02], all additional probe modes would contain 2% of the total intensity. sum(pmode_init_pows) must be 1 if more than len(pmode_init_pows) > 1. See 'utils.make_mixed_probe' for more details

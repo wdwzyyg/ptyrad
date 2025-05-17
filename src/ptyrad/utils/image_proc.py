@@ -167,12 +167,11 @@ def fit_cbed_pattern(image: np.ndarray, initial_guess=None, verbose=False):
         dict: Dictionary containing the fitted parameters as dict['center', 'radius', 'std'].
     """
     Npix = image.shape[0]
+    image = image / image.max() # Make sure it's normalized to max at 1 like our mask
     assert image.shape[0] == image.shape[1], "Only square images supported for now."
 
     def loss(params):
         y0, x0, r, std = params  # Note: y0, x0 order to match center=(y,x) in make_gaussian_mask
-        if not (0 <= y0 < Npix and 0 <= x0 < Npix and 1 <= r <= Npix/2 and 0.1 <= std <= 20):
-            return np.inf  # outside valid parameter space
         model = make_gaussian_mask(Npix, radius=r, std=std, center=(y0, x0))
         return np.mean((image - model) ** 2)  # Mean Squared Error
 
@@ -189,37 +188,36 @@ def fit_cbed_pattern(image: np.ndarray, initial_guess=None, verbose=False):
             y0_guess, x0_guess = Npix / 2, Npix / 2
             
         r_guess = guess_radius_of_bright_field_disk(image)
-        std_guess = 1.0  # Start with a reasonable Gaussian blur
+        std_guess = 0.5  # Start with a reasonable Gaussian blur
     else:
         # Use provided initial guess
         center = initial_guess.get("center", (Npix / 2, Npix / 2))
         y0_guess, x0_guess = center
         r_guess = initial_guess.get("radius", Npix / 4)
-        std_guess = initial_guess.get("std", 2.0)
+        std_guess = initial_guess.get("std", 0.5)
     
     p0 = [y0_guess, x0_guess, r_guess, std_guess]
     
-    if verbose:
-        vprint(f"Initial guess: center=({y0_guess:.1f}, {x0_guess:.1f}), radius={r_guess:.1f}, std={std_guess:.1f}")
+    vprint(f"Initial guess: center=({y0_guess:.2f}, {x0_guess:.2f}), radius={r_guess:.2f}, Gaussian blur std={std_guess:.2f}", verbose=verbose)
         
     # Use tighter bounds for optimization
-    bounds = [(0, Npix-1), (0, Npix-1), (1, Npix/2), (0.1, 5)]
+    bounds = [(0, Npix-1), (0, Npix-1), (1, Npix/2), (0, 5)]
 
     # Run optimization with more iterations and a higher tolerance
     options = {'maxiter': 1000, 'disp': verbose}
     result = minimize(loss, p0, bounds=bounds, method='L-BFGS-B', options=options)
-
+    counts = 1
+    
     # Try multiple starting points if the first optimization doesn't succeed
     if not result.success or result.fun > 0.01:
-        if verbose:
-            vprint("First optimization attempt didn't converge well, trying different starting points")
+        vprint("First optimization attempt didn't converge well, trying different starting points", verbose=verbose)
         
         # Try a few different starting points
         best_result = result
-        for shift_y in [-Npix/10, 0, Npix/10]:
-            for shift_x in [-Npix/10, 0, Npix/10]:
-                if shift_y == 0 and shift_x == 0:
-                    continue  # Skip the case we already tried
+        shift_range = np.linspace(-Npix/10,  Npix/10, 10)
+        for shift_y in shift_range:
+            for shift_x in shift_range:
+                counts += 1
                 
                 new_p0 = [y0_guess + shift_y, x0_guess + shift_x, r_guess, std_guess]
                 new_result = minimize(loss, new_p0, bounds=bounds, method='L-BFGS-B', options=options)
@@ -227,11 +225,12 @@ def fit_cbed_pattern(image: np.ndarray, initial_guess=None, verbose=False):
                 if new_result.fun < best_result.fun:
                     best_result = new_result
                     if verbose:
-                        vprint(f"Found better solution with starting point at ({new_p0[0]:.1f}, {new_p0[1]:.1f})")
-        
+                        vprint(f"Found better solution with starting point at ({new_p0[0]:.2f}, {new_p0[1]:.2f})")
+        vprint(f"Total fitting trials with different initial guesses = {counts}", verbose=verbose)
         result = best_result
 
     y0, x0, r, std = result.x
+    vprint(f"Final fit: center=({y0:.2f}, {x0:.2f}), radius={r:.2f}, Gaussian blur std={std:.2f}", verbose=verbose)
     return {
         "center": (y0, x0),
         "radius": r,
