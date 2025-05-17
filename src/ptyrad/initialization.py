@@ -143,7 +143,7 @@ class Initializer:
             vprint("Using loaded raw averaged measurement (before crop/pad/resample) to fit RBF as a part of the meas calibration", verbose=self.verbose)
             fitRBF = guess_radius_of_bright_field_disk(meas_raw_avg, thresh=calib_dict.get('thresh', 0.5))
             
-            vprint(f"Radius of fitted bright field disk (RBF) = {fitRBF:.2f} px with Npix = {meas_raw_avg.shape[-1]}")
+            vprint(f"Radius of fitted bright field disk (RBF) = {fitRBF:.2f} px with Npix = {meas_raw_avg.shape[-1]}", verbose=self.verbose)
             vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) > {(fitRBF * 2 / Npix):.4f}", verbose=self.verbose)
             
             vprint("Fitting raw averaged measurement with center, radius, and Gaussian blur std as a sanity check", verbose=self.verbose)
@@ -197,7 +197,7 @@ class Initializer:
                 dx = dx * Npix / Npix_new
                 Npix_is_modified = True
                 Npix_modified = Npix_new
-                vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_crop, Npix = {Npix_modified}")
+                vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_crop, Npix = {Npix_modified}", verbose=self.verbose)
                 if illum_type == 'electron':
                     vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF * 2 / Npix_modified):.4f}", verbose=self.verbose)
         
@@ -210,7 +210,7 @@ class Initializer:
             if Npix_is_modified:
                 Npix = Npix_modified
             dx = dx * Npix / target_Npix
-            vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_pad (mode = {mode}, padding_type = {padding_type}), Npix = {target_Npix}")
+            vprint(f"Update dx to {dx:.4f} {unit_str} due to meas_pad (mode = {mode}, padding_type = {padding_type}), Npix = {target_Npix}", verbose=self.verbose)
             if illum_type == 'electron':
                 vprint(f"Suggested probe_mask_k radius (RBF*2/Npix) changes to > {(fitRBF * 2 / target_Npix):.4f}", verbose=self.verbose)
 

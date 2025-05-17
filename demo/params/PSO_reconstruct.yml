@@ -73,6 +73,7 @@ hypertune_params : {
         'slr'        : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
         'tlr'        : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
         'dzlr'       : {'state': false, 'suggest': 'float', 'kwargs': {'low': 1.0e-4, 'high': 1.0e-2, 'step': null, 'log': true}},
+        'dx'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 0.0900, 'high': 0.1100, 'step': null, 'log': false}},
         'pmode_max'  : {'state': false, 'suggest': 'int', 'kwargs': {'low': 1, 'high': 8, 'step': 1, 'log': false}},
         'conv_angle' : {'state': false, 'suggest': 'float', 'kwargs': {'low': 24, 'high': 26, 'step': 1, 'log': false}},
         'defocus'    : {'state': false, 'suggest': 'float', 'kwargs': {'low': -50, 'high': 50, 'step': 0.1, 'log': false}},

@@ -871,7 +871,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     """
     import optuna
     
-    init.verbose = False
+    init.verbose = verbose # This would affect the initialization printing for each hypertune trials
     params = deepcopy(params)
         
     # Parse the recon_params
@@ -892,7 +892,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     
     ## Currently only re-initialize the required parts for performance, but once there're too many correlated params need to be re-initialized,
     ## we might put the entire initialization inside optuna_objective for readability, although init_measurements for every trial would be a large overhead.
-    ## For example, re-initialize `dx` would require re-initializing the measurements if there's meas_crop, meas_pad, meas_resample that involves updating `dx`.
+
+    ## TODO After the refactoring of `init_calibration` and better dx setting logic, it's possible to include more optimizable params without exploding the logic here
             
     # Batch size
     if tune_params['batch_size']['state']:
@@ -915,6 +916,18 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             vparams = tune_params[vname]
             params['model_params']['update_params'][lr_to_tensor[vname]]['lr'] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
     
+    # dx (calibration)
+    if tune_params['dx']['state']:
+        vname = 'dx'
+        vparams = tune_params[vname]
+        init.init_params['meas_calib'] = {'mode': vname, 'value': get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])}
+        init.init_calibration()
+        init.set_variables_dict()
+        init.init_probe()
+        init.init_pos()
+        init.init_obj()
+        init.init_H()
+        
     # probe_params (pmode_max, conv_angle, defocus, c3, c5)
     remake_probe = False
     for vname in ['pmode_max', 'conv_angle', 'defocus', 'c3', 'c5']:
