@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from numpy.fft import fft2, fftshift, ifftshift
 
-from ptyrad.utils import make_sigmoid_mask, vprint
+from ptyrad.utils import make_sigmoid_mask, safe_filename, vprint
 
 def plot_sigmoid_mask(Npix, relative_radius, relative_width, img=None, show_circles=False):
     """ Plot a sigmoid mask overlay on img with a line profile """
@@ -427,7 +427,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_loss.show()
         if save_fig:
-            fig_loss.savefig(output_path + f"/summary_loss{collate_str}{iter_str}.png")
+            fig_loss.savefig(safe_filename(output_path + f"/summary_loss{collate_str}{iter_str}.png"))
     
     # Forward pass
     if 'forward' in selected_figs or 'all' in selected_figs:
@@ -439,7 +439,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_forward.show()
         if save_fig:
-            fig_forward.savefig(output_path + f"/summary_forward_pass{collate_str}{iter_str}.png")
+            fig_forward.savefig(safe_filename(output_path + f"/summary_forward_pass{collate_str}{iter_str}.png"))
     
     # Probe modes in real and reciprocal space
     init_probe = init_variables['probe']
@@ -451,7 +451,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_probe_modes_real_amp.show()
         if save_fig:
-            fig_probe_modes_real_amp.savefig(output_path + f"/summary_probe_modes_real_amp{collate_str}{iter_str}.png",bbox_inches='tight')
+            fig_probe_modes_real_amp.savefig(safe_filename(output_path + f"/summary_probe_modes_real_amp{collate_str}{iter_str}.png"),bbox_inches='tight')
             
 
     if 'probe_k_amp' in selected_figs or 'all' in selected_figs:
@@ -460,7 +460,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_probe_modes_fourier_amp.show()
         if save_fig:
-            fig_probe_modes_fourier_amp.savefig(output_path + f"/summary_probe_modes_fourier_amp{collate_str}{iter_str}.png",bbox_inches='tight')
+            fig_probe_modes_fourier_amp.savefig(safe_filename(output_path + f"/summary_probe_modes_fourier_amp{collate_str}{iter_str}.png"),bbox_inches='tight')
             
 
     if 'probe_k_phase' in selected_figs or 'all' in selected_figs:
@@ -469,7 +469,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_probe_modes_fourier_phase.show()
         if save_fig:
-            fig_probe_modes_fourier_phase.savefig(output_path + f"/summary_probe_modes_fourier_phase{collate_str}{iter_str}.png",bbox_inches='tight')
+            fig_probe_modes_fourier_phase.savefig(safe_filename(output_path + f"/summary_probe_modes_fourier_phase{collate_str}{iter_str}.png"),bbox_inches='tight')
             
             
     # Scan positions and tilts
@@ -484,7 +484,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_scan_pos.show()
         if save_fig:
-            fig_scan_pos.savefig(output_path + f"/summary_scan_pos{collate_str}{iter_str}.png")
+            fig_scan_pos.savefig(safe_filename(output_path + f"/summary_scan_pos{collate_str}{iter_str}.png"))
     
     if 'tilt' in selected_figs or 'all' in selected_figs:
         fig_obj_tilts, ax = plot_obj_tilts(pos=pos[indices], tilts=tilts[indices], show_fig=False, pass_fig=True)
@@ -492,14 +492,14 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_obj_tilts.show()
         if save_fig:
-            fig_obj_tilts.savefig(output_path + f"/summary_obj_tilts{collate_str}{iter_str}.png")
+            fig_obj_tilts.savefig(safe_filename(output_path + f"/summary_obj_tilts{collate_str}{iter_str}.png"))
             
     if 'tilt_avg' in selected_figs or 'all' in selected_figs:
         fig_avg_obj_tilts = plot_obj_tilts_avg(model.avg_tilt_iters, last_n_iters=10, show_fig=show_fig, pass_fig=True)
         if show_fig:
             fig_avg_obj_tilts.show()
         if save_fig:
-            fig_avg_obj_tilts.savefig(output_path + f"/summary_obj_tilts_avg{collate_str}{iter_str}.png")
+            fig_avg_obj_tilts.savefig(safe_filename(output_path + f"/summary_obj_tilts_avg{collate_str}{iter_str}.png"))
     
     # Slice thickness
     if 'slice_thickness' in selected_figs or 'all' in selected_figs:
@@ -507,7 +507,7 @@ def plot_summary(output_path, model, niter, indices, init_variables, selected_fi
         if show_fig:
             fig_slice_thickness.show()
         if save_fig:
-            fig_slice_thickness.savefig(output_path + f"/summary_slice_thickness{collate_str}{iter_str}.png")
+            fig_slice_thickness.savefig(safe_filename(output_path + f"/summary_slice_thickness{collate_str}{iter_str}.png"))
     
     # Close figures after saving
     plt.close('all')

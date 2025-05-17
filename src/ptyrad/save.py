@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from tifffile import imwrite
 
-from ptyrad.utils import get_date, normalize_by_bit_depth, vprint
+from ptyrad.utils import get_date, normalize_by_bit_depth, safe_filename, vprint
 
 
 def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses):
@@ -253,6 +253,7 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
     
     output_path += postfix
     
+    output_path = safe_filename(output_path)
     os.makedirs(output_path, exist_ok=True)
     vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
     return output_path
@@ -304,7 +305,7 @@ def save_results(output_path, model, params, optimizer, niter, indices, batch_lo
     
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses)
-        torch.save(save_dict, os.path.join(output_path, f"model{collate_str}{iter_str}.pt"))
+        torch.save(save_dict, safe_filename(os.path.join(output_path, f"model{collate_str}{iter_str}.pt")))
     probe      = model.get_complex_probe_view() 
     probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
     probe_prop = model.get_propagated_probe([0]).permute(0,2,1,3)
@@ -331,9 +332,9 @@ def save_results(output_path, model, params, optimizer, niter, indices, batch_lo
         else:
             bit_str = ''
         if 'probe' in save_result_list:
-            imwrite(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(probe_amp, bit))
+            imwrite(safe_filename(os.path.join(output_path, f"probe_amp{bit_str}{collate_str}{iter_str}.tif")), normalize_by_bit_depth(probe_amp, bit))
         if 'probe_prop' in save_result_list:
-            imwrite(os.path.join(output_path, f"probe_prop_amp{bit_str}{collate_str}{iter_str}.tif"), normalize_by_bit_depth(prop_p_amp, bit))
+            imwrite(safe_filename(os.path.join(output_path, f"probe_prop_amp{bit_str}{collate_str}{iter_str}.tif")), normalize_by_bit_depth(prop_p_amp, bit))
         for fov in result_modes['FOV']:
             if fov == 'crop':
                 fov_str = '_crop'
@@ -357,26 +358,26 @@ def save_results(output_path, model, params, optimizer, niter, indices, batch_lo
                     
                     if omode == 1 and zslice == 1:
                         if dim == 2: 
-                            imwrite(os.path.join(output_path, f"objp{postfix_str}.tif"),              normalize_by_bit_depth(objp_crop[0,0], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp{postfix_str}.tif")),              normalize_by_bit_depth(objp_crop[0,0], bit))
                     elif omode == 1 and zslice > 1:
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"objp_zstack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[0,:], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_zstack{postfix_str}.tif")),       normalize_by_bit_depth(objp_crop[0,:], bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"objp_zsum{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_zsum{postfix_str}.tif")),         normalize_by_bit_depth(objp_crop[0,:].sum(0), bit))
                     elif omode > 1 and zslice == 1:
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"objp_ostack{postfix_str}.tif"),       normalize_by_bit_depth(objp_crop[:,0], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_ostack{postfix_str}.tif")),       normalize_by_bit_depth(objp_crop[:,0], bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"objp_omean{postfix_str}.tif"),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
-                            imwrite(os.path.join(output_path, f"objp_ostd{postfix_str}.tif"),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_omean{postfix_str}.tif")),        normalize_by_bit_depth(objp_crop[:,0].mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_ostd{postfix_str}.tif")),         normalize_by_bit_depth(objp_crop[:,0].std(0), bit))
                     else:
                         if dim == 4:
-                            imwrite(os.path.join(output_path, f"objp_4D{postfix_str}.tif"),           normalize_by_bit_depth(objp_crop[:,:], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_4D{postfix_str}.tif")),           normalize_by_bit_depth(objp_crop[:,:], bit))
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif"),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
-                            imwrite(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_ostack_zsum{postfix_str}.tif")),  normalize_by_bit_depth(objp_crop[:,:].sum(1), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_omean_zstack{postfix_str}.tif")), normalize_by_bit_depth(objp_crop[:,:].mean(0), bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif"),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"objp_omean_zsum{postfix_str}.tif")),   normalize_by_bit_depth(objp_crop[:,:].mean(0).sum(0), bit))
                             
             if any(keyword in save_result_list for keyword in ['obja']):
                 # TODO: For omode_occu != 'uniform', we should do a weighted sum across omode instead
@@ -385,26 +386,26 @@ def save_results(output_path, model, params, optimizer, niter, indices, batch_lo
                     
                     if omode == 1 and zslice == 1:
                         if dim == 2: 
-                            imwrite(os.path.join(output_path, f"obja{postfix_str}.tif"),              normalize_by_bit_depth(obja_crop[0,0], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja{postfix_str}.tif")),              normalize_by_bit_depth(obja_crop[0,0], bit))
                     elif omode == 1 and zslice > 1:
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"obja_zstack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[0,:], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_zstack{postfix_str}.tif")),       normalize_by_bit_depth(obja_crop[0,:], bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"obja_zmean{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].mean(0), bit))
-                            imwrite(os.path.join(output_path, f"obja_zprod{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[0,:].prod(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_zmean{postfix_str}.tif")),         normalize_by_bit_depth(obja_crop[0,:].mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_zprod{postfix_str}.tif")),         normalize_by_bit_depth(obja_crop[0,:].prod(0), bit))
                     elif omode > 1 and zslice == 1:
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"obja_ostack{postfix_str}.tif"),       normalize_by_bit_depth(obja_crop[:,0], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_ostack{postfix_str}.tif")),       normalize_by_bit_depth(obja_crop[:,0], bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"obja_omean{postfix_str}.tif"),        normalize_by_bit_depth(obja_crop[:,0].mean(0), bit))
-                            imwrite(os.path.join(output_path, f"obja_ostd{postfix_str}.tif"),         normalize_by_bit_depth(obja_crop[:,0].std(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_omean{postfix_str}.tif")),        normalize_by_bit_depth(obja_crop[:,0].mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_ostd{postfix_str}.tif")),         normalize_by_bit_depth(obja_crop[:,0].std(0), bit))
                     else:
                         if dim == 4:
-                            imwrite(os.path.join(output_path, f"obja_4D{postfix_str}.tif"),           normalize_by_bit_depth(obja_crop[:,:], bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_4D{postfix_str}.tif")),           normalize_by_bit_depth(obja_crop[:,:], bit))
                         if dim == 3:
-                            imwrite(os.path.join(output_path, f"obja_ostack_zmean{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].mean(1), bit))
-                            imwrite(os.path.join(output_path, f"obja_ostack_zprod{postfix_str}.tif"),  normalize_by_bit_depth(obja_crop[:,:].prod(1), bit))
-                            imwrite(os.path.join(output_path, f"obja_omean_zstack{postfix_str}.tif"), normalize_by_bit_depth(obja_crop[:,:].mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_ostack_zmean{postfix_str}.tif")),  normalize_by_bit_depth(obja_crop[:,:].mean(1), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_ostack_zprod{postfix_str}.tif")),  normalize_by_bit_depth(obja_crop[:,:].prod(1), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_omean_zstack{postfix_str}.tif")), normalize_by_bit_depth(obja_crop[:,:].mean(0), bit))
                         if dim == 2:
-                            imwrite(os.path.join(output_path, f"obja_omean_zmean{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).mean(0), bit))
-                            imwrite(os.path.join(output_path, f"obja_omean_zprod{postfix_str}.tif"),   normalize_by_bit_depth(obja_crop[:,:].mean(0).prod(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_omean_zmean{postfix_str}.tif")),   normalize_by_bit_depth(obja_crop[:,:].mean(0).mean(0), bit))
+                            imwrite(safe_filename(os.path.join(output_path, f"obja_omean_zprod{postfix_str}.tif")),   normalize_by_bit_depth(obja_crop[:,:].mean(0).prod(0), bit))

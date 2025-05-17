@@ -1,6 +1,7 @@
 import io
 import logging
 import os
+import platform
 from time import perf_counter
 
 import torch
@@ -365,3 +366,93 @@ def parse_hypertune_params_to_str(hypertune_params):
             hypertune_str += f"_{key}_{value}"
     
     return hypertune_str
+
+def safe_filename(filepath, verbose=False):
+    """
+    Ensures a filepath is safe across platforms by:
+    1. Converting relative paths to absolute
+    2. Limiting individual components to 255 characters
+    3. Handling total path length restrictions
+    4. Providing feedback when corrections are made
+    
+    Args:
+        filepath: The original filepath to make safe
+        verbose: Whether to print messages about corrections (default: False)
+    
+    Returns:
+        A modified filepath that should work across platforms
+    """
+    # Store original path for reporting
+    original_path = filepath
+    
+    # Handle relative paths by converting to absolute
+    filepath = os.path.abspath(filepath)
+    
+    # Platform detection
+    is_windows = platform.system() == 'Windows'
+    
+    # Check if path already has long path prefix on Windows
+    has_long_prefix = is_windows and filepath.startswith("\\\\?\\")
+    
+    # Early return if path is already valid
+    if not has_long_prefix:
+        # Check individual component limit (255 chars)
+        components_valid = True
+        sep = '\\' if is_windows else '/'
+        parts = filepath.split(sep)
+        for part in parts:
+            if len(part) > 255:
+                components_valid = False
+                break
+        
+        # Check total path length limit
+        length_valid = (len(filepath) <= 260) if is_windows else True
+        
+        # If everything is valid, return the absolute path
+        if components_valid and length_valid:
+            return filepath
+    
+    # Path requires correction - continue with fixing logic
+    # Path separator based on platform
+    sep = '\\' if is_windows else '/'
+    
+    # Split path into directory and filename
+    directory, filename = os.path.split(filepath)
+    
+    # Track if any changes were made
+    changes_made = False
+    
+    # Limit filename component to 255 chars (preserve extension)
+    if len(filename) > 255:
+        changes_made = True
+        name, ext = os.path.splitext(filename)
+        max_name_length = 255 - len(ext)
+        filename = name[:max_name_length] + ext
+    
+    # Handle directory components (limit each to 255 chars)
+    if directory:
+        parts = directory.split(sep)
+        for i, part in enumerate(parts):
+            if len(part) > 255:
+                changes_made = True
+                parts[i] = part[:255]
+        directory = sep.join(parts)
+    
+    # Recombine path
+    result_path = os.path.join(directory, filename)
+    
+    # Handle Windows total path length
+    if is_windows and len(result_path) > 260:
+        changes_made = True
+        # If still too long, apply the \\?\ prefix for long path support
+        if not result_path.startswith("\\\\?\\"):
+            # Ensure we're working with an absolute path for the \\?\ prefix
+            result_path = "\\\\?\\" + os.path.abspath(result_path)
+    
+    # Provide feedback if corrections were made
+    if changes_made and verbose:
+        print(f"Path corrected for compatibility:")
+        print(f"  Original: {original_path}")
+        print(f"  Corrected: {result_path}")
+    
+    return result_path

@@ -20,6 +20,7 @@ from ptyrad.utils import (
     get_date,
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
+    safe_filename,
     time_sync,
     vprint,
 )
@@ -371,7 +372,7 @@ def prepare_recon(model, init, params):
     # Create the output path, save fig_grouping, and copy params file
     if SAVE_ITERS is not None:
         output_path = make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes, verbose=verbose)
-        fig_grouping.savefig(output_path + "/summary_pos_grouping.png")
+        fig_grouping.savefig(safe_filename(output_path + "/summary_pos_grouping.png"))
         if copy_params and not if_hypertune:
             # Save params.yml to separate reconstruction folder for normal mode. Hypertune mode params copying is handled at hypertune()
             copy_params_to_dir(params_path, output_path, params, verbose=verbose)
@@ -885,6 +886,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     # Parse the hypertune_params
     hypertune_params  = params['hypertune_params']
     collate_results   = hypertune_params['collate_results']
+    append_params     = hypertune_params['append_params']
     error_metric      = hypertune_params['error_metric']
     tune_params       = hypertune_params['tune_params']
     trial_id = 't' + str(trial.number).zfill(4)
@@ -1001,7 +1003,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
             if trial.should_prune():
             
                 # Save the current results of the pruned trials
-                collate_str = f"_error_{optuna_error:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
+                params_str = parse_hypertune_params_to_str(trial.params) if append_params else ''
+                collate_str = f"_error_{optuna_error:.5f}_{trial_id}{params_str}"
                 if collate_results:
                     save_results(output_dir, model, params, optimizer, niter, indices, batch_losses, collate_str=collate_str)
                     plot_summary(output_dir, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
@@ -1012,7 +1015,8 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         optuna_error = compute_optuna_error(model, indices, error_metric)
     
     ## Saving collate results and figs of the finished trials
-    collate_str = f"_error_{optuna_error:.5f}_{trial_id}{parse_hypertune_params_to_str(trial.params)}"
+    params_str = parse_hypertune_params_to_str(trial.params) if append_params else ''
+    collate_str = f"_error_{optuna_error:.5f}_{trial_id}{params_str}"
     if collate_results:
         save_results(output_dir, model, params, optimizer, niter, indices, batch_losses, collate_str=collate_str)
         plot_summary(output_dir, model, niter, indices, init.init_variables, selected_figs=selected_figs, collate_str=collate_str, show_fig=False, save_fig=True, verbose=verbose)
