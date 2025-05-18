@@ -13,6 +13,7 @@ def set_accelerator():
 
     try:
         from accelerate import Accelerator, DataLoaderConfiguration, DistributedDataParallelKwargs
+        from accelerate.state import DistributedType
         dataloader_config  = DataLoaderConfiguration(split_batches=True) # This supress the warning when we do `Accelerator(split_batches=True)`
         kwargs_handlers    = [DistributedDataParallelKwargs(find_unused_parameters=False)] # This avoids the error `RuntimeError: Expected to have finished reduction in the prior iteration before starting a new one. This error indicates that your module has parameters that were not used in producing loss.` We don't necessarily need this if we carefully register parameters (used in forward) and buffer in the `model`.
         accelerator        = Accelerator(dataloader_config=dataloader_config, kwargs_handlers=kwargs_handlers)
@@ -21,6 +22,10 @@ def set_accelerator():
         vprint(f"Accelerator.num_process      = {accelerator.num_processes}")
         vprint(f"Accelerator.mixed_precision  = {accelerator.mixed_precision}")
         
+        if accelerator.distributed_type == DistributedType.NO and accelerator.mixed_precision == "no":
+            vprint("'accelerate' is available but NOT using distributed mode or mixed precision")
+            vprint("If you want to utilize 'accelerate' for multiGPU or mixed precision, ")
+            vprint("Run `accelerate launch --num_processes=2 --mixed_precision=fp16 ptyrad run <PTYRAD_ARGUMENTS>` in your terminal")
     except ImportError:
         vprint("### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
         accelerator = None
@@ -130,9 +135,6 @@ class CustomLogger:
             self.file_handler = None
 
 def print_system_info():
-    
-    import importlib
-    import importlib.metadata
     import os
     import platform
     import sys
@@ -171,9 +173,26 @@ def print_system_info():
             vprint(f"Available Memory: {mem.available / (1024 ** 3):.2f} GB")
         except ImportError:
             vprint("Memory information will be available after `conda install conda-forge::psutil`")
+    vprint(" ")
+            
+    # GPU information
+    print_gpu_info()
+    vprint(" ")
+    
+    # Python version and executable
+    vprint("### Python information ###")
+    vprint(f"Python Executable: {sys.executable}")
+    vprint(f"Python Version: {sys.version}")
+    vprint(" ")
+    
+    # Packages information (numpy, PyTorch, Optuna, Accelerate, PtyRAD)
+    print_packages_info()
+    vprint(" ")
+
+def print_gpu_info():
+    vprint("### GPU information ###")
     try:
         import torch
-        # GPU information
         if torch.backends.cuda.is_built() and torch.cuda.is_available():
             vprint(f"CUDA Available: {torch.cuda.is_available()}")
             vprint(f"CUDA Version: {torch.version.cuda}")
@@ -181,16 +200,20 @@ def print_system_info():
         elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
             vprint(f"MPS Available: {torch.backends.mps.is_available()}")
         elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
-            vprint("GPU support built with PyTorch, but could not find any GPU device.")
+            vprint("WARNING: GPU support built with PyTorch, but could not find any GPU device.")
+            vprint("         This may result in very slow performance of PtyRAD.")
         else:
-            vprint("No GPU backend (CUDA or MPS) built into this PyTorch install.")
-            vprint("Install a PyTorch version with GPU support if you want to utilize GPUs.")
+            vprint("WARNING: No GPU backend (CUDA or MPS) built into this PyTorch install.")
+            vprint("         This may result in very slow performance of PtyRAD.")
+            vprint("         Please consider reinstalling PyTorch using `pytorch-cuda=X.Y` for GPU support.")
     except ImportError:
-        vprint("No GPU information because PyTorch can't be imported")
+        vprint("WARNING: No GPU information because PyTorch can't be imported.")
+        vprint("         Please install PyTorch because it's the crucial dependency of PtyRAD.")
     
-    # Python version and executable
-    vprint(f"Python Executable: {sys.executable}")
-    vprint(f"Python Version: {sys.version}")
+def print_packages_info():
+    import importlib
+    import importlib.metadata
+    vprint("### Packages information ###")
     
     # Print package versions
     packages = [
@@ -232,8 +255,6 @@ def print_system_info():
         vprint("PtyRAD imported, but no __version__ attribute found.")
     except Exception as e:
         vprint(f"Error retrieving version for PtyRAD: {e}")
-    
-    vprint(" ")
 
 def set_gpu_device(gpuid=0):
     vprint("### Setting GPU Device ###")

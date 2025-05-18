@@ -18,6 +18,7 @@ from .common import (  # noqa: F401
     get_date,
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
+    print_gpu_info,
     print_system_info,
     safe_filename,
     safe_get_nested,

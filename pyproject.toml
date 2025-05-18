@@ -20,6 +20,9 @@ classifiers = [
 # This pyproject.toml is prepared solely to register the `ptyrad` via `pip install -e .` for more robust import
 dependencies = []
 
+[project.scripts]
+ptyrad = "ptyrad.cli:main"
+
 [project.urls]
 "Homepage" = "https://github.com/chiahao3/ptyrad"
 "Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"
