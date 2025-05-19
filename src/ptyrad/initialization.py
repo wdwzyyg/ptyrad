@@ -80,7 +80,7 @@ class Initializer:
                 vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
                 self.cache_contents = load_hdf5(self.cache_path, dataset_key=None)
             else:
-                raise KeyError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
+                raise ValueError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
         vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
         vprint(f"use_cached_probe = {self.use_cached_probe}", verbose=self.verbose)
         vprint(f"use_cached_pos   = {self.use_cached_pos}", verbose=self.verbose)
@@ -168,7 +168,7 @@ class Initializer:
                 
         elif illum_type == 'xray':
             if calib_mode in ['RBF', 'fitRBF', 'n_alpha']:
-                raise KeyError(f"Calibration mode '{calib_mode}' is not supported for xray. Use 'dx', 'dk', 'kMax', 'da', 'angleMax'.")
+                raise ValueError(f"Calibration mode '{calib_mode}' is not supported for xray. Use 'dx', 'dk', 'kMax', 'da', 'angleMax'.")
             # Get wavelength
             energy  = self.init_params.get('beam_kev') # keV
             wavelength = 1.23984193e-9 / energy # wavelength in m, energy in keV
@@ -180,7 +180,7 @@ class Initializer:
                                         'wavelength': wavelength})
             
         else:
-            raise KeyError(f"'probe_illum_type' = {illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+            raise ValueError(f"'probe_illum_type' = {illum_type} not implemented yet, please use either 'electron' or 'xray'!")
         
         # Print the information
 
@@ -393,7 +393,7 @@ class Initializer:
             omode = self.init_params['obj_omode_max']
             omode_occu = np.ones(omode)/omode
         else:
-            raise KeyError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
+            raise ValueError(f"Initialization method {occu_type} not implemented yet, please use 'custom' or 'uniform'!")
         
         omode_occu = omode_occu.astype('float32')
         vprint(f"omode_occu                            (omode) = {omode_occu.dtype}, {omode_occu.shape}", verbose=self.verbose)
@@ -418,7 +418,7 @@ class Initializer:
             lambd = 1.23984193e-9 / (self.init_params['beam_kev'])
             unit_str = 'm'
         else:
-            raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+            raise ValueError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
         
         vprint(f"Calculating H with probe_shape = {probe_shape} px, dx = {dx:.4f} {unit_str}, slice_thickness = {slice_thickness:.4f} {unit_str}, lambd = {lambd:.4f} {unit_str}", verbose=self.verbose)
         
@@ -437,7 +437,7 @@ class Initializer:
             tilt_source     = self.init_params['tilt_source']
             tilt_params     = self.init_params['tilt_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
 
         vprint(f"### Initializing obj tilts from = '{tilt_source}' ###", verbose=self.verbose)
         
@@ -462,10 +462,10 @@ class Initializer:
                 obj_tilts = np.broadcast_to(np.float32(init_tilts), shape=(1,2))
                 vprint(f"Initialized obj_tilts with init_tilts = {init_tilts} (theta_y, theta_x) mrad", verbose=self.verbose)
             else:
-                raise KeyError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
+                raise ValueError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
 
         else:
-            raise KeyError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
+            raise ValueError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
         
         # Print summary
         self.init_variables['obj_tilts'] = obj_tilts
@@ -505,6 +505,9 @@ class Initializer:
             scale_factors = self.init_variables['on_the_fly_meas_scale_factors']
         else:
             scale_factors = [1,1]   
+        
+        # TODO These checks should probably be refactored a bit with clearer message
+        # We could duplicate some of them at the specific section to catch them early
         
         # Check DP shape
         if Npix == meas.shape[-2] == meas.shape[-1] == probe.shape[-2] == probe.shape[-1] == H.shape[-2] == H.shape[-1]:
@@ -573,7 +576,7 @@ class Initializer:
             pos_source   = self.init_params['pos_source']
             pos_params   = self.init_params['pos_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
         
         triplets = [
         ('obj', obj_source, obj_params),
@@ -616,8 +619,16 @@ class Initializer:
             meas_source = self.init_params['meas_source']
             meas_params = self.init_params['meas_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
+        
+        # Check for 'path' key for all sources
+        if 'path' not in meas_params:
+            raise KeyError(f"'path' is required in 'meas_params' for source '{meas_source}'. Set 'path': <PATH_TO_YOUR_DATASET> inside your 'meas_params' dict.")
 
+        # Additional validation for specific sources
+        if meas_source in ('mat', 'hdf5') and 'key' not in meas_params:
+            raise KeyError(f"'key' is required in 'meas_params' for source '{meas_source}'. Set 'key': <KEY_TO_YOUR_DATASET> inside your 'meas_params' dict.")
+        
         vprint(f"Loading measurements from source = '{meas_source}'", verbose=self.verbose)
 
         if meas_source == 'custom':
@@ -643,7 +654,7 @@ class Initializer:
                 gap=meas_params.get('gap', 1024)
             )
         else:
-            raise KeyError(f"Unsupported measurement source '{meas_source}'. "
+            raise ValueError(f"Unsupported measurement source '{meas_source}'. "
                         "Use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw'.")
 
         vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
@@ -667,6 +678,16 @@ class Initializer:
         meas = self._meas_reshape(meas, self.init_params.get('meas_reshape'))
         meas = self._meas_flipT(meas, self.init_params.get('meas_flipT'))
         self.init_variables['meas_raw_avg'] = meas.mean(0) # Save this for initial dx calibration. The crop/pad/resample effect would be accounted accordingly in `init_calibration`
+        
+        # Shape check after flipT (`meas` corresponds to the freshly loaded dataset before anything that could change its shape)
+        N_scans = self.init_params_original['pos_N_scans']
+        Npix = self.init_params_original['meas_Npix']
+        if meas.ndim != 3 or meas.shape[0] != N_scans or meas.shape[1:] != (Npix, Npix):
+            raise ValueError(
+                f"Shape mismatch after loading and processing the measurements: expected measurements shape = (N_scans={N_scans}, Npix={Npix}, Npix={Npix}), "
+                f"but got {meas.shape}. PtyRAD allows you to directly preprocess your loaded measurements with `meas_permute` and `meas_reshape` specified in params files to make it (N_scans, Npix(ky), Npix(kx)). "
+                f"Please read the comments in demo YAML params files or the documentation for more information about how to set `meas_permute` and `meas_reshape`."
+            )
         
         # Operations that may change the shape of the measurements
         meas = self._meas_crop(meas, self.init_params.get('meas_crop'))
@@ -811,13 +832,13 @@ class Initializer:
 
         elif mode == 'clip_value':
             if value is None:
-                raise ValueError("Mode 'clip_value' requires a non-None 'value'.")
+                raise KeyError("Mode 'clip_value' requires a non-None 'value'.")
             vprint(f"Minimum value = {meas.min():.4f}, measurements below {value} are clipped to 0 due to the positive px value constraint of measurements", verbose=self.verbose)
             meas[meas < value] = 0
 
         elif mode == 'subtract_value':
             if value is None:
-                raise ValueError("Mode 'subtract_value' requires a non-None 'value'.")
+                raise KeyError("Mode 'subtract_value' requires a non-None 'value'.")
             vprint(f"Minimum value = {meas.min():.4f}, measurements subtracted by {value} due to the positive px value constraint of measurements", verbose=self.verbose)
             meas -= value
 
@@ -870,7 +891,7 @@ class Initializer:
 
         elif norm_mode == 'divide_const':
             if norm_const is None:
-                raise ValueError("Mode 'divide_const' requires a non-None 'norm_const'.")
+                raise KeyError("Mode 'divide_const' requires a non-None 'norm_const'.")
             normalization_const = norm_const
             vprint(f"Normalizing by user-defined constant: {normalization_const:.8g}", verbose=self.verbose)
 
@@ -949,7 +970,7 @@ class Initializer:
             popt = fit_background(amp_avg, mask, fit_type='power')
             amp_padded = power_law(r, *popt)
         else:
-            raise KeyError(f"Unsupported padding_type = '{padding_type}'")
+            raise ValueError(f"Unsupported padding_type = '{padding_type}'")
         
         # Square the padded amplitude back to intensity
         meas_padded = np.square(amp_padded)[None,] # (1, ky, kx)
@@ -970,7 +991,7 @@ class Initializer:
             self.init_variables['on_the_fly_meas_padded'] = meas_padded
             self.init_variables['on_the_fly_meas_padded_idx'] = [pad_h1, pad_h2, pad_w1, pad_w2]
         else:
-            raise KeyError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+            raise ValueError(f"meas_pad does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or null")
 
         # Update iself.init_params similar to _meas_crop
         vprint("Update Npix after the measurements padding", verbose=self.verbose)
@@ -993,7 +1014,7 @@ class Initializer:
             Npix = self.init_params['meas_Npix']
             scale_factors = resample_cfg['scale_factors']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
 
         # Ensure scale_factors is a list or tuple of length 2
         if len(scale_factors) != 2:
@@ -1023,7 +1044,7 @@ class Initializer:
             self.init_variables['on_the_fly_meas_scale_factors'] = scale_factors
 
         else:
-            raise KeyError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or None")
+            raise ValueError(f"meas_resample does not support mode = '{mode}', please choose from 'on_the_fly', 'precompute', or null")
 
         # Update self.init_params similar to _meas_crop
         self.init_params['meas_Npix'] = Npix
@@ -1074,7 +1095,7 @@ class Initializer:
             value = poisson_cfg['value']
             scan_step_size = self.init_params['pos_scan_step_size']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
 
         # Convert units to total electrons per pattern
         if unit == 'total_e_per_pattern':
@@ -1110,7 +1131,7 @@ class Initializer:
             probe_source = self.init_params['probe_source']
             probe_params = self.init_params['probe_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
         
         probe_illum_type = self.init_variables['probe_illum_type']
 
@@ -1127,7 +1148,7 @@ class Initializer:
         elif probe_source == 'simu':
             probe = self._simulate_probe(probe_params, probe_illum_type)
         else:
-            raise KeyError(f"Unsupported probe source '{probe_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
+            raise ValueError(f"Unsupported probe source '{probe_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
 
         vprint(f"Loaded probe shape = {probe.shape}, dtype = {probe.dtype}", verbose=self.verbose)
         return probe
@@ -1203,7 +1224,7 @@ class Initializer:
         elif probe_illum_type == 'xray':
             probe = make_fzp_probe(simu_params, verbose=self.verbose)[None, ...]
         else:
-            raise KeyError(f"Unsupported illumination type '{probe_illum_type}'. Use 'electron' or 'xray'.")
+            raise ValueError(f"Unsupported illumination type '{probe_illum_type}'. Use 'electron' or 'xray'.")
 
         # probe is (1, Ny, Nx) after simulation, expand it to (pmode, Ny, Nx) if needed
         if simu_params['pmodes'] > 1:
@@ -1247,7 +1268,10 @@ class Initializer:
             # becasue on-the-fly padding could increase the total meas intensity
             meas_avg_sum = self.init_variables['meas_avg_sum']
         except KeyError:
-            raise ValueError("Measurement average sum ('meas_avg_sum') is required for probe normalization.")
+            vprint("WARNING: Measurement average sum ('meas_avg_sum') not found. Initializing measurements first for probe normalization...", verbose=self.verbose)
+            vprint(" ", verbose=self.verbose)
+            self.init_measurements()
+            meas_avg_sum = self.init_variables['meas_avg_sum']
 
         normalization_factor = (np.sum(np.abs(probe) ** 2) / meas_avg_sum) ** 0.5
         probe = probe / normalization_factor
@@ -1266,7 +1290,7 @@ class Initializer:
             pos_source = self.init_params['pos_source']
             pos_params = self.init_params['pos_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
     
         vprint(f"Loading probe positions from source = '{pos_source}'", verbose=self.verbose)
     
@@ -1283,7 +1307,7 @@ class Initializer:
         elif pos_source == 'foldslice_hdf5':
             pos = self._load_pos_from_foldslice(pos_params)
         else:
-            raise KeyError(f"Unsupported position source '{pos_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', 'simu', or 'foldslice_hdf5'.")
+            raise ValueError(f"Unsupported position source '{pos_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', 'simu', or 'foldslice_hdf5'.")
     
         return pos
     
@@ -1427,7 +1451,7 @@ class Initializer:
             obj_source = self.init_params['obj_source']
             obj_params = self.init_params['obj_params']
         except KeyError as e:
-            raise ValueError(f"Missing required configuration field: {e}")
+            raise KeyError(f"Missing required configuration field: {e}")
 
         vprint(f"Loading object from source = '{obj_source}'", verbose=self.verbose)
 
@@ -1442,7 +1466,7 @@ class Initializer:
         elif obj_source == 'simu':
             obj = self._simulate_obj(obj_params)
         else:
-            raise KeyError(f"Unsupported object source '{obj_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
+            raise ValueError(f"Unsupported object source '{obj_source}'. Use 'custom', 'PtyRAD', 'PtyShv', 'py4DSTEM', or 'simu'.")
 
         return obj
     
@@ -1504,7 +1528,7 @@ class Initializer:
             try:
                 Ny, Nx = self.init_variables['obj_lateral_extent']
             except KeyError:
-                vprint("Warning: 'obj_lateral_extent' not found. Initializing positions first for obj_shape estimation...", verbose=self.verbose)
+                vprint("WARNING: 'obj_lateral_extent' not found. Initializing positions first for obj_shape estimation...", verbose=self.verbose)
                 vprint(" ", verbose=self.verbose)
                 self.init_pos()
                 Ny, Nx = self.init_variables['obj_lateral_extent']

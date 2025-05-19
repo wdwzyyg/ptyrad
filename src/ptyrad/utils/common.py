@@ -200,15 +200,23 @@ def print_gpu_info():
         elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
             vprint(f"MPS Available: {torch.backends.mps.is_available()}")
         elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
-            vprint("WARNING: GPU support built with PyTorch, but could not find any GPU device.")
-            vprint("         This may result in very slow performance of PtyRAD.")
+            vprint("WARNING: GPU support built with PyTorch, but could not find any existing / compatible GPU device.")
+            vprint("         PtyRAD will fall back to CPU which is much slower in performance")
+            vprint("         → If you're using a CPU-only machine, you can safely ignore this.")
+            vprint("         → If you believe you *do* have a GPU, please check the compatibility:")
+            vprint("           - Are the correct NVIDIA drivers installed?")
+            vprint("           - Is your CUDA runtime version compatible with PyTorch?")
+            vprint("           Tips: Run `nvidia-smi` in your terminal for NVIDIA driver and CUDA runtime information.")
+            vprint("           Tips: Run `conda list torch` in your terminal (with `ptyrad` environment activated) to check the installed PyTorch version.")
         else:
             vprint("WARNING: No GPU backend (CUDA or MPS) built into this PyTorch install.")
-            vprint("         This may result in very slow performance of PtyRAD.")
-            vprint("         Please consider reinstalling PyTorch using `pytorch-cuda=X.Y` for GPU support.")
+            vprint("         PtyRAD will fall back to CPU which is much slower in performance")
+            vprint("         Please consider reinstalling PyTorch with GPU support if available.")
+            vprint("         See https://github.com/chiahao3/ptyrad for PtyRAD installation guide.")
     except ImportError:
         vprint("WARNING: No GPU information because PyTorch can't be imported.")
         vprint("         Please install PyTorch because it's the crucial dependency of PtyRAD.")
+        vprint("         See https://github.com/chiahao3/ptyrad for PtyRAD installation guide.")
     
 def print_packages_info():
     import importlib
@@ -472,7 +480,7 @@ def safe_filename(filepath, verbose=False):
     
     # Provide feedback if corrections were made
     if changes_made and verbose:
-        print(f"Path corrected for compatibility:")
+        print("Path corrected for compatibility:")
         print(f"  Original: {original_path}")
         print(f"  Corrected: {result_path}")
     

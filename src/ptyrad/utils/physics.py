@@ -209,7 +209,7 @@ def get_default_probe_simu_params(init_params):
                         "D_H"            : init_params['probe_D_H'],
         }
     else:
-        raise KeyError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
+        raise ValueError(f"init_params['probe_illum_type'] = {probe_illum_type} not implemented yet, please use either 'electron' or 'xray'!")
     return probe_simu_params
 
 def make_stem_probe(probe_params, verbose=True):

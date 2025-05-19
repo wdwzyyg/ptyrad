@@ -212,7 +212,7 @@ class PtychoAD(torch.nn.Module):
         self.optimizable_params = []
         for param_name, lr in lr_params.items():
             if param_name not in self.optimizable_tensors:
-                raise KeyError(f"Warning: '{param_name}' is not a valid parameter name, check your lr_params.")
+                raise ValueError(f"WARNING: '{param_name}' is not a valid parameter name, check your `update_params` and choose from 'obja', 'objp', 'obj_tilts', 'slice_thickness', 'probe', and 'probe_pos_shifts'")
             else:
                 self.optimizable_tensors[param_name].requires_grad = (lr != 0) # Set requires_grad based on learning rate
                 if lr != 0:

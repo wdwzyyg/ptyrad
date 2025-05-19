@@ -136,7 +136,7 @@ def get_blob_size(dx, blob, output='d90', plot_profile=False, verbose=True):
     elif output =='fig':
         out =  fig
     else:
-        raise KeyError(f"output ={output} not implemented!")
+        raise ValueError(f"output ={output} not implemented!")
     
     if output not in ['radial_profile', 'radial_sum', 'fig'] and verbose:
         vprint(f'{output} = {out/dx:.3f} px or {out:.3f} Ang')

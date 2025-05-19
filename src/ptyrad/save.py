@@ -241,7 +241,7 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
             init_Ls = init_params['Ls']
             output_path += f"_Ls{init_Ls* 1e9:.0f}"
         else:
-            raise KeyError(f"init_params['probe_illum_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
+            raise ValueError(f"init_params['probe_illum_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
             
     if scan_affine is not None:
         affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)

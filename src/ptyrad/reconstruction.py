@@ -417,7 +417,7 @@ def select_scan_indices(N_scan_slow, N_scan_fast, subscan_slow=None, subscan_fas
         indices = full_indices[slow_grid, fast_grid].reshape(-1)
 
     else:
-        raise KeyError(f"Indices selection mode {mode} not implemented, please use either 'full', 'center', or 'sub'")   
+        raise ValueError(f"Indices selection mode {mode} not implemented, please use either 'full', 'center', or 'sub'")   
         
     return indices
 

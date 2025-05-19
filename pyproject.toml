@@ -20,6 +20,39 @@ classifiers = [
 # This pyproject.toml is prepared solely to register the `ptyrad` via `pip install -e .` for more robust import
 dependencies = []
 
+# Experimenting pip-based approach for future PyPi publication.
+# First run `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118` if you're using CUDA 11.8
+# And then `pip install -e .[pip]` to install ptyrad with the rest of dependencies with pip
+
+# Note for Windows / Linux : 
+# `pip install -e .[pip]` would automatically install the CPU version of PyTorch, which will make PtyRAD significantly slower.
+# Therefore, for GPU-supported PyTorch, you must either run:
+# (1) `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118` BEFORE the `pip install -e .[pip]` 
+# (2) `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118 --force-reinstall` AFTER the `pip install -e .[pip]`
+# The `cu118` in the url represents the CUDA runtime version shipped with the PyTorch build, and it must be "equal or smaller" than the maximum version that your GPU driver supports.
+# You can check the maximum supported CUDA runtime version for your GPU driver via `nvidia-smi` in yout terminal.
+# It might look like the following, which indicates my NVIDIA GPU driver supports CUDA runtime up to 12.8, and I can freely choose the pytorch-cuda version that is <= 12.8
+# +-----------------------------------------------------------------------------------------+
+# | NVIDIA-SMI 571.59                 Driver Version: 571.59         CUDA Version: 12.8     |
+# |-----------------------------------------+------------------------+----------------------+
+
+# Note for MacOS:
+# There's no CUDA for MacOS, so no need to install CUDA-supported PyTorch.
+# `pip install -e .[pip]` would automatically solve to the PyTorch built with MPS (Apple Silicon) GPU support.
+[project.optional-dependencies]
+pip = [
+  "accelerate",
+  "h5py",
+  "jupyter",
+  "matplotlib",
+  "optuna",
+  "torch>=2.0,<2.7",
+  "scikit-learn",
+  "scipy",
+  "tifffile",
+  "torchvision"
+]
+
 [project.scripts]
 ptyrad = "ptyrad.cli:main"
 

@@ -1,6 +1,5 @@
 name: ptyrad
 channels:
-  - nvidia
   - pytorch
   - conda-forge
 dependencies:
@@ -9,10 +8,11 @@ dependencies:
   - jupyter
   - matplotlib
   - optuna
-  - python
-  - pytorch
-  - pytorch-cuda
+  - python>=3.10,<3.13
+  - pytorch>=2.0,<2.7
   - scikit-learn
   - scipy
   - tifffile
   - torchvision
+
+# Capping at 2nd newest versions of Python and PyTorch as of 2025.05.19 just to be preventive.
