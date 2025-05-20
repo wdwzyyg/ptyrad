@@ -1,7 +1,7 @@
 # New Features and Enhancements
 
 
-Last Update: 2025.05.07
+Last Update: 2025.05.19
 
 ---
 
@@ -18,6 +18,9 @@ Last Update: 2025.05.07
     - Appending different reconstruciton engines
     - Could start from notebooks, but ultimately a wrapper class would be nice
 
+### Params generation and validation
+- Add a `params.py` module to handle the type check, default filling, and value validation. Might do it with dataclasses or pydantic.
+
 ### Initialization
 
 - Add padding and resampling to loaded objects and probes
@@ -27,9 +30,6 @@ Last Update: 2025.05.07
     - [autocorrelation](https://doi.org/10.1364/OPTICA.522380)
     - Wirtinger Flow spectral method
     - tcBF?
-- Add normalization options for measurements:
-    - Normalize 2D pattern with (mean, sum, or max) to 1.
-    - Normalize 2D pattern with ADU.
 - Add totoal probe intensity so we can better normalize the measurement with respect to the probe intensity
     - This should help estimate the amplitude term with total intensity variation
 
@@ -37,7 +37,6 @@ Last Update: 2025.05.07
 
 - Test propagator with higher order terms to handle larger convergence angle
     - [A multislice approach to the spherical aberration theory in electron optics](https://www.tandfonline.com/doi/abs/10.1080/09500349608232892)
-    - Currently propagators are all stored in `utils.py` but we may consider move it to `forward.py` or have its own module if that makes better sense
 
 ### Models
 
@@ -53,18 +52,12 @@ Last Update: 2025.05.07
     - https://arxiv.org/abs/2504.17501
     - Note that this optimization would likely be just a refinement from typical MEP
     - A postprocessing of object is needed to map it back to Cartessian space
-- Add optimizable param of detector blur
-    - Currently we can only do a fixed value
 - Might be an interesting approach to optimize probe in k-space or completely with aberration coefficients, optimize object in real space, and optimizer tilt / thickness with PACBED because we can have multiple optimizers for different parameters.
 
 ### Reconstruction
 
 - Decouple the reconstruction objective with data error so that we can reconstruct with whatever target loss, while having an independent data error metric that can be used as a standard value for comparison
 - Consider refactor or decouple the measurements initialization from Initializer so we can have more hypertunable parameters and cleaner optuna_objective by re-initializing everything except loading measurements
-
-### Optimization
-
-- Make sure the existing loss and constraint classes have default values so it won’t throw error when users didn’t specify the configurations in their params files
 
 ### Loss Functions
 
@@ -118,7 +111,6 @@ Last Update: 2025.05.07
 
 ### Output
 
-- FIlename too long check
 - Maybe restructure the output filename setting to allow some list concat just like Velox prefix style?
 - Write modeled CBED as an output for py4DGUI examination
 - Finish the weighted sum of `omode_occu` in `save_results` when `omode_occu != 'uniform’`
@@ -128,8 +120,6 @@ Last Update: 2025.05.07
 - Try [4DSTEM-calibration] (https://github.com/ningustc/4DSTEM-Calibration) for position correction initialization with better affine transformation values
 - Add a scan rotation fitting routine from the curl of gradCoM of CBEDs similar to the py4DSTEM's `solve_for_center_of_mass_relative_rotation` could be very handy
 - Data orientation checking script (permuting 8 configurations)
-- Add `get_detector_blur` estimation of detector blur from the tapering of vacuum CBED aperture edge and some fitting. Might be able to suggest better dx calibration if we trust the convergence angle. Can probably combine with `get_rbf` routine
-- Add a routine to check for CBED calibration (rbf/convergence angle) and off centering
 
 ### Code clarity
 

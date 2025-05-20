@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ptyrad"
-version = "0.1.0b4"
+version = "0.1.0b5"
 authors = [
   { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
 ]
@@ -16,8 +16,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-# Leave this empty so all the dependencies are installed via `conda` during environment creation
-# This pyproject.toml is prepared solely to register the `ptyrad` via `pip install -e .` for more robust import
+# This empty dependencies is a temporary hack, so all the dependencies are installed via `conda` during environment creation for better cross-platform CUDA version pinning.
+# This allows registering `ptyrad` via `pip install -e .` for more robust import and CLI tools. while the dependencies are handled by conda.
+# We will populate this with proper dependencies (now under [pip]) when we're about to publish PtyRAD on PyPI.
 dependencies = []
 
 # Experimenting pip-based approach for future PyPi publication.
@@ -61,5 +62,7 @@ ptyrad = "ptyrad.cli:main"
 "Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"
 
 [tool.setuptools]
-packages = ["ptyrad"]
 package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

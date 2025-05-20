@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b5] - 2025-05-20
+### Added
+- Add `meas_calibration` option into the params yml file to enable calibration using 7 different units, or to directly fit the experimental data. This change is strongly advised by @noahschnitzer, @ecchung, and @shaqekar!
+- Add `dx` as a hypertunable parameter, although technically one should do the kMax calibration and fix the dx value for each collection angle, and use hypertune for scan affine transformation
+- Add `append_params` boolean flag to `hypertune_params` so we can optionally append the hypertune params to the collate results. This is advised by @shaqekar and @YinChen!
+- Add the Command Line Interface (CLI) tools as `cli.py` module. We can call `ptyrad run --params_path <PARAMS_PATH> --gpuid 0` from anywhere, or call `ptyrad check-gpu` to quickly check whether GPU-supported PyTorch is installed or not. This is suggested by @sezelt!
+- Add `envs/` to keep CUDA-specific environment.yml files. Set suggested versions to CUDA 11.8, Python>=3.10, <3.13. and pytorch>=2.0, <2.7 for maximal compatibility. This is motivated by @dasol-yoon!
+### Changed
+- Fix the potential mismatch from rounding Npix during `meas_resample`. This was first pointed out by @ecchung!
+- Improve `init_initialization` process significatly, especially the `init_calibration` logic with `init_measurements`.
+- Add `safe_filename` to `utils/common/` so we can correct illegal filenames (total length and component length) across different platforms, extra str except file extension would be clipped, this should completely prevent the file name too long error especially on Windows.
+- Enable proper pip install via `pip install .` by modifying the `pyproject.toml` Thanks @ercius for pointing this out!
+- Split `print_gpu_info` and `print_packages_info` out of `print_system_info` for clarity and allow easier check via CLI. Also improve the printed message and format a bit.
+- Enhance error messages about missing fields and shape mismatch of `load_meas` and `_process_meas` of `init_measurements`. This is motivated by @PhysX.
+### Removed
+- Remove `probe_dx` option from params yml and incorporate it into `meas_calibration`. Note that `dx` is still used internally by PtyRAD as the only calibration metric.
+
 ## [0.1.0b4] - 2025-05-12 (soft public release)
 ### Added
 - Add `demo/` folder to organize demo-specific data, params, and notebooks

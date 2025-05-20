@@ -5,4 +5,7 @@ logs/
 output/
 __pycache__
 *.sqlite3
+# setuptools build artifacts
+build/
+dist/
 *.egg-info/

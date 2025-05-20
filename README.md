@@ -1,13 +1,13 @@
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
 
-*PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [arXiv paper](https://arxiv.org/abs/2505.07814) for more information.
+*PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [arXiv paper](https://arxiv.org/abs/2505.07814) and the [Zenodo record](https://doi.org/10.5281/zenodo.15273176) for more information and demo datasets.
 
 ## Getting Started
 
 ### Major dependencies
 
 * Python 3.10 or above
-* PyTorch 2.1 or above
+* PyTorch 2.0 or above
 * While *PtyRAD* can run on CPU, GPU is strongly suggested for high-speed ptychographic reconstructions. 
     - *PtyRAD* supports both NVIDIA GPUs with CUDA and Apple Silicon (MPS)
 * *PtyRAD* was tested on Windows, MacOS, and Linux
@@ -83,30 +83,23 @@ Creating separate environments for each project is strongly recommended — it h
 
 ### Step 3. Create the Python environment required for *PtyRAD*
 
-Based on your system and whether you have GPU support, choose the appropriate installation command below and run it in your terminal.
+Based on your system and whether you have GPU support, choose the appropriate installation command below and run it in your terminal. Make sure you are inside the `ptyrad/` directory so the environment YAML files are visible.
 
 - **3a. For Windows and Linux system with CUDA-supported GPUs**
 
-    - Option 1 (Recommended): Create the environment using the provided YAML file
+    ```bash
+    conda env create -f envs/environment_ptyrad_cuda118.yml
+    ```
 
-        ```bash
-        # Ensure you are inside the `ptyrad/` directory so the environment YAML file is visible
-        conda env create -f environment_ptyrad.yml
-        ```
-
-    - Option 2: Manually specifying the packages for more control
-        
-        ```bash
-        conda create -n ptyrad python pytorch pytorch-cuda accelerate torchvision optuna matplotlib scikit-learn scipy h5py tifffile jupyter -c nvidia -c pytorch -c conda-forge
-        ```
+    >💡 **Note:** PyTorch ships with the specified CUDA runtime so please make sure your machine has a compatible GPU driver. Run `nvidia-smi` in your terminal to see the maximum supported CUDA runtime version. You can modify the specifed version of `pytorch-cuda=X.Y` in the YAML file if your machine supports newer CUDA runtime.
 
 - **3b. For MacOS users, or Windows/Linux without a GPU**
 
     ```bash
-    conda create -n ptyrad python pytorch accelerate torchvision optuna matplotlib scikit-learn scipy h5py tifffile jupyter -c pytorch -c conda-forge
+    conda env create -f envs/environment_ptyrad_no_cuda.yml
     ```
 
-    >💡 **Note:** It’s completely fine to use the GPU install options even on systems without a GPU. Packages like `pytorch-cuda` will simply remain inactive and unused. If your *PyTorch* installation isn’t built with CUDA support, or if *PtyRAD* can't detect a compatible GPU, it will automatically fall back to running on the CPU.
+    >💡 **Note:** It’s completely fine to use the GPU install options even on systems without a GPU. If your *PyTorch* installation isn’t built with CUDA support, or if *PtyRAD* can't detect a compatible GPU, it will automatically fall back to running on the CPU.
 
 The created Python environment will be named `(ptyrad)` and stored under `miniforge3/envs/ptyrad/`. Throughout this guide, we use `(ptyrad)` to refer to the Python environment, and `ptyrad/` to refer to the repository folder. The parentheses `(...)` help keep them distinct.
 
@@ -141,26 +134,42 @@ Once the Python environment `(ptyrad)` is created:
 
 ### Step 5. Try the demo script / notebook
 
-Once your `(ptyrad)` environment is activated, and you've installed *PtyRAD*, you're ready to run a quick demo using one of two interfaces:
+> 💡 **Note:** You can find the two example datasets (PSO, tBL_WSe2) in the `demo/data/` folder in our [Zenodo record](https://doi.org/10.5281/zenodo.15273176), which contains a full copy of the PtyRAD codebase (v0.1.0b4) as well.
 
- - Interactive interface (Recommended):
+Before running the demo, please check the following:
+1. Demo datasets are downloaded and placed to the correct location under `demo/data/`
+2. `(ptyrad)` environment is created and activated (if you're using command line)
+3. *PtyRAD* is installed in the `(ptyrad)` environment as outlined in Step. 4
+   
+Now you're ready to run a quick demo using one of two interfaces:
+
+- **5a. Interactive Jupyter interface (Recommended)**
  
-    Use `run_ptyrad_quick_example.ipynb` to quickly reconstruct the demo dataset in a [*Jupyter notebook*](https://docs.jupyter.org/en/latest/running.html)
+    Use `run_ptyrad_quick_example.ipynb` to quickly reconstruct the demo dataset in a Jupyter notebook
 
- - Command-line interface:
-  
-    Use `run_ptyrad.py` to run *PtyRAD* directly from your *Miniforge Prompt* terminal:
-
+- **5b. Command-line interface** (like your *Miniforge Prompt* terminal)
     ```bash
-    # Here we assume working directory is set at demo/
-    python ../scripts/run_ptyrad.py --params_path "params/tBL_WSe2_reconstruct.yml" --gpuid 0
+    # Here we assume working directory is set at `demo/`
+    ptyrad run --params_path "params/tBL_WSe2_reconstruct.yml" --gpuid 0
     ```
 
-We've included two example datasets (PSO, tBL_WSe2) in the `demo/data/` folder and three preconfigured parameter files in `demo/params/` to get you started. The full datasets and all parameter files used in the manuscript will be released on Zenodo.
+### Bonus Step: How do I know if my PyTorch has the GPU support?
+CUDA version, GPU support, and PyTorch build across platforms can be extremely confusing, so *PtyRAD* provides handy CLI tools to help check these information for you!
+
+Once you activated `(ptyrad)` environment and installed *PtyRAD* via `pip insall -e .`, you'll have access to the following command:
+
+```bash
+# You can run this command anywhere from your terminal, as long as `ptyrad` is installed in the environment
+ptyrad check-gpu
+```
+
+This command will print out relevant information of your CUDA information if available.
 
 ## Beyond the Demo: Using *PtyRAD* with Your Own Data
 
 *PtyRAD* is designed to be **fully driven and specified by configuration files** — no code editing required. Each reconstruction is specified using a YAML params file, which includes the location of your data, preprocessing options, experimental parameters, and all other relevant reconstruction parameters (e.g., optimizer algorithm, constraints, loss, output files, etc).
+
+>💡 **Note:** It's strongly recommended to read through the comments provided in the demo params YAML files because they contain comprehensive information of the available features of PtyRAD. We are diligently building our documentation website and hopefully it will be available soon!
 
 To reconstruct your own dataset:
 
