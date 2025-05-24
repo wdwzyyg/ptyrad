@@ -125,10 +125,11 @@ Once the Python environment `(ptyrad)` is created:
     ```
 3. Install *PtyRAD* as an editable Python package inside the `(ptyrad)` environment
    ```bash
-   # Note that there is a space and period after "-e"
-    pip install -e .
+    pip install -e . --no-deps
     ```
-    >💡 **Note:** This editable install registers *PtyRAD* as a Python package, so you can import it from anywhere — without worrying about your working directory or `sys.path`.
+    >💡 **Note:** This editable install registers *PtyRAD* as a Python package and uses the source code when imported, allowing you to import it from anywhere without worrying about your working directory.
+    >
+    > The `--no-deps` flag prevents `pip` from installing additional dependencies, even if they're listed in `pyproject.toml`, since all dependencies are managed by `conda` in Step 3.
     >
     > This command also creates a `ptyrad.egg-info/` folder for storing metadata. You can safely ignore or delete this folder — it won't affect the installed package.
 

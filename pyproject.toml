@@ -8,40 +8,19 @@ version = "0.1.0b5"
 authors = [
   { name="Chia-Hao Lee", email="cl2696@cornell.edu" },
 ]
-description = "PtyRAD: PTYchographic Reconstruction with Automatic Differentiation. Developed at the Muller Group, Cornell University."
+description = "PtyRAD: Ptychographic Reconstruction with Automatic Differentiation"
 readme = "README.md"
+keywords = ["Ptychography"]
+license = "LGPL-3.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
 
-# This empty dependencies is a temporary hack, so all the dependencies are installed via `conda` during environment creation for better cross-platform CUDA version pinning.
-# This allows registering `ptyrad` via `pip install -e .` for more robust import and CLI tools. while the dependencies are handled by conda.
-# We will populate this with proper dependencies (now under [pip]) when we're about to publish PtyRAD on PyPI.
-dependencies = []
-
-# Experimenting pip-based approach for future PyPi publication.
-# First run `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118` if you're using CUDA 11.8
-# And then `pip install -e .[pip]` to install ptyrad with the rest of dependencies with pip
-
-# Note for Windows / Linux : 
-# `pip install -e .[pip]` would automatically install the CPU version of PyTorch, which will make PtyRAD significantly slower.
-# Therefore, for GPU-supported PyTorch, you must either run:
-# (1) `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118` BEFORE the `pip install -e .[pip]` 
-# (2) `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu118 --force-reinstall` AFTER the `pip install -e .[pip]`
-# The `cu118` in the url represents the CUDA runtime version shipped with the PyTorch build, and it must be "equal or smaller" than the maximum version that your GPU driver supports.
-# You can check the maximum supported CUDA runtime version for your GPU driver via `nvidia-smi` in yout terminal.
-# It might look like the following, which indicates my NVIDIA GPU driver supports CUDA runtime up to 12.8, and I can freely choose the pytorch-cuda version that is <= 12.8
-# +-----------------------------------------------------------------------------------------+
-# | NVIDIA-SMI 571.59                 Driver Version: 571.59         CUDA Version: 12.8     |
-# |-----------------------------------------+------------------------+----------------------+
-
-# Note for MacOS:
-# There's no CUDA for MacOS, so no need to install CUDA-supported PyTorch.
-# `pip install -e .[pip]` would automatically solve to the PyTorch built with MPS (Apple Silicon) GPU support.
-[project.optional-dependencies]
-pip = [
+dependencies = [
   "accelerate",
   "h5py",
   "jupyter",
@@ -59,7 +38,9 @@ ptyrad = "ptyrad.cli:main"
 
 [project.urls]
 "Homepage" = "https://github.com/chiahao3/ptyrad"
-"Bug Tracker" = "https://github.com/chiahao3/ptyrad/issues"
+"Repository" = "https://github.com/chiahao3/ptyrad"
+"Issues" = "https://github.com/chiahao3/ptyrad/issues"
+"Changelog" = "https://github.com/chiahao3/ptyrad/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
