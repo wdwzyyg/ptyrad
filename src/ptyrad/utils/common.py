@@ -25,7 +25,7 @@ def set_accelerator():
         if accelerator.distributed_type == DistributedType.NO and accelerator.mixed_precision == "no":
             vprint("'accelerate' is available but NOT using distributed mode or mixed precision")
             vprint("If you want to utilize 'accelerate' for multiGPU or mixed precision, ")
-            vprint("Run `accelerate launch --num_processes=2 --mixed_precision=fp16 ptyrad run <PTYRAD_ARGUMENTS>` in your terminal")
+            vprint("Run `accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' -m ptyrad run <PTYRAD_ARGUMENTS>` in your terminal")
     except ImportError:
         vprint("### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
         accelerator = None

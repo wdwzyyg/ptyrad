@@ -1,4 +1,4 @@
 # __init__.py is not strictly needed since Python 3.3 for the intepreter to recognize it as a package 
 # However, this is still included for clarity and for initialization purpose
 
-__version__ = "0.1.0b5" # 2025.05.20
+__version__ = "0.1.0b6" # 2025.05.24

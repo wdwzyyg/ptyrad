@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b6] - 2025-05-24
+### Add
+- Add `__main__.py` to allow `python -m ptyrad`. Now we can execute `ptyrad` package as a module/script for `accelerate launch`.
+- Add `.github/workflows/publish_pypi.yml` for automation. Future release will automatically be published to PyPI. 
+### Changed
+- Fix `set_gpu_device` so we can properly return `device=None` to allow `accelerate` setting devices for multiGPU. The `--gpuid` argument can now take `'acc'`, `'cpu'`, and integers for GPU ID, which is still backward compatible. This hotfix is motivated by the question of multiGPU raised by @ccs1019.
+- Update `slurm_run_ptyrad.sub` with clearer comments about the normal and accelerate (multiGPU) modes.
+- Update `pyproject.toml` for the PyPI (pip) publishing. The dependencies are moved to the core list so `pip install -e . --no-deps` is now preferred to prevent `pip` from pulling packages.
+### Removed
+- Remove `scripts/run_ptyrad.py` script because it's completely covered by the `ptyrad run` CLI command for reconstruction, hypertune, and accelerate (multiGPU) modes.
+
 ## [0.1.0b5] - 2025-05-20
 ### Added
 - Add `meas_calibration` option into the params yml file to enable calibration using 7 different units, or to directly fit the experimental data. This change is strongly advised by @noahschnitzer, @ecchung, and @shaqekar!
