@@ -19,22 +19,21 @@ PARAMS_PATH="params/PSO_reconstruct.yml"
 echo params_path = ${PARAMS_PATH}
 
 ## Assuming you are under `ptyrad/` root and calling `sbatch scripts/slurm_run_ptyrad.sub`
-## Change directory to ptyrad/demo/
+## Change directory to ptyrad/demo/ so the relative path of data location specified in params.yml is correct
 cd demo/; pwd; 
 
 ## The gpuid is used to assign the device for PtyRAD, it can be either 'acc', 'cpu', or an integer
 ## The jobid is used as a unique identifier for hypertune mode with multiple GPU workers on different nodes. 
 ## The JOBID is an environment variable that'll be automatically set to 1-N via LoopSubmit.sh. If not set, default to 0.
 
-## Run the script via ptyrad CLI command `ptyrad run` or python script. They are equivalent but `ptyrad run` can be executed from any location  
+## Execute the ptyrad CLI command `ptyrad run`
 ptyrad run --params_path "${PARAMS_PATH}" --gpuid 0 --jobid "${JOBID:-0}" 2>&1 # This runs via ptyrad CLI command on 1 GPU. 
-# python ../cripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid 0 --jobid "${JOBID:-0}" 2>&1 # This runs via typical python script on 1 GPU. 
 
-## For multi-GPU and mixed-precision, explicitly pass `--gpuid acc` so that we can defer the device assignment to "HuggingFace accelerate" for parallelism
-## These capabilities are only available while launched via accelerate, and are only supported on non-MIG nodes so we can only do c0001 (full A100s)
-## On A100, mixed-precision do not give significant speedup because A100 uses mostly tensor cores for TF32 dtype
+## For multi-GPU and mixed-precision, explicitly pass `--gpuid acc` so that we can defer the device assignment to the "HuggingFace accelerate" package
+## These capabilities are only available while launched via `accelerate``, and are only supported on non-MIG nodes so we can only do c0001 (full A100s)
+## On A100, mixed-precision does not give significant speedup because A100 uses mostly tensor cores for TF32 dtype
 ## multi-GPU can also be much slower if the batch size is too small. Typically smaller batch sizes converge faster unless we scale the learning rate with batch size.
-# accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' ../scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid acc 2>&1 # This runs DDP on 2 GPUs without mixed precision via `accelerate`
-# accelerate launch --num_processes=1 --mixed_precision='fp16' ../scripts/run_ptyrad.py --params_path "${PARAMS_PATH}" --gpuid acc 2>&1 # This runs on 1 GPU with mixed precision via `accelerate`
+# accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' -m ptyrad run --params_path "${PARAMS_PATH}" --gpuid acc 2>&1 # This runs DDP on 2 GPUs without mixed precision
+# accelerate launch --num_processes=1 --mixed_precision='fp16' -m ptyrad run --params_path "${PARAMS_PATH}" --gpuid acc 2>&1 # This runs on 1 GPU with mixed precision
 
 date
