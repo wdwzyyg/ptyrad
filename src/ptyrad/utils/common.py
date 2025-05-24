@@ -265,36 +265,66 @@ def print_packages_info():
         vprint(f"Error retrieving version for PtyRAD: {e}")
 
 def set_gpu_device(gpuid=0):
+    """
+    Sets the GPU device based on the input. If 'acc' is passed, it returns None to defer to accelerate.
+    
+    Args:
+        gpuid (str or int): The GPU ID to use. Can be:
+            - "acc": Defer device assignment to accelerate.
+            - "cpu": Use CPU.
+            - An integer (or string representation of an integer) for a specific GPU ID. This only has effect on NVIDIA GPUs.
+    
+    Returns:
+        torch.device or None: The selected device, or None if deferred to accelerate.
+    """
     vprint("### Setting GPU Device ###")
 
-    if gpuid is None:
+    if gpuid == "acc":
+        vprint("Specified to use accelerate device (gpuid='acc')")
+        vprint(" ")
+        return None
+    
+    if gpuid == "cpu":
         device = torch.device("cpu")
-        vprint("Specified to use CPU (gpuid=None).")
+        torch.set_default_device(device)
+        vprint("Specified to use CPU (gpuid='cpu').")
+        vprint(" ")
+        return device
 
-    else:
+    try:
+        gpuid = int(gpuid)
         if torch.cuda.is_available():
             num_cuda_devices = torch.cuda.device_count()
             if gpuid < num_cuda_devices:
                 device = torch.device(f"cuda:{gpuid}")
                 torch.set_default_device(device)
                 vprint(f"Selected GPU device: {device} ({torch.cuda.get_device_name(gpuid)})")
+                vprint(" ")
+                return device
+            
             else:
                 device = torch.device("cuda")
-                vprint(f"Requested CUDA device cuda:{gpuid} is out of range (only {num_cuda_devices} available)." 
-                       f"Fall back to GPU device: {device}")
-        
+                vprint(f"Requested CUDA device cuda:{gpuid} is out of range (only {num_cuda_devices} available). " 
+                    f"Fall back to GPU device: {device}")
+                vprint(" ")
+                return device
+            
         elif torch.backends.mps.is_available():
             device = torch.device("mps")
+            torch.set_default_device(device)
             vprint("Selected GPU device: MPS (Apple Silicon)")
+            vprint(" ")
+            return device
         
         else:
             device = torch.device("cpu")
+            torch.set_default_device(device)
             vprint(f"GPU ID specifed as {gpuid} but no GPU found. Using CPU instead.")
-            
-    torch.set_default_device(device)
-
-    vprint(" ")
-    return device
+            vprint(" ")
+            return device
+        
+    except ValueError:
+        raise ValueError(f"Invalid gpuid '{gpuid}'. Expected 'acc', 'cpu', or an integer.")
 
 def vprint(*args, verbose=True, **kwargs):
     """Verbose print/logging with individual control, only for rank 0 in DDP."""

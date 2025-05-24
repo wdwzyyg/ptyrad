@@ -67,7 +67,7 @@ class PtyRADSolver(object):
         self.if_hypertune    = self.params.get('hypertune_params', {}).get('if_hypertune', False)
         self.verbose         = not self.params['recon_params']['if_quiet']
         self.accelerator     = acc
-        self.use_acc_device  = True if (device is None and acc is not None) else False
+        self.use_acc_device  = device is None and acc is not None
         self.device          = self.accelerator.device if self.use_acc_device else device
         self.logger          = logger
         

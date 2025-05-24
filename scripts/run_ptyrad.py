@@ -23,8 +23,8 @@ if __name__ == "__main__":
         description="Run PtyRAD", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("--params_path", type=str, required=True)
-    parser.add_argument("--gpuid",       type=int, required=False, default=None)
-    parser.add_argument("--jobid",       type=int, required=False, default=0)
+    parser.add_argument("--gpuid",       type=str, required=False, default="0", help="GPU ID to use ('acc', 'cpu', or an integer)")
+    parser.add_argument("--jobid",       type=int, required=False, default=0, help="Unique identifier for hypertune mode with multiple GPU workers")
     args = parser.parse_args()
     
     # Set up custom logger

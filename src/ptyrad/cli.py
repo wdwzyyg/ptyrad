@@ -68,8 +68,8 @@ def main():
     # run
     parser_run = subparsers.add_parser("run", help="Run PtyRAD reconstruction")
     parser_run.add_argument("--params_path", type=str, required=True)
-    parser_run.add_argument("--gpuid", type=int, required=False, default=None)
-    parser_run.add_argument("--jobid", type=int, required=False, default=0)
+    parser_run.add_argument("--gpuid", type=str, required=False, default="0", help="GPU ID to use ('acc', 'cpu', or an integer)")
+    parser_run.add_argument("--jobid", type=int, required=False, default=0, help="Unique identifier for hypertune mode with multiple GPU workers")
     parser_run.set_defaults(func=run)
 
     # check-gpu
