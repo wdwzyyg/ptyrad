@@ -249,7 +249,7 @@ class PtychoAD(torch.nn.Module):
         """ Get object ROI with integer coordinates """
         # It's strongly recommended to do integer version of get_obj_ROI
         # opt_obj.shape = (B,D,H,W,C) = (omode,D,H,W,2)
-        # object_patches = (N,B,D,H,W,2), N is the additional sample index within the input batch, B is now used for omode.
+        # object_roi = (N,B,D,H,W,2), N is the additional sample index within the input batch, B is now used for omode.
         
         # rpy_grid is the y-grid (Ny,Nx), by adding the y coordinates from init_crop_pos (N,1) in a broadcast way, it becomes (N,Ny,Nx)
         # obj_ROI_grid_y = (N,Ny,Nx)
@@ -258,9 +258,28 @@ class PtychoAD(torch.nn.Module):
         obj_ROI_grid_y = self.rpy_grid[None,:,:] + self.crop_pos[indices, None, None, 0]
         obj_ROI_grid_x = self.rpx_grid[None,:,:] + self.crop_pos[indices, None, None, 1]
         
-        object_patches = opt_obj[:,:,obj_ROI_grid_y,obj_ROI_grid_x,:].permute(2,0,1,3,4,5)
-        return object_patches
+        object_roi = opt_obj[:,:,obj_ROI_grid_y,obj_ROI_grid_x,:].permute(2,0,1,3,4,5)
+        return object_roi
     
+    def get_obj_patches(self, indices):
+        """
+        Get object patches from specified indices
+        
+        """
+        
+        object_patches = self.get_obj_ROI(indices)
+        
+        if self.obj_preblur_std is None or self.obj_preblur_std == 0:
+            return object_patches
+        
+        else:
+            # Permute and reshape approach, this is much faster than the stack/list comprehension version
+            obj = object_patches.permute(5,0,1,2,3,4) # Move the r/i to the front so it's (2,N,B,D,H,W)
+            obj_shape = obj.shape
+            obj = obj.reshape(-1, obj_shape[-2], obj_shape[-1])
+            object_patches = gaussian_blur(obj, kernel_size=5, sigma=self.obj_preblur_std).reshape(obj_shape).permute(1,2,3,4,5,0) # The torchvision Gaussian blur only acts on last 2 dimensions
+            return object_patches
+        
     def get_probes(self, indices):
         """ Get probes for each position """
         # If you're not trying to optimize probe positions, there's not much point using sub-px shifted stationary probes
@@ -387,26 +406,25 @@ class PtychoAD(torch.nn.Module):
             measurements = self.measurements
         
         return measurements
+    
+    def clear_cache(self):
+        """Clear temporary attributes like cached object patches."""
+        self._current_object_patches = None    
         
     def forward(self, indices):
         """ Doing the forward pass and get an output diffraction pattern for each input index """
         # The indices are passed in as an array and representing the whole batch
         # Note that detector blur is a physical process and should be included in the forward method
         # It's a design choice to put it here, instead of putting it under optimization.py
-        
-        object_patches = self.get_obj_ROI(indices)
-        
-        if self.obj_preblur_std is not None and self.obj_preblur_std != 0:
-            # Permute and reshape approach, this is much faster than the stack/list comprehension version
-            obj = object_patches.permute(5,0,1,2,3,4) # Move the r/i to the front
-            obj_shape = obj.shape
-            obj = obj.reshape(-1, obj_shape[-2], obj_shape[-1])
-            object_patches = gaussian_blur(obj, kernel_size=5, sigma=self.obj_preblur_std).reshape(obj_shape).permute(1,2,3,4,5,0)
-        
+
+        object_patches = self.get_obj_patches(indices)
         probes         = self.get_probes(indices)
         propagators    = self.get_propagators(indices)
         dp_fwd         = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, propagators)
         
+        # Keep the object_patches for later object-specific loss
+        self._current_object_patches = object_patches
+        
         if self.detector_blur_std is not None and self.detector_blur_std != 0:
             dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
-        return dp_fwd, object_patches
+        return dp_fwd

@@ -122,6 +122,12 @@ class PtyRADSolver(object):
         if not self.use_acc_device:
             indices, batches, output_path = prepare_recon(model, self.init, params)
         else:
+            if params['model_params']['optimizer_params']['name'] == 'LBFGS' and self.accelerator.num_processes >1:
+                vprint(f"WARNING: Optimizer 'LBFGS' is not supported for multiGPU mode (accelerator.num_processes = {self.accelerator.num_processes}), switch to default optimizer 'Adam'")
+                params['model_params']['optimizer_params']['name'] = 'Adam'
+                model.optimizer_params['name'] = 'Adam'
+                optimizer     = create_optimizer(model.optimizer_params, model.optimizable_params)
+            
             vprint(f"params['recon_params']['GROUP_MODE'] is set to 'random' because `use_acc_device` = {self.use_acc_device}", verbose=self.verbose)
             params['recon_params']['GROUP_MODE'] = 'random'
             # `batches` would be replaced by a random DataLoader if we use_acc_device because I haven't figured out how to do specified indices in DataLoader
@@ -653,8 +659,9 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
             # Run grad accumulation inside the closure for LBFGS, note that each closure is ideally 1 full iter with grad_accu
             for batch_idx in accu_batch_idx:
                 batch = batches[batch_idx]
-                model_DP, object_patches = model(batch)
+                model_DP = model(batch) # Forward pass is handled automatically by DDP, but methods/attributes should use the unwrapped model
                 measured_DP = model_instance.get_measurements(batch)
+                object_patches = model_instance._current_object_patches
                 loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
                 total_loss += loss_batch # LBFGS uses the returned loss to perform the line-search so it's better to return the loss that's associated to all the batches
             total_loss = total_loss / len(accu_batch_idx)
@@ -668,6 +675,9 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
         # This extra evaluation on accumulated batches is just to get the `losses` for logging purpose
         _, losses = closure()
         optimizer.zero_grad()
+        
+        # Clear the model cache after the mini-batch
+        model_instance.clear_cache()
         
         # Append losses and log batch progress
         if acc is not None:
@@ -701,6 +711,9 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
                 optimizer.zero_grad() 
             batch_t = time_sync() - start_batch_t
         
+            # Clear the model cache after the mini-batch
+            model_instance.clear_cache()
+        
             # Append losses and log batch progress
             if acc is not None:
                 acc.wait_for_everyone()
@@ -733,12 +746,14 @@ def compute_loss(batch, model, model_instance, loss_fn, acc=None):
     """Compute the model output and loss, with optional support for accelerate's autocast."""
     if acc is not None:
         with acc.autocast():
-            model_DP, object_patches = model(batch)
+            model_DP = model(batch)
             measured_DP = model_instance.get_measurements(batch)
+            object_patches = model_instance._current_object_patches
             loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
     else:
-        model_DP, object_patches = model(batch)
+        model_DP = model(batch)
         measured_DP = model_instance.get_measurements(batch)
+        object_patches = model_instance._current_object_patches
         loss_batch, losses = loss_fn(model_DP, measured_DP, object_patches, model_instance.omode_occu)
     
     return loss_batch, losses

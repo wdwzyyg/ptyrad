@@ -46,15 +46,16 @@ def plot_forward_pass(model, indices, dp_power, show_fig=True, pass_fig=False):
     # The dp_power here is for visualization purpose, the actual loss function has its own param field
     
     with torch.no_grad():
-        probes                   = model.get_probes(indices)
-        probes_int               = probes.abs().pow(2).sum(1)
-        model_DP, obj_patches = model(indices)
-        omode_occu               = model.omode_occu
-        measured_DP           = model.get_measurements(indices)
+        probes      = model.get_probes(indices)
+        probes_int  = probes.abs().pow(2).sum(1)
+        model_DP    = model(indices)
+        obj_patches = model.get_obj_patches(indices) # The cache would be cleared right after the mini-batch update so we have to re-calculate it here
+        omode_occu  = model.omode_occu
+        measured_DP = model.get_measurements(indices)
         
-        probes_int     = probes_int.detach().cpu().numpy()
-        obja_ROI        = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
-        objp_ROI        = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        probes_int  = probes_int.detach().cpu().numpy()
+        obja_ROI    = (obj_patches[...,0] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
+        objp_ROI    = (obj_patches[...,1] * omode_occu[:,None,None,None]).sum(1).detach().cpu().numpy() # obj_ROI = (N_i, Nz,Ny,Nx)
         model_DP    = model_DP.detach().cpu().numpy()
         measured_DP = measured_DP.detach().cpu().numpy()
     

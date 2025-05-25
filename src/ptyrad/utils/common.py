@@ -2,11 +2,49 @@ import io
 import logging
 import os
 import platform
+import subprocess
 from time import perf_counter
 
 import torch
 import torch.distributed as dist
 
+
+def is_mig_enabled():
+    """
+    Detects if any GPU on the system is operating in MIG (Multi-Instance GPU) mode.
+    
+    Returns:
+        bool: True if MIG mode is enabled on any GPU, False otherwise.
+    """
+    try:
+        # Run the `nvidia-smi` command to query MIG mode
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=mig.mode.current", "--format=csv,noheader"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        
+        # Check for errors in the command execution
+        if result.returncode != 0:
+            print(f"Error running nvidia-smi: {result.stderr.strip()}")
+            return False
+        
+        # Parse the output to check for MIG mode
+        mig_modes = result.stdout.strip().split("\n")
+        for mode in mig_modes:
+            if mode.strip() == "Enabled":
+                return True
+        
+        return False
+    except FileNotFoundError:
+        # `nvidia-smi` is not available
+        print("nvidia-smi not found. Unable to detect MIG mode.")
+        return False
+    except Exception as e:
+        # Catch other unexpected errors
+        print(f"Error detecting MIG mode: {e}")
+        return False
 
 # Only used in run_ptyrad.py, might have a better place
 def set_accelerator():
@@ -21,6 +59,15 @@ def set_accelerator():
         vprint(f"Accelerator.distributed_type = {accelerator.distributed_type}")
         vprint(f"Accelerator.num_process      = {accelerator.num_processes}")
         vprint(f"Accelerator.mixed_precision  = {accelerator.mixed_precision}")
+        
+        # Check if the number of processes exceeds available GPUs
+        if accelerator.num_processes > torch.cuda.device_count():
+            vprint(f"ERROR: The specified number of processes for 'accelerate' ({accelerator.num_processes}) exceeds the number of GPUs available ({torch.cuda.device_count()}).")
+            vprint("Please verify the following:")
+            vprint("  1. Check the number of GPUs available on your system using `nvidia-smi`.")
+            vprint("  2. If using a SLURM cluster, ensure your job script requests the correct number of GPUs (e.g., `--gres=gpu:<num_gpus>`).")
+            vprint("  3. Ensure your environment is correctly configured to detect GPUs (e.g., CUDA drivers are installed and compatible).")
+            raise ValueError("The number of processes exceeds the available GPUs. Please adjust your configuration.")
         
         if accelerator.distributed_type == DistributedType.NO and accelerator.mixed_precision == "no":
             vprint("'accelerate' is available but NOT using distributed mode or mixed precision")
@@ -197,6 +244,10 @@ def print_gpu_info():
             vprint(f"CUDA Available: {torch.cuda.is_available()}")
             vprint(f"CUDA Version: {torch.version.cuda}")
             vprint(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
+            vprint(f"MIG (Multi-Instance GPU) mode = {is_mig_enabled()}")
+            vprint("INFO: MIG splits a physical GPU into multiple GPU slices, but multiGPU does not support these MIG slices.")
+            vprint("      → If you're doing normal reconstruction/hypertune, you can safely ignore this.")
+            vprint("      → If you want to do multiGPU, you must provide multiple 'full' GPUs that are not in MIG mode.")
         elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
             vprint(f"MPS Available: {torch.backends.mps.is_available()}")
         elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
