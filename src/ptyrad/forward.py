@@ -14,7 +14,7 @@ from ptyrad.utils import fftshift2
 # Note that element-wise multiplication of tensor (*) is defaulted as out-of-place operation
 # So new tensor is being created and referenced to the old graph to keep the gradient flowing
 
-def multislice_forward_model_vec_all(object_patches, omode_occu, probe, H, eps=1e-10):
+def multislice_forward_model_vec_all(object_patches, probe, H, omode_occu=None, eps=1e-10):
     """
     Computes the multislice electron diffraction pattern with multiple incoherent probe 
     and object modes using a vectorized forward model.
@@ -37,6 +37,14 @@ def multislice_forward_model_vec_all(object_patches, omode_occu, probe, H, eps=1
         torch.Tensor: Tensor of shape (N, Ky, Kx) with float32 positive values, representing the 
         forward diffraction pattern for each sample in the batch.
     """
+    
+    # Initialize omode_occu if it's not specified
+    if omode_occu is None:
+        objp=  object_patches[...,1]
+        device = objp.device
+        dtype = objp.dtype
+        omode = objp.size(1)
+        omode_occu = torch.ones(omode, dtype=dtype, device=device) / omode
     
     # Cast the object back to actual complex tensor
     object_cplx = torch.polar(object_patches[...,0], object_patches[...,1]) # (N, omode, Nz, Ny, Nx)

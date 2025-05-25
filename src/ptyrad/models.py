@@ -373,6 +373,15 @@ class PtychoAD(torch.nn.Module):
         
         return probe_prop
     
+    def get_forward_meas(self, object_patches, probes, propagators):
+        
+        dp_fwd = multislice_forward_model_vec_all(object_patches, probes, propagators, omode_occu=self.omode_occu)
+        
+        if self.detector_blur_std is not None and self.detector_blur_std != 0:
+            dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
+            
+        return dp_fwd
+    
     def get_measurements(self, indices=None):
         """ Get measurements for each position """
         # Return the selected measurements based on input indices
@@ -420,11 +429,9 @@ class PtychoAD(torch.nn.Module):
         object_patches = self.get_obj_patches(indices)
         probes         = self.get_probes(indices)
         propagators    = self.get_propagators(indices)
-        dp_fwd         = multislice_forward_model_vec_all(object_patches, self.omode_occu, probes, propagators)
+        dp_fwd         = self.get_forward_meas(object_patches, probes, propagators)
         
         # Keep the object_patches for later object-specific loss
         self._current_object_patches = object_patches
         
-        if self.detector_blur_std is not None and self.detector_blur_std != 0:
-            dp_fwd = gaussian_blur(dp_fwd, kernel_size=5, sigma=self.detector_blur_std)
         return dp_fwd
