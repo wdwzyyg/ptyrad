@@ -945,6 +945,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         vname = 'dz'
         vparams = tune_params[vname]
         init.init_params['obj_slice_thickness'] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
+        init.set_variables_dict()
         init.init_obj() # Currently the slice_thickness only modifies the printed obj_extent value, but eventually we'll add obj resampling so let's keep it for now
         init.init_H()
     
