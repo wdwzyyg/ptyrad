@@ -64,7 +64,7 @@ hypertune_params : {
     'pruner_params'  : {'name': 'HyperbandPruner', 'configs': {'min_resource': 5, 'reduction_factor': 2}}, # type: null, dict. Pruning is early termination of unpromising trials to save computation budget. Set to False to disable pruning (i.e., no early termination). The recommended prunner is HyperbandPruner, see Optuna document for more details
     'storage_path'   : 'sqlite:///hypertune.sqlite3', # type: str. Path to the SQLite database file (i.e., sotrage) as 'sqlite:///<DATABASE_FILENAME>.sqlite3'.
     'study_name'     : 'tBL_WSe2', # type: str. Name of the hypertune record (i.e., study). Hypertune of different dataset or different search space (i.e., different optimizable parameters) are encouraged to use different study name or even separate database file
-    'error_metric'   : 'contrast', # type: str. Either use 'loss' or 'contrast'. 'contrast' is simply calculated by std(img)/mean(std) to reflect reconstruction quality because 'loss' doesn't correlate that well. Note that `contrast` doesn't necessarily change monotonically with iterations, so you may want to disable pruning and set NITER carefullly. 
+    'error_metric'   : 'loss', # type: str. Either use 'loss' or 'contrast'. 'contrast' is simply calculated by std(img)/mean(std) to reflect reconstruction quality because 'loss' doesn't correlate that well. Note that `contrast` doesn't necessarily change monotonically with iterations, so you may want to disable pruning and set NITER carefullly. 
     'tune_params'    : {
         'optimizer'  : {'state': true, 'suggest': 'cat', 'kwargs': {'choices': ["Adam", "AdamW", "RMSprop", 'SGD']}, 'optim_configs': {}},
         'batch_size' : {'state': true, 'suggest': 'int', 'kwargs': {'low': 16, 'high': 512, 'log': true}},
@@ -80,6 +80,7 @@ hypertune_params : {
         'defocus'    : {'state': false, 'suggest': 'float', 'kwargs': {'low': -50, 'high': 50, 'step': 0.1, 'log': false}},
         'c3'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 4000, 'high': 10000, 'step': null, 'log': false}},
         'c5'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 50000, 'high': 100000, 'step': 5000, 'log': false}},
+        'Nlayer'     : {'state': false, 'suggest': 'int', 'kwargs': {'low': 1, 'high': 8, 'step': 1, 'log': false}},
         'dz'         : {'state': false, 'suggest': 'float', 'kwargs': {'low': 4, 'high': 8, 'step': 0.5, 'log': false}},
         'scale'      : {'state': false, 'suggest': 'float', 'kwargs': {'low': 0.8, 'high': 1.2, 'step': 0.02, 'log': false}}, # [scale, asymmetry, rotation, shear] corresponds to 'scan_affine' under 'exp_params'
         'asymmetry'  : {'state': false, 'suggest': 'float', 'kwargs': {'low': -0.2, 'high': 0.2, 'step': 0.05, 'log': false}},

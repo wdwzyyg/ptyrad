@@ -940,6 +940,13 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
     if remake_probe:
         init.init_probe()
             
+    # Nlayer
+    if tune_params['Nlayer']['state']:
+        vname = 'Nlayer'
+        vparams = tune_params[vname]
+        init.init_params['obj_Nlayer'] = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
+        init.init_obj()
+    
     # slice_thickness
     if tune_params['dz']['state']:
         vname = 'dz'
