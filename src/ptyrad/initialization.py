@@ -2,12 +2,14 @@
 
 from copy import deepcopy
 from math import floor
+import os
 
 import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
 from ptyrad.load import load_fields_from_mat, load_hdf5, load_npy, load_pt, load_raw, load_tif
+from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
     create_one_hot_mask,
@@ -107,7 +109,12 @@ class Initializer:
         self.init_variables['meas_avg']     = meas_avg
         self.init_variables['meas_avg_sum'] = meas_avg_sum
         self.init_variables['measurements'] = meas
-
+        
+        export_params = self.init_params.get('meas_export') # Ture, False, None, dict (could be {})
+        if export_params is True or isinstance(export_params, dict):
+            vprint(f"Exporting measurements with `meas_export` = {export_params}")
+            self._export_meas(export_params if isinstance(export_params, dict) else {})
+        
         # Print out some measurements statistics
         vprint(f"meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         vprint(f"measurements                      (N, Ky, Kx) = {meas.dtype}, {meas.shape}", verbose=self.verbose)
@@ -1116,6 +1123,23 @@ class Initializer:
         
         return meas
 
+    def _export_meas(self, export_params={}):
+        meas = self.init_variables['measurements']
+        file_dir = export_params.get("file_dir")
+        
+        # Handle the case where file_dir is None
+        if file_dir is None:
+            meas_path = safe_get_nested(self.init_params, ['meas_params', 'path'], '')
+            export_params["file_dir"] = os.path.dirname(meas_path)
+            
+        # Ensure the directory exists if it's not empty
+        if file_dir and not os.path.exists(file_dir):
+            vprint(f"User specified 'file_dir' = '{file_dir}' doesn't exist, creating the directory now.", verbose=self.verbose)
+            os.makedirs(file_dir, exist_ok=True)
+            
+        save_array(meas, **export_params)
+        return
+            
     ###### Private methods for initializing probe ######
         
     def _load_probe(self):
