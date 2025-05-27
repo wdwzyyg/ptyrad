@@ -80,7 +80,7 @@ class Initializer:
                 self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
             elif self.cache_source == 'py4DSTEM':
                 vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_hdf5(self.cache_path, dataset_key=None)
+                self.cache_contents = load_hdf5(self.cache_path, key=None)
             else:
                 raise ValueError(f"File type {source} not implemented for caching yet, please use 'PtyRAD', or 'PtyShv'!")
         vprint(f"use_cached_obj   = {self.use_cached_obj}", verbose=self.verbose)
@@ -1221,7 +1221,7 @@ class Initializer:
         https://github.com/chiahao3/py4DSTEM/tree/benchmark
         """
         hdf5_path = params
-        probe = self.cache_contents['probe'] if self.use_cached_probe else load_hdf5(hdf5_path, 'probe')
+        probe = self.cache_contents['probe'] if self.use_cached_probe else load_hdf5(hdf5_path, key='probe')
 
         vprint(f"Input py4DSTEM probe has original shape {probe.shape}", verbose=self.verbose)
 
@@ -1367,7 +1367,7 @@ class Initializer:
     
     def _load_pos_from_py4dstem(self, params: str):
         hdf5_path       = params
-        hdf5_contents   = self.cache_contents if self.use_cached_pos else load_hdf5(hdf5_path, 'positions_px')
+        hdf5_contents   = self.cache_contents if self.use_cached_pos else load_hdf5(hdf5_path, key='positions_px')
         probe_positions = hdf5_contents['positions_px']
         probe_shape     = hdf5_contents['probe'].shape[-2:] # py4DSTEM probe is (pmode,Ny,Nx)
         pos             = probe_positions - np.array(probe_shape)/2 
@@ -1381,8 +1381,8 @@ class Initializer:
         probe_shape = self.init_variables['probe_shape']
         
         hdf5_path = params
-        ppY = load_hdf5(hdf5_path, dataset_key='ppY')
-        ppX = load_hdf5(hdf5_path, dataset_key='ppX')
+        ppY = load_hdf5(hdf5_path, key='ppY')
+        ppX = load_hdf5(hdf5_path, key='ppX')
         pos = np.stack((-ppY, -ppX), axis=1) / dx 
         pos = np.flipud(pos) # (N,2) in (pos_y_px, pos_x_px)
         obj_shape = 1.2 * np.ceil(pos.max(0) - pos.min(0) + probe_shape)
@@ -1528,7 +1528,7 @@ class Initializer:
     
     def _load_obj_from_py4dstem(self, params: str):
         hdf5_path = params
-        obj = self.cache_contents['object'] if self.use_cached_obj else load_hdf5(hdf5_path, 'object')
+        obj = self.cache_contents['object'] if self.use_cached_obj else load_hdf5(hdf5_path, key='object')
     
         vprint(f"Input py4DSTEM object has original shape {obj.shape}", verbose=self.verbose)
         vprint("Expanding py4DSTEM object dimension to (omode, Nz, Ny, Nx)", verbose=self.verbose)

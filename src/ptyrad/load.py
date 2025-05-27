@@ -1,11 +1,13 @@
 import os
+from typing import Union
 
 import h5py
 import numpy as np
 import scipy.io as sio
 
-from ptyrad.utils import vprint
+from ptyrad.utils import handle_hdf5_types, list_hdf5_keys, vprint
 
+KeyType = Union[str, list[str], None]
 
 ###### These are data loading functions ######
 
@@ -301,50 +303,157 @@ def load_fields_from_mat(file_path, target_field=None, squeeze_me=True, simplify
     vprint("Success! Loaded .mat file path =", file_path)
     return result_list[0] if len(result_list)==1 else result_list
 
-def load_hdf5(file_path, dataset_key=None):
+def load_hdf5(file_path: str, key: KeyType = None, delimiter: str = ".") -> Union[np.ndarray, dict[str, np.ndarray]]:
     """
-    Load data from an HDF5 file.
-    
+    Load dataset(s) from an HDF5 file, recursively if groups are encountered.
+
     Parameters:
-    
-    file_path (str): The full path to the HDF5 data file.
-    dataset_key (str, optional): The key of the dataset to load from the HDF5 file.
-    
+    - file_path (str): Path to the HDF5 file.
+    - key (str | list[str] | None): Name(s) of the dataset(s) to load.
+        - If None, '', or []: Load all datasets recursively, preserving the original nested structure.
+        - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
+        - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure with the hierarchical key strings as keys.
+    - delimiter (str): Delimiter for hierarchical keys (default: ".").
+
     Returns:
-    data (numpy.ndarray): The loaded data.
-    
+    - data (np.ndarray or dict): The loaded dataset(s).
+        - If `key` is a string, returns a single `np.ndarray` or a nested dictionary if the key points to a group.
+        - If `key` is a list of strings, returns a dictionary with the hierarchical key strings as keys and the corresponding datasets as values.
+        - If `key` is None, returns a nested dictionary preserving the original structure of the HDF5 file.
+
     Raises:
-    FileNotFoundError: If the specified file does not exist.
-    
-    Example:
-    file_path = 'data.h5'
-    data, data_source = load_hdf5(file_path, dataset_key='ds')
+    - FileNotFoundError: If the specified file does not exist.
+    - KeyError: If provided key(s) are not found in the file.
+    - TypeError: If the key is not None, a string, or a list of strings.
+
+    Notes:
+    - **Hierarchical Keys**: 
+        - The function supports hierarchical keys (e.g., 'group1.dataset1') to directly access nested datasets or groups.
+        - When a list of hierarchical keys is provided, the returned dictionary will have a flattened structure with the hierarchical key strings as keys.
+        - Example: If `key=["group1/dataset1", "group2/dataset2"]`, the returned dictionary will look like:
+          ```python
+          {
+              "group1/dataset1": <numpy.ndarray>,
+              "group2/dataset2": <numpy.ndarray>
+          }
+          ```
+
+    - **Preserving Original Structure**:
+        - If [key=None], the function recursively loads all datasets and groups, preserving the original nested structure of the HDF5 file.
+        - Example: If the HDF5 file has the following structure:
+          ```
+          /group1
+              /dataset1
+              /dataset2
+          /group2
+              /dataset3
+          ```
+          The returned dictionary will look like:
+          ```python
+          {
+              "group1": {
+                  "dataset1": <numpy.ndarray>,
+                  "dataset2": <numpy.ndarray>
+              },
+              "group2": {
+                  "dataset3": <numpy.ndarray>
+              }
+          }
+          ```
+
+    - **Performance Considerations**:
+        - Providing an exact key (e.g., [key="group1/dataset1"]) is significantly faster than recursively loading the entire file or traversing the hierarchy.
+        - Recursive loading ([key=None]) or traversing with a list of keys can be slow for large HDF5 files with deeply nested structures or many datasets.
+
+    Examples:
+    1. **Load a Single Dataset**:
+       ```python
+       data = load_hdf5("example.h5", key="group1/dataset1")
+       ```
+
+    2. **Load Multiple Datasets with Hierarchical Keys**:
+       ```python
+       data = load_hdf5("example.h5", key=["group1/dataset1", "group2/dataset3"])
+       # Output:
+       # {
+       #     "group1/dataset1": <numpy.ndarray>,
+       #     "group2/dataset3": <numpy.ndarray>
+       # }
+       ```
+
+    3. **Load All Datasets Preserving Original Structure**:
+       ```python
+       data = load_hdf5("example.h5", key=None)
+       # Output:
+       # {
+       #     "group1": {
+       #         "dataset1": <numpy.ndarray>,
+       #         "dataset2": <numpy.ndarray>
+       #     },
+       #     "group2": {
+       #         "dataset3": <numpy.ndarray>
+       #     }
+       # }
+       ```
+
     """
+    def _recursively_load(hobj, key=None, delimiter='.'):
+        """Recursively load h5py Group or Dataset into dict or array."""
+        
+        # Traverse hierarchically with a user-specified key
+        if key is not None:
+            parts = key.split(delimiter)
+            for part in parts:
+                if not isinstance(hobj, (h5py.Group, h5py.File)) or part not in hobj:
+                    raise KeyError(f"Key '{key}' not found. Failed at '{part}'. "
+                                   f"Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
+                                    "If you don't know the correct key, try 'key=None' to load the entire file as a dict.")
+                hobj = hobj[part]
+        
+        # Load the object without user-specified key
+        if isinstance(hobj, h5py.Dataset):
+            return handle_hdf5_types(hobj[()])
+        elif isinstance(hobj, h5py.Group):
+            return {k: _recursively_load(hobj[k]) for k in hobj}
+        else:
+            raise TypeError(f"Unsupported HDF5 object type: {type(hobj)}")
+    
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path.")
 
     with h5py.File(file_path, "r") as hf:
-        if dataset_key is None:
-            f = dict()
-            for key in hf.keys():
-                data = np.array(hf[key])
-                if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                    vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
-                    data = data.view('complex128')
-                f[key] = data
-            vprint("Success! Loaded .hdf5 file path =", file_path)
-            return f
-            
-        else:
-            data = np.array(hf[dataset_key])
-            if data.dtype == [('real', '<f8'), ('imag', '<f8')]: # For mat v7.3, the complex128 is read as this complicated datatype via h5py
-                vprint(f"Loaded data.dtype = {data.dtype}, cast it to 'complex128'")
-                data = data.view('complex128')
-            vprint("Success! Loaded .hdf5 file path =", file_path)
-            vprint("Imported .hdf5 data shape =", data.shape)
-            vprint("Imported .hdf5 data type =", data.dtype)
+        if key in (None, '', []):
+            file_dict = {k: _recursively_load(hf[k]) for k in hf.keys()}
+            vprint(f"Success! Loaded .hdf5 file as a dict from path = '{file_path}'")
+            return file_dict
+
+        elif isinstance(key, str):
+            data = _recursively_load(hf, key=key, delimiter=delimiter)
+            vprint(f"Success! Loaded .hdf5 file with key = '{key}' from path = '{file_path}'")
+            if isinstance(data, np.ndarray): 
+                vprint(f"Imported .hdf5 data shape = {data.shape}")
+                vprint(f"Imported .hdf5 data type = {data.dtype}")
             return data
+
+        elif isinstance(key, list):
+            if not all(isinstance(k, str) for k in key):
+                raise TypeError(f"All elements in 'key' list must be strings, got {[type(k).__name__ for k in key]}")
+            missing = []
+            for k in key:
+                try:
+                    _recursively_load(hf, key=k, delimiter=delimiter)
+                except KeyError:
+                    missing.append(k)
+            if missing:
+                raise KeyError(f"Key(s) = {missing} not found. Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
+                               "If you don't know the correct key, try 'key=None' to load the entire file as a dict.")
+            datasets_dict = {k: _recursively_load(hf, key=k, delimiter=delimiter) for k in key}
+            vprint(f"Success! Loaded .hdf5 file as a dict with keys = {key} from path = '{file_path}'")
+            return datasets_dict
+
+        else:
+            raise TypeError(f"`key` must be None, a string, or a list of strings but got key = '{key}'")
 
 def load_pt(file_path, weights_only=False):
     import torch

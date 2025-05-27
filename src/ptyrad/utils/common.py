@@ -5,6 +5,7 @@ import platform
 import subprocess
 from time import perf_counter
 
+import numpy as np
 import torch
 import torch.distributed as dist
 
@@ -566,3 +567,58 @@ def safe_filename(filepath, verbose=False):
         print(f"  Corrected: {result_path}")
     
     return result_path
+
+def handle_hdf5_types(x):
+    """
+    Convert data to native Python or NumPy types. Especially when loaded by h5py.
+
+    Handles special cases like MATLAB v7.3 complex128 data types and ensures
+    that data is converted to a format compatible with native Python or NumPy.
+
+    Args:
+        data: The input data to be converted.
+
+    Returns:
+        The converted data into native Python or NumPy types.
+    """
+    if isinstance(x, np.generic):
+        return x.item()
+    
+    # This handles string
+    elif isinstance(x, bytes):
+        try:
+            return x.decode('utf-8')
+        except UnicodeDecodeError:
+            return x  # Leave as-is if undecodable
+        
+    # For mat v7.3, the complex128 is read as this complicated datatype via h5py
+    elif isinstance(x, np.ndarray) and x.dtype == [('real', '<f8'), ('imag', '<f8')]: 
+        vprint(f"Detected data.dtype = {x.dtype}. Casting back to 'complex128'.")
+        return x.view(np.complex128)
+    
+    else:
+        return x
+
+def list_hdf5_keys(hobj, prefix=""):
+    """
+    Recursively list all keys in an HDF5 file or group, including hierarchical paths.
+
+    Args:
+        hobj (h5py.Group or h5py.File): The HDF5 group or file to traverse.
+        prefix (str): The current hierarchical path (used for recursion).
+
+    Returns:
+        list[str]: A list of all keys with their hierarchical paths.
+    """
+    import h5py
+    
+    keys = []
+    for key in hobj.keys():
+        full_key = f"{prefix}{key}" if prefix == "" else f"{prefix}/{key}"
+        if isinstance(hobj[key], h5py.Group):
+            # Recursively list keys in the group
+            keys.extend(list_hdf5_keys(hobj[key], prefix=f"{full_key}/"))
+        else:
+            # Add dataset key
+            keys.append(full_key)
+    return keys
