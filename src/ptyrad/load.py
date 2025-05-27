@@ -64,10 +64,137 @@ def load_npy(file_path):
     vprint("Imported .npy data shape =", data.shape)
     return data
 
+def load_measurements(path, key=None, shape=None, offset=None, gap=None):
+    """
+    Load diffraction measurements from a file. The file type is inferred from the extension.
+    Currently supports .tif, .tiff, .npy, .mat, .h5, .hdf5, and .raw.
+
+    Args:
+        path (str): Path to the file.
+        key (str): Key to specify the dataset (optional).
+        shape (tuple): Shape of the data for .raw files (optional).
+        offset (int): Offset for .raw files (optional).
+        gap (int): Gap for .raw files (optional).
+
+    Returns:
+        numpy.ndarray: The loaded measurements.
+
+    Raises:
+        ValueError: If the file type is unsupported or no valid dataset is found.
+    """
+    
+    file_path = path # The function signature is simplified for users, although I think file_path is clearer
+    
+    # Check file existence
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+    
+    # Infer file type from extension
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+
+    if ext in ['.tif', '.tiff']:
+        return load_tif(file_path)
+    
+    elif ext == '.npy':
+        return load_npy(file_path)
+    
+    elif ext in ['.mat', '.h5', '.hdf5']:
+        return load_ND_with_key(file_path, key)
+    
+    elif ext == '.raw':
+        if shape is None:
+            raise ValueError(f"Please at least provide 'shape' of the expected data array to correctly load the .raw file {file_path}.")
+        raw_args = {'shape': shape, 'offset': offset, 'gap': gap}
+        raw_args = {k: v for k, v in raw_args.items() if v is not None} # Remove argument with None
+        return load_raw(file_path, **raw_args)
+    
+    else:
+        raise ValueError(f"Unsupported file type: '{ext}'. Supported types are .tif, .tiff, .mat, .h5, .hdf5, .npy, and .raw.")
+
+def load_ND_with_key(file_path, key=None, ndims=[3, 4], verbose=True):
+    """
+    Load and filter datasets from a file using the provided loading function.
+
+    Args:
+        file_path (str): Path to the file.
+        key (str): Key to specify the dataset (optional).
+        ndims (list): List of desired dimensions for filtering datasets.
+        verbose (bool): Whether to print information about the datasets.
+
+    Returns:
+        numpy.ndarray: The loaded dataset if only one valid dataset is found.
+
+    Raises:
+        ValueError: If multiple valid datasets are found or no valid dataset is found.
+    """
+    
+    # Infer file type from extension
+    _, ext = os.path.splitext(file_path)
+    ext = ext.lower()
+    
+    # Check file extension
+    if ext == '.mat':
+        load_func = load_fields_from_mat
+    elif ext in ['.h5', '.hdf5']:
+        load_func = load_hdf5
+    else:
+        raise ValueError(f"Unsupported file type: '{ext}'. Supported types are .mat, .h5, .hdf5.")
+    
+    if key:
+        try:
+            return load_func(file_path, key)
+        except KeyError:
+            vprint(f"Couldn't find the dataset given the key '{key}', trying to search the whole file.")
+
+    # Load all datasets and filter valid ones
+    data_dict = load_func(file_path)
+    valid_datasets = collect_ND_datasets(data_dict, ndims=ndims, verbose=verbose)
+
+    if len(valid_datasets) == 1:
+        return next(iter(valid_datasets.values()))  # Return the single dataset
+    raise ValueError(f"Multiple ND datasets found: {list(valid_datasets.keys())}. Please specify the dataset key explicitly.")
+
+def collect_ND_datasets(data_dict, ndims=[3, 4], verbose=True):
+    """
+    Collect ND datasets from a dictionary and return them.
+
+    Args:
+        data_dict (dict): A dictionary containing datasets (e.g., from .mat or .hdf5 files).
+        ndims (list): A list of integers containing the desired dimensions of the datasets.
+        verbose (bool): Whether to print information about the datasets.
+
+    Returns:
+        dict: A dictionary of valid datasets with keys and their corresponding data.
+
+    Raises:
+        ValueError: If the input is not a dictionary or no dataset matches the required dimensions.
+    """
+    if not isinstance(data_dict, dict):
+        raise ValueError("Input must be a dictionary containing datasets.")
+
+    # Filter datasets that match the desired dimensions
+    valid_datasets = {
+        key: data for key, data in data_dict.items()
+        if isinstance(data, np.ndarray) and data.ndim in ndims
+    }
+
+    # Handle cases where no valid datasets are found
+    if len(valid_datasets) == 0:
+        raise ValueError(f"No dataset fits the required ndim in {ndims} in the provided dictionary.")
+
+    # Print information about the datasets if verbose is enabled
+    if verbose:
+        vprint(f"Found the following ND datasets with ndim in {ndims}:")
+        for key, data in valid_datasets.items():
+            vprint(f"  Key: '{key}', Shape: {data.shape}, Dtype: {data.dtype}")
+
+    return valid_datasets
+    
 ###### These are reconstruction file loading functions ######
 # Note that .mat and .hdf5 are also used for normal data
 
-def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplify_cells=True):
+def load_fields_from_mat(file_path, target_field=None, squeeze_me=True, simplify_cells=True):
     """
     Load and extract specified fields from a MATLAB .mat file.
 
@@ -115,7 +242,7 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
     result_list = []
 
     # Load entire .mat
-    if target_field == "All":
+    if target_field is None:
         try:
             mat_contents = sio.loadmat(
                 file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
@@ -172,9 +299,9 @@ def load_fields_from_mat(file_path, target_field="All", squeeze_me=True, simplif
             data = load_hdf5(file_path, name)
             result_list.append(data)
     vprint("Success! Loaded .mat file path =", file_path)
-    return result_list
+    return result_list[0] if len(result_list)==1 else result_list
 
-def load_hdf5(file_path, dataset_key="ds"):
+def load_hdf5(file_path, dataset_key=None):
     """
     Load data from an HDF5 file.
     
@@ -199,7 +326,6 @@ def load_hdf5(file_path, dataset_key="ds"):
 
     with h5py.File(file_path, "r") as hf:
         if dataset_key is None:
-            vprint("Imported entire .hdf5 as a dict:", file_path)
             f = dict()
             for key in hf.keys():
                 data = np.array(hf[key])

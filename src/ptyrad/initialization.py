@@ -1,14 +1,14 @@
 ## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
 
+import os
 from copy import deepcopy
 from math import floor
-import os
 
 import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.load import load_fields_from_mat, load_hdf5, load_npy, load_pt, load_raw, load_tif
+from ptyrad.load import load_fields_from_mat, load_hdf5, load_measurements, load_pt
 from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
@@ -629,41 +629,45 @@ class Initializer:
             raise KeyError(f"Missing required configuration field: {e}")
         
         # Check for 'path' key for all sources
-        if 'path' not in meas_params:
+        if meas_source != 'custom' and 'path' not in meas_params:
             raise KeyError(f"'path' is required in 'meas_params' for source '{meas_source}'. Set 'path': <PATH_TO_YOUR_DATASET> inside your 'meas_params' dict.")
 
-        # Additional validation for specific sources
-        if meas_source in ('mat', 'hdf5') and 'key' not in meas_params:
-            raise KeyError(f"'key' is required in 'meas_params' for source '{meas_source}'. Set 'key': <KEY_TO_YOUR_DATASET> inside your 'meas_params' dict.")
-        
         vprint(f"Loading measurements from source = '{meas_source}'", verbose=self.verbose)
 
         if meas_source == 'custom':
-            meas = meas_params  # assumed to already be a NumPy array
-        elif meas_source in ('tif', 'tiff'):
-            meas = load_tif(meas_params['path']) # key is ignored because it's not needed for tif files
-        elif meas_source == 'mat':
-            meas = load_fields_from_mat(meas_params['path'], meas_params['key'])[0]
-        elif meas_source == 'hdf5':
-            meas = load_hdf5(meas_params['path'], meas_params['key']).astype('float32')
-        elif meas_source == 'npy':
-            meas = load_npy(meas_params['path']).astype('float32')
-        elif meas_source == 'raw':
-            default_shape = (
-                self.init_params['pos_N_scans'],
-                self.init_params['meas_Npix'],
-                self.init_params['meas_Npix'],
-            )
-            meas = load_raw(
-                meas_params['path'],
-                shape=meas_params.get('shape', default_shape),
-                offset=meas_params.get('offset', 0),
-                gap=meas_params.get('gap', 1024)
-            )
-        else:
-            raise ValueError(f"Unsupported measurement source '{meas_source}'. "
-                        "Use 'custom', 'tif', 'mat', 'hdf5', 'npy', or 'raw'.")
+            if not isinstance(meas_params, np.ndarray): # assume to be a numpy array
+                raise TypeError(f"'custom' source requires 'meas_params' to be a NumPy array. Got {type(meas_params)}.")
+            meas = meas_params
+            
+        elif meas_source in ['file', 'tif', 'tiff', 'mat', 'h5', 'hdf5', 'npy', 'raw']: # Keep the file types for backward compatibility
+            # Infer file type from extension
+            file_path = meas_params.get('path')
+            key = meas_params.get('key')
+            _, ext = os.path.splitext(file_path)
+            ext = ext.lower()
+            vprint(f"Detected measurement file type = '{ext}'")
+            
+            # Warning when there's no key specified
+            if ext in ('.mat', '.h5', '.hdf5') and key is None:
+                vprint(f"WARNING: Couldn't find the 'key' in 'meas_params' with file type = '{ext}'.")
+                vprint("It is strongly recommended to provide an explicit key to better find the desired dataset.")
+                vprint("PtyRAD will still try to find the dataset, but you may consider setting 'key': <DATASET_KEY> inside your 'meas_params' dict.")
+            
+            # Provide default shape for .raw files if it's not specified
+            if ext == '.raw' and meas_params.get('shape') is None:
+                vprint(f"WARNING: Couldn't find the 'shape' in 'meas_params' with file type = '{ext}'.")
+                vprint("It is strongly recommended to provide an explicit shape to better load from .raw files")
+                vprint("PtyRAD will still try to load the dataset based on the provided 'init_params', but you may consider setting 'shape': (N_scans, Npix, Npix) inside your 'meas_params' dict.")
+                meas_params['shape'] = (self.init_params['pos_N_scans'],
+                                        self.init_params['meas_Npix'],
+                                        self.init_params['meas_Npix'])
+            meas = load_measurements(**meas_params)
 
+        else:
+            raise ValueError(f"Unsupported measurement source '{meas_source}'. Use 'custom' or 'file'.")
+        
+        meas = meas.astype('float32')
+        vprint("Casting measurements dtype to float32 (single precision) for computational efficiency.")
         vprint(f"Imported meausrements shape / dtype = {meas.shape}, dtype = {meas.dtype}", verbose=self.verbose)
         vprint(f"Imported meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.4f}, {meas.max():.4f})", verbose=self.verbose)
         return meas
@@ -1190,7 +1194,7 @@ class Initializer:
         mat_path = params
         mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
         use_h5py = (mat_version[0] == 2)
-        probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')[0]
+        probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')
         vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
 
         if use_h5py:
@@ -1506,7 +1510,7 @@ class Initializer:
         mat_path = params
         mat_version = get_matfile_version(mat_path)
         use_h5py = (mat_version[0] == 2)
-        obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')[0]
+        obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')
     
         if use_h5py:
             obj = obj.transpose(range(obj.ndim)[::-1])
