@@ -650,7 +650,7 @@ class Initializer:
             # Warning when there's no key specified
             if ext in ('.mat', '.h5', '.hdf5') and key is None:
                 vprint(f"WARNING: Couldn't find the 'key' in 'meas_params' with file type = '{ext}'.")
-                vprint("It is strongly recommended to provide an explicit key to better find the desired dataset.")
+                vprint("It is strongly recommended to provide an explicit key to better find the desired dataset, which is often much faster as well.")
                 vprint("PtyRAD will still try to find the dataset, but you may consider setting 'key': <DATASET_KEY> inside your 'meas_params' dict.")
             
             # Provide default shape for .raw files if it's not specified

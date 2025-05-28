@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import Any, List, Optional, Union, Tuple
 
 import h5py
 import numpy as np
@@ -66,7 +66,13 @@ def load_npy(file_path):
     vprint("Imported .npy data shape =", data.shape)
     return data
 
-def load_measurements(path, key=None, shape=None, offset=None, gap=None):
+def load_measurements(
+    path: str,
+    key: Optional[str] = None,
+    shape: Optional[Tuple[int, ...]] = None,
+    offset: Optional[int] = None,
+    gap: Optional[int] = None,
+) -> np.ndarray:
     """
     Load diffraction measurements from a file. The file type is inferred from the extension.
     Currently supports .tif, .tiff, .npy, .mat, .h5, .hdf5, and .raw.
@@ -84,114 +90,171 @@ def load_measurements(path, key=None, shape=None, offset=None, gap=None):
     Raises:
         ValueError: If the file type is unsupported or no valid dataset is found.
     """
-    
-    file_path = path # The function signature is simplified for users, although I think file_path is clearer
-    
+
+    file_path = path  # The function signature is simplified for users, although I think file_path is clearer
+
     # Check file existence
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
-    
+
     # Infer file type from extension
     _, ext = os.path.splitext(file_path)
     ext = ext.lower()
 
-    if ext in ['.tif', '.tiff']:
+    if ext in [".tif", ".tiff"]:
         return load_tif(file_path)
-    
-    elif ext == '.npy':
-        return load_npy(file_path)
-    
-    elif ext in ['.mat', '.h5', '.hdf5']:
-        return load_ND_with_key(file_path, key)
-    
-    elif ext == '.raw':
-        if shape is None:
-            raise ValueError(f"Please at least provide 'shape' of the expected data array to correctly load the .raw file {file_path}.")
-        raw_args = {'shape': shape, 'offset': offset, 'gap': gap}
-        raw_args = {k: v for k, v in raw_args.items() if v is not None} # Remove argument with None
-        return load_raw(file_path, **raw_args)
-    
-    else:
-        raise ValueError(f"Unsupported file type: '{ext}'. Supported types are .tif, .tiff, .mat, .h5, .hdf5, .npy, and .raw.")
 
-def load_ND_with_key(file_path, key=None, ndims=[3, 4], verbose=True):
+    elif ext == ".npy":
+        return load_npy(file_path)
+
+    elif ext in [".mat", ".h5", ".hdf5"]:
+        return load_ND_with_key(file_path, key)
+
+    elif ext == ".raw":
+        if shape is None:
+            raise ValueError(
+                f"Please at least provide 'shape' of the expected data array to correctly load the .raw file {file_path}."
+            )
+        raw_args = {"shape": shape, "offset": offset, "gap": gap}
+        raw_args = {
+            k: v for k, v in raw_args.items() if v is not None
+        }  # Remove argument with None
+        return load_raw(file_path, **raw_args)
+
+    else:
+        raise ValueError(
+            f"Unsupported file type: '{ext}'. Supported types are .tif, .tiff, .mat, .h5, .hdf5, .npy, and .raw."
+        )
+
+def load_ND_with_key(
+    file_path: str,
+    key: Optional[str] = None,
+    ndims: Optional[List[int]] = None,
+    verbose: bool = True,
+) -> np.ndarray:
     """
-    Load and filter datasets from a file using the provided loading function.
+    Load exactly one ND dataset from (possibly nested) files like .mat and .hdf5.
 
     Args:
         file_path (str): Path to the file.
-        key (str): Key to specify the dataset (optional).
+        key (str, optional): Key to specify the dataset. If not provided, will search for all valid ND datasets.
         ndims (list): List of desired dimensions for filtering datasets.
         verbose (bool): Whether to print information about the datasets.
 
     Returns:
-        numpy.ndarray: The loaded dataset if only one valid dataset is found.
+        numpy.ndarray: The loaded dataset.
 
     Raises:
-        ValueError: If multiple valid datasets are found or no valid dataset is found.
+        ValueError: If the file type is unsupported, or the key is invalid, or multiple/zero valid datasets are found.
     """
-    
+
+    if ndims is None:
+        ndims = [3, 4]
+
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(
+            f"The specified file '{file_path}' does not exist. Please check your file path."
+        )
+
     # Infer file type from extension
     _, ext = os.path.splitext(file_path)
     ext = ext.lower()
-    
-    # Check file extension
-    if ext == '.mat':
+
+    # Select loader
+    if ext == ".mat":
         load_func = load_fields_from_mat
-    elif ext in ['.h5', '.hdf5']:
+    elif ext in [".h5", ".hdf5"]:
         load_func = load_hdf5
     else:
-        raise ValueError(f"Unsupported file type: '{ext}'. Supported types are .mat, .h5, .hdf5.")
-    
-    if key:
-        try:
-            return load_func(file_path, key)
-        except KeyError:
-            vprint(f"Couldn't find the dataset given the key '{key}', trying to search the whole file.")
+        raise ValueError(
+            f"Unsupported file type: '{ext}'. Supported types are .mat, .h5, .hdf5."
+        )
 
-    # Load all datasets and filter valid ones
-    data_dict = load_func(file_path)
-    valid_datasets = collect_ND_datasets(data_dict, ndims=ndims, verbose=verbose)
+    # Load the data using the selected loader.
+    if key in (None, ""):
+        datasets_dict = load_func(file_path)  # None key would return a dict of the file
+        valid_datasets = collect_ND_datasets(
+            datasets_dict, ndims=ndims, verbose=verbose
+        )  # This will search recursively and return all valid ND datasets
+        if len(valid_datasets) == 1:
+            return next(iter(valid_datasets.values()))
+        elif len(valid_datasets) == 0:
+            raise ValueError(
+                f"No eligible datasets found in file with ndims = {ndims}. Please check the file and file path."
+            )
+        else:
+            raise ValueError(
+                f"Multiple eligible ND datasets found: {list(valid_datasets.keys())}. Please specify the dataset key explicitly."
+            )
 
-    if len(valid_datasets) == 1:
-        return next(iter(valid_datasets.values()))  # Return the single dataset
-    raise ValueError(f"Multiple ND datasets found: {list(valid_datasets.keys())}. Please specify the dataset key explicitly.")
+    elif isinstance(key, str):
+        data_or_dict = load_func(
+            file_path, key
+        )  # String key would normally return ndarray, but incorrectly specified key may point to a group or anything else
+        if isinstance(data_or_dict, np.ndarray):
+            return data_or_dict
+        else:
+            raise ValueError(
+                f"The returned value at key '{key}' is not an ndarray dataset, got type = {type(data_or_dict).__name__}. "
+                "If you don't know the correct dataset key, try 'key=None' to search for eligible ND datasets from the entire file."
+            )
+    else:
+        raise TypeError(f"`key` must be None or a string, but got key = '{key}'")
 
-def collect_ND_datasets(data_dict, ndims=[3, 4], verbose=True):
+def collect_ND_datasets(
+    data_dict: dict[str, Any],
+    ndims: list[int] = None,
+    delimiter: str = ".",
+    verbose: bool = True,
+    _parent_key: Optional[str] = None,
+) -> dict[str, np.ndarray]:
     """
-    Collect ND datasets from a dictionary and return them.
+    Collect ND numpy arrays from a (possibly nested) dictionary that match desired dimensionalities.
+
+    Automatically traverses nested dictionaries and flattens keys with '//'.
 
     Args:
-        data_dict (dict): A dictionary containing datasets (e.g., from .mat or .hdf5 files).
-        ndims (list): A list of integers containing the desired dimensions of the datasets.
-        verbose (bool): Whether to print information about the datasets.
+        data_dict (dict): Dictionary of datasets (flat or nested).
+        ndims (list of int): Desired dimensionalities to match (e.g., [3, 4]).
+        delimiter (str): String symbol used to seperate different levels of the full path to the dataset
+        verbose (bool): Whether to print matched datasets.
+        _parent_key (str, optional): **Internal use only.** Tracks nested keys during recursion. Do not set manually.
 
     Returns:
-        dict: A dictionary of valid datasets with keys and their corresponding data.
+        dict[str, np.ndarray]: Matching datasets with flattened hierarchical keys.
 
     Raises:
-        ValueError: If the input is not a dictionary or no dataset matches the required dimensions.
+        ValueError: If input is not a dict or no datasets match.
     """
     if not isinstance(data_dict, dict):
         raise ValueError("Input must be a dictionary containing datasets.")
 
-    # Filter datasets that match the desired dimensions
-    valid_datasets = {
-        key: data for key, data in data_dict.items()
-        if isinstance(data, np.ndarray) and data.ndim in ndims
-    }
+    if ndims is None:
+        ndims = [3, 4]
 
-    # Handle cases where no valid datasets are found
-    if len(valid_datasets) == 0:
-        raise ValueError(f"No dataset fits the required ndim in {ndims} in the provided dictionary.")
+    results: dict[str, np.ndarray] = {}
 
-    # Print information about the datasets if verbose is enabled
-    if verbose:
+    for key, val in data_dict.items():
+        full_key = f"{_parent_key}{delimiter}{key}" if _parent_key else key
+
+        if isinstance(val, np.ndarray):
+            if val.ndim in ndims:
+                results[full_key] = val
+
+        elif isinstance(val, dict):
+            results.update(
+                collect_ND_datasets(
+                    val, ndims=ndims, verbose=False, _parent_key=full_key
+                )
+            )
+
+    if verbose and results:
         vprint(f"Found the following ND datasets with ndim in {ndims}:")
-        for key, data in valid_datasets.items():
-            vprint(f"  Key: '{key}', Shape: {data.shape}, Dtype: {data.dtype}")
+        for k, arr in results.items():
+            vprint(f"  Key: '{k}', Shape: {arr.shape}, Dtype: {arr.dtype}")
 
-    return valid_datasets
+    return results
     
 ###### These are reconstruction file loading functions ######
 # Note that .mat and .hdf5 are also used for normal data
@@ -303,7 +366,9 @@ def load_fields_from_mat(file_path, target_field=None, squeeze_me=True, simplify
     vprint("Success! Loaded .mat file path =", file_path)
     return result_list[0] if len(result_list)==1 else result_list
 
-def load_hdf5(file_path: str, key: KeyType = None, delimiter: str = ".") -> Union[np.ndarray, dict[str, np.ndarray]]:
+def load_hdf5(
+    file_path: str, key: KeyType = None, delimiter: str = "."
+) -> Union[np.ndarray, dict[str, np.ndarray]]:
     """
     Load dataset(s) from an HDF5 file, recursively if groups are encountered.
 
@@ -397,19 +462,22 @@ def load_hdf5(file_path: str, key: KeyType = None, delimiter: str = ".") -> Unio
        ```
 
     """
-    def _recursively_load(hobj, key=None, delimiter='.'):
+
+    def _recursively_load(hobj, key=None, delimiter="."):
         """Recursively load h5py Group or Dataset into dict or array."""
-        
+
         # Traverse hierarchically with a user-specified key
         if key is not None:
             parts = key.split(delimiter)
             for part in parts:
                 if not isinstance(hobj, (h5py.Group, h5py.File)) or part not in hobj:
-                    raise KeyError(f"Key '{key}' not found. Failed at '{part}'. "
-                                   f"Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
-                                    "If you don't know the correct key, try 'key=None' to load the entire file as a dict.")
+                    raise KeyError(
+                        f"Key '{key}' not found. Failed at '{part}'. "
+                        f"Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
+                        "If you don't know the correct key, try 'key=None' to load the entire file as a dict."
+                    )
                 hobj = hobj[part]
-        
+
         # Load the object without user-specified key
         if isinstance(hobj, h5py.Dataset):
             return handle_hdf5_types(hobj[()])
@@ -417,28 +485,34 @@ def load_hdf5(file_path: str, key: KeyType = None, delimiter: str = ".") -> Unio
             return {k: _recursively_load(hobj[k]) for k in hobj}
         else:
             raise TypeError(f"Unsupported HDF5 object type: {type(hobj)}")
-    
+
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path.")
+        raise FileNotFoundError(
+            f"The specified file '{file_path}' does not exist. Please check your file path."
+        )
 
     with h5py.File(file_path, "r") as hf:
-        if key in (None, '', []):
+        if key in (None, "", []):
             file_dict = {k: _recursively_load(hf[k]) for k in hf.keys()}
             vprint(f"Success! Loaded .hdf5 file as a dict from path = '{file_path}'")
             return file_dict
 
         elif isinstance(key, str):
             data = _recursively_load(hf, key=key, delimiter=delimiter)
-            vprint(f"Success! Loaded .hdf5 file with key = '{key}' from path = '{file_path}'")
-            if isinstance(data, np.ndarray): 
+            vprint(
+                f"Success! Loaded .hdf5 file with key = '{key}' from path = '{file_path}'"
+            )
+            if isinstance(data, np.ndarray):
                 vprint(f"Imported .hdf5 data shape = {data.shape}")
                 vprint(f"Imported .hdf5 data type = {data.dtype}")
             return data
 
         elif isinstance(key, list):
             if not all(isinstance(k, str) for k in key):
-                raise TypeError(f"All elements in 'key' list must be strings, got {[type(k).__name__ for k in key]}")
+                raise TypeError(
+                    f"All elements in 'key' list must be strings, got {[type(k).__name__ for k in key]}"
+                )
             missing = []
             for k in key:
                 try:
@@ -446,14 +520,22 @@ def load_hdf5(file_path: str, key: KeyType = None, delimiter: str = ".") -> Unio
                 except KeyError:
                     missing.append(k)
             if missing:
-                raise KeyError(f"Key(s) = {missing} not found. Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
-                               "If you don't know the correct key, try 'key=None' to load the entire file as a dict.")
-            datasets_dict = {k: _recursively_load(hf, key=k, delimiter=delimiter) for k in key}
-            vprint(f"Success! Loaded .hdf5 file as a dict with keys = {key} from path = '{file_path}'")
+                raise KeyError(
+                    f"Key(s) = {missing} not found. Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
+                    "If you don't know the correct key, try 'key=None' to load the entire file as a dict."
+                )
+            datasets_dict = {
+                k: _recursively_load(hf, key=k, delimiter=delimiter) for k in key
+            }
+            vprint(
+                f"Success! Loaded .hdf5 file as a dict with keys = {key} from path = '{file_path}'"
+            )
             return datasets_dict
 
         else:
-            raise TypeError(f"`key` must be None, a string, or a list of strings but got key = '{key}'")
+            raise TypeError(
+                f"`key` must be None, a string, or a list of strings but got key = '{key}'"
+            )
 
 def load_pt(file_path, weights_only=False):
     import torch
