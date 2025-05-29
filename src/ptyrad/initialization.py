@@ -8,7 +8,7 @@ import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.load import load_fields_from_mat, load_hdf5, load_measurements, load_pt
+from ptyrad.load import load_fields_from_mat, load_hdf5, load_measurements, load_ptyrad
 from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
@@ -74,7 +74,7 @@ class Initializer:
         if any([self.use_cached_obj, self.use_cached_probe, self.use_cached_pos]):
             if self.cache_source == 'PtyRAD':
                 vprint(f"Loading 'PtyRAD' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_pt(self.cache_path)
+                self.cache_contents = load_ptyrad(self.cache_path)
             elif self.cache_source == 'PtyShv':
                 vprint(f"Loading 'PtyShv' file from {self.cache_path} for caching", verbose=self.verbose)
                 self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
@@ -453,8 +453,8 @@ class Initializer:
 
         elif tilt_source == 'PtyRAD':
             pt_path = tilt_params
-            ckpt = self.cache_contents if pt_path == self.cache_path else load_pt(pt_path)            
-            obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'].detach().cpu().numpy())
+            ckpt = self.cache_contents if pt_path == self.cache_path else load_ptyrad(pt_path)            
+            obj_tilts = np.float32(ckpt['optimizable_tensors']['obj_tilts'])
             vprint(f"Initialized obj_tilts with loaded obj_tilts from PtyRAD, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad", verbose=self.verbose)
 
         elif tilt_source == 'simu':
@@ -1183,8 +1183,8 @@ class Initializer:
 
     def _load_probe_from_ptyrad(self, params: str):
         pt_path = params
-        ckpt = self.cache_contents if self.use_cached_probe else load_pt(pt_path)
-        probe = ckpt['optimizable_tensors']['probe'].detach().cpu().numpy()
+        ckpt = self.cache_contents if self.use_cached_probe else load_ptyrad(pt_path)
+        probe = ckpt['optimizable_tensors']['probe']
         return probe
     
     def _load_probe_from_ptyshv(self, params: str):
@@ -1341,9 +1341,9 @@ class Initializer:
     
     def _load_pos_from_ptyrad(self, params: str):
         pt_path = params
-        ckpt = self.cache_contents if self.use_cached_pos else load_pt(pt_path)
-        crop_pos = ckpt['model_attributes']['crop_pos'].detach().cpu().numpy()
-        probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts'].detach().cpu().numpy()
+        ckpt = self.cache_contents if self.use_cached_pos else load_ptyrad(pt_path)
+        crop_pos = ckpt['model_attributes']['crop_pos']
+        probe_pos_shifts = ckpt['optimizable_tensors']['probe_pos_shifts']
         pos = crop_pos + probe_pos_shifts
         return pos
     
@@ -1500,9 +1500,9 @@ class Initializer:
     
     def _load_obj_from_ptyrad(self, params: str):
         pt_path = params
-        ckpt = self.cache_contents if self.use_cached_obj else load_pt(pt_path)
-        obja = ckpt['optimizable_tensors']['obja'].detach().cpu().numpy()
-        objp = ckpt['optimizable_tensors']['objp'].detach().cpu().numpy()
+        ckpt = self.cache_contents if self.use_cached_obj else load_ptyrad(pt_path)
+        obja = ckpt['optimizable_tensors']['obja']
+        objp = ckpt['optimizable_tensors']['objp']
         obj = obja * np.exp(1j * objp)
         return obj
     

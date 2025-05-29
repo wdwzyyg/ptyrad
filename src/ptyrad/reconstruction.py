@@ -18,6 +18,7 @@ from ptyrad.save import copy_params_to_dir, make_output_folder, save_results
 from ptyrad.utils import (
     get_blob_size,
     get_date,
+    ndarrays_to_tensors,
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
     safe_filename,
@@ -284,10 +285,57 @@ class IndicesDataset(Dataset):
 # These are called within PtyRADSolver, and the detailed walkthrough notebook
  
 def create_optimizer(optimizer_params, optimizable_params, verbose=True):
+    
+    def _fix_optimizer_state_dict_format(optim_state_dict: dict) -> dict:
+        """
+        Fix HDF5-loaded optimizer state dict by:
+        - Recovering integer keys (HDF5 forces strings as keys).
+        - Converting param_groups from dicts back to list format, if needed.
+        - Converting any remaining param indices to lists.
+
+        Args:
+            op_state_dict (dict): Loaded optimizer state dict (e.g. from HDF5).
+
+        Returns:
+            dict: Fixed optimizer state dict.
+        """
+        fixed = {}
+
+        for key, val in optim_state_dict.items():
+            # If the value is a dict (like 'state'), fix its integer keys
+            if isinstance(val, dict):
+                fixed_val = {}
+                for nested_key, nested_val in val.items():
+                    try:
+                        fixed_nested_key = int(nested_key)  # Convert '0', '1' etc. to 0, 1
+                    except (ValueError, TypeError):
+                        fixed_nested_key = nested_key  # Keep string keys as-is
+                    fixed_val[fixed_nested_key] = nested_val
+                fixed[key] = fixed_val
+            else:
+                fixed[key] = val
+
+        # Fix param_groups format if it was accidentally stored as a dict
+        if isinstance(fixed.get("param_groups"), dict):
+            param_groups_dict = fixed["param_groups"]
+            # Convert {0: {...}, 1: {...}} → [{...}, {...}]
+            fixed["param_groups"] = [
+                param_groups_dict[k] for k in sorted(param_groups_dict, key=lambda x: int(x))
+            ]
+
+        # Ensure 'params' field is a list of ints, not tensors or ndarrays
+        for group in fixed.get("param_groups", []):
+            if isinstance(group.get("params"), torch.Tensor):
+                group["params"] = group["params"].tolist()
+            elif isinstance(group.get("params"), np.ndarray):
+                group["params"] = group["params"].tolist()
+
+        return fixed
+    
     # Extract the optimizer name and configs
     optimizer_name = optimizer_params['name']
     optimizer_configs = optimizer_params.get('configs') or {} # if "None" is provided or missing, it'll default an empty dict {}
-    pt_path = optimizer_params.get('load_state')
+    ptyrad_path = optimizer_params.get('load_state')
     
     vprint(f"### Creating PyTorch '{optimizer_name}' optimizer with configs = {optimizer_configs} ###", verbose=verbose)
     
@@ -305,16 +353,19 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
         optimizable_params = [p['params'][0] for p in optimizable_params if p['params'][0].requires_grad] # LBFGS only takes 1 params group as an iterable
 
     optimizer = optimizer_class(optimizable_params, **optimizer_configs)
-
-    if pt_path is not None:
+    device = optimizable_params[0]['params'][0].device
+    
+    if ptyrad_path is not None and isinstance(ptyrad_path, str):
         try:
-            from ptyrad.load import load_pt
-            optimizer.load_state_dict(load_pt(pt_path)['optim_state_dict'])
-            vprint(f"Loaded optimizer state from '{pt_path}'", verbose=verbose)
-        except ImportError as e:
-            raise ImportError("Failed to import 'load_pt' from ptyrad.load. Make sure load.py is accessible.") from e
-        except KeyError:
-            raise KeyError(f"Missing 'optim_state_dict' in loaded checkpoint from {pt_path}")
+            from ptyrad.load import load_ptyrad
+            optim_state_dict = load_ptyrad(ptyrad_path)['optim_state_dict']
+            optim_state_dict = _fix_optimizer_state_dict_format(optim_state_dict)
+            # Convert 'state' to tensors on the right device, while 'param_groups' are kept as generic scalars/arrays/boolean/None/list of int
+            optim_state_dict['state'] = ndarrays_to_tensors(optim_state_dict['state'], device=device) 
+            optimizer.load_state_dict(optim_state_dict)
+            vprint(f"Loaded optimizer state from '{ptyrad_path}'", verbose=verbose)
+        except Exception as e:
+            vprint(f"Failed to load optimizer state from '{ptyrad_path}': {e}. Using fresh optimizer.", verbose=verbose)
     vprint(" ", verbose=verbose)
     return optimizer
 

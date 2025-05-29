@@ -1,6 +1,7 @@
 # Saving
 
 import os
+from typing import Any, Dict
 
 import h5py
 import numpy as np
@@ -96,8 +97,11 @@ def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_
         optimizable_tensors[name] = tensor.detach().clone()
         if name == 'probe':
             optimizable_tensors['probe'] = model.get_complex_probe_view().detach().clone()
+    
+    from ptyrad import __version__ as ptyrad_version
         
     save_dict = {
+                'ptyrad_version'        : ptyrad_version,
                 'output_path'           : output_path,
                 'optimizable_tensors'   : optimizable_tensors,
                 'optim_state_dict'      : optimizer.state_dict() if 'optim_state' in params['recon_params']['save_result'] else None,
@@ -131,6 +135,99 @@ def make_save_dict(output_path, model, params, optimizer, niter, indices, batch_
                 }
     
     return save_dict
+
+def save_dict_to_hdf5(
+    d: Dict[str, Any], output_path: str, none_sentinel: str = "__NONE__", **kwargs
+) -> None:
+    """
+    Save a nested Python dictionary to an HDF5 file.
+
+    Supports common Python, NumPy, and PyTorch types. Non-HDF5-compatible types
+    (e.g., list of tuples, None, etc.) are automatically converted to HDF5-friendly formats.
+
+    Note that integer key (e.g. like in optimizer state dict) are coerced to string for HDF5 format.
+    
+    Args:
+        d (Dict[str, Any]): The nested dictionary to save.
+        output_path (str): The file path to save the HDF5 output to.
+        none_sentinel (str, optional): String used to represent `None` in HDF5. Defaults to "__NONE__".
+        **kwargs: Additional keyword arguments to pass to `h5py.File()` or `create_dataset()`.
+                  This can include compression settings like `compression="gzip"`, etc.
+
+    Returns:
+        None
+    """
+
+    def _recursively_save_dict_to_hdf5(d: Dict[str, Any], h5group: h5py.Group, path="") -> None:
+        for key, value in d.items():
+            full_key = f"{path}/{key}" if path else str(key)
+            key = str(key)  # convert to string for HDF5, especially important for optimizer state dict with integer as key
+            
+            try:
+                # Delete existing group/dataset if it exists
+                if key in h5group:
+                    del h5group[key]
+                
+                if value is None:
+                    h5group.create_dataset(key, data=none_sentinel, **kwargs)
+                
+                elif isinstance(value, dict):
+                    subgroup = h5group.create_group(key)
+                    _recursively_save_dict_to_hdf5(value, subgroup)
+                
+                elif isinstance(value, list):
+                    if all(isinstance(i, (int, float, np.number)) for i in value):
+                        h5group.create_dataset(key, data=np.array(value), **kwargs)
+                    
+                    elif all(isinstance(i, str) for i in value):
+                        dt = h5py.special_dtype(vlen=str)
+                        h5group.create_dataset(key, data=np.array(value, dtype=dt), **kwargs)
+                    
+                    elif all(isinstance(i, tuple) for i in value):
+                        try:
+                            arr = np.array([list(t) for t in value])
+                            h5group.create_dataset(key, data=arr, **kwargs)
+                        except Exception:
+                            h5group.create_dataset(key, data=str(value), **kwargs)
+                    
+                    elif all(isinstance(i, dict) for i in value):
+                        subgroup = h5group.create_group(key)
+                        for idx, item in enumerate(value):
+                            item_group = subgroup.create_group(str(idx))
+                            _recursively_save_dict_to_hdf5(item, item_group)
+                    
+                    elif all(isinstance(i, (np.ndarray, torch.Tensor)) for i in value):
+                        try:
+                            arr = np.stack([i.detach().cpu().numpy() if isinstance(i, torch.Tensor) else i for i in value])
+                            h5group.create_dataset(key, data=arr, **kwargs)
+                        except Exception:
+                            h5group.create_dataset(key, data=str(value), **kwargs)
+                    
+                    else:
+                        # fallback to storing list as strings (warn if needed)
+                        h5group.create_dataset(key, data=str(value), **kwargs)
+                
+                elif isinstance(value, tuple):
+                    h5group.create_dataset(key, data=np.array(value), **kwargs)
+                
+                elif isinstance(value, (int, float, str, np.number)):
+                    h5group.create_dataset(key, data=value, **kwargs)
+                
+                elif isinstance(value, torch.Tensor):
+                    h5group.create_dataset(key, data=value.detach().cpu().numpy(), **kwargs)
+                
+                elif isinstance(value, np.ndarray):
+                    h5group.create_dataset(key, data=value, **kwargs)
+                
+                # Fallback option
+                else:
+                    h5group.create_dataset(key, data=str(value), **kwargs)
+            
+            except Exception as e:
+                raise RuntimeError(f"Failed to save key '{key}' (full path: '{full_key}') of type {type(value)}") from e
+            
+    with h5py.File(output_path, "w") as hf:
+        _recursively_save_dict_to_hdf5(d, hf)
 
 def make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
     ''' 
@@ -338,9 +435,10 @@ def copy_params_to_dir(params_path, output_dir, params=None, verbose=True):
         params (dict, optional): The programmatically generated params dictionary to save if no file exists.
         verbose (bool): Whether to print verbose messages.
     """
-    import shutil
-    import yaml
     import os
+    import shutil
+
+    import yaml
 
     # Ensure the output directory exists
     os.makedirs(output_dir, exist_ok=True)
@@ -374,7 +472,7 @@ def save_results(output_path, model, params, optimizer, niter, indices, batch_lo
     
     if 'model' in save_result_list:
         save_dict = make_save_dict(output_path, model, params, optimizer, niter, indices, batch_losses)
-        torch.save(save_dict, safe_filename(os.path.join(output_path, f"model{collate_str}{iter_str}.pt")))
+        save_dict_to_hdf5(save_dict, safe_filename(os.path.join(output_path, f"model{collate_str}{iter_str}.hdf5")))
     probe      = model.get_complex_probe_view() 
     probe_amp  = probe.reshape(-1, probe.size(-1)).t().abs().detach().cpu().numpy()
     probe_prop = model.get_propagated_probe([0]).permute(0,2,1,3)
