@@ -404,26 +404,58 @@ def vprint_nested_dict(d, indent=0, verbose=True, leaf_inline_threshold=6):
         else:
             vprint(f"{indent_str}{key}: {repr(value)}", verbose=verbose)
 
-def safe_get_nested(d, keys, default=None):
+def get_nested(d, key, delimiter='.', safe=False, default=None):
     """
-    Safely get a value from a nested dictionary.
+    Get a value from a nested dictionary either safely (return default if not found) or stricly to fail early.
     
     Parameters:
     - d (dict): The dictionary to traverse.
-    - keys (list or tuple): A sequence of keys to access nested values.
+    - key (str, or list or tuple of string): A sequence of keys to access nested values.
+    - delimiter (str): The string used to seperate different parts of the displayed key path
+    - safe (boolean): The flag to switch between safe/strict mode of getting values from a nested dict.
     - default: The value to return if any key is missing or intermediate value is None.
     
     Returns:
-    - The nested value if found, otherwise `default`.
+    - The nested value if found, otherwise `default` in safe mode or error in strict mode.
     """
-    for key in keys:
-        if not isinstance(d, dict):
-            return default
-        d = d.get(key)
-        if d is None:
-            return default
-    return d
+    
+    if not key:
+        raise ValueError("Please specify a non-empty 'key' to get the value from a nested dict.")
 
+    # Parse the input key (str with delimiter, or sequence of strings)
+    if isinstance(key, str):
+        parts = key.split(delimiter)
+    elif isinstance(key, (tuple, list)):
+        if not all(isinstance(k, str) for k in key):
+            raise TypeError(
+                f"All elements in 'key' must be strings, got {[type(k).__name__ for k in key]}"
+            )
+        parts = key
+    else:
+        raise TypeError(f"'key' must be a str, or a sequence (list, tuple) of strings, got {type(key).__name__}.")
+    
+    # Getting value safely with a default return 
+    if safe:
+        for k in parts:
+            if not isinstance(d, dict):
+                return default
+            d = d.get(k)
+            if d is None:
+                return default
+        return d
+    
+    # Getting value strictly with raised error
+    else:
+        for k in parts:
+            if not isinstance(d, dict) or k not in d:
+                raise KeyError(
+                    f"Key '{key}' not found. Failed at '{k}'. "
+                    f"Available key(s) in this nested dict are {list_nested_keys(d)}. "
+                    "Tip: If you don't know the correct key, use `vprint_nested_dict()` from `ptyrad.utils.common` to check your nested dict first."
+                )
+            d = d[k]
+        return d
+    
 def get_date(date_format='%Y%m%d'):
     from datetime import date, datetime
     
@@ -604,7 +636,7 @@ def handle_hdf5_types(x):
 
     # Handle MATLAB-style complex128 compound dtype
     if isinstance(x, np.ndarray) and x.dtype == [('real', '<f8'), ('imag', '<f8')]:
-        vprint(f"Detected data.dtype = {x.dtype}. Casting back to 'complex128'.")
+        vprint(f"Detected data.shape = {x.shape} with data.dtype = {x.dtype}. Casting back to 'complex128'.")
         return x.view(np.complex128)
 
     # Convert 1D array of strings (or object-dtype strings) to Python list of str
@@ -626,12 +658,13 @@ def handle_hdf5_types(x):
     
     return x
 
-def list_hdf5_keys(hobj, prefix=""):
+def list_nested_keys(hobj, delimiter=".", prefix=""):
     """
-    Recursively list all keys in an HDF5 file or group, including hierarchical paths.
+    Recursively list all keys in an HDF5 file, HDF5 group, or dict, including hierarchical paths.
 
     Args:
-        hobj (h5py.Group or h5py.File): The HDF5 group or file to traverse.
+        hobj (h5py.File, h5py.Group, or dict): The hierarchical object to traverse.
+        delimiter (str): The string used to seperate different parts of the displayed key path
         prefix (str): The current hierarchical path (used for recursion).
 
     Returns:
@@ -639,12 +672,20 @@ def list_hdf5_keys(hobj, prefix=""):
     """
     import h5py
     
+    # Check input type
+    if isinstance(hobj, (h5py.Group, h5py.File)):
+        compare_type = h5py.Group
+    elif isinstance(hobj, dict):
+        compare_type = dict
+    else:
+        raise ValueError(f"Expected hobj is an HDF5 file, HDF5 group, or a dict, got {type(hobj).__name__}.")
+    
     keys = []
     for key in hobj.keys():
-        full_key = f"{prefix}{key}" if prefix == "" else f"{prefix}/{key}"
-        if isinstance(hobj[key], h5py.Group):
-            # Recursively list keys in the group
-            keys.extend(list_hdf5_keys(hobj[key], prefix=f"{full_key}/"))
+        full_key = f"{prefix}{key}" if prefix == "" else f"{prefix}{delimiter}{key}"
+        if isinstance(hobj[key], compare_type):
+            # Recursively list keys in the group / dict
+            keys.extend(list_nested_keys(hobj[key], delimiter=delimiter, prefix=full_key))
         else:
             # Add dataset key
             keys.append(full_key)

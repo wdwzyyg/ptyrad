@@ -8,7 +8,7 @@ import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.load import load_fields_from_mat, load_hdf5, load_measurements, load_ptyrad
+from ptyrad.load import load_mat, load_hdf5, load_measurements, load_ptyrad
 from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
@@ -18,6 +18,7 @@ from ptyrad.utils import (
     fit_cbed_pattern,
     get_default_probe_simu_params,
     get_EM_constants,
+    get_nested,
     guess_radius_of_bright_field_disk,
     infer_dx_from_params,
     make_fzp_probe,
@@ -25,7 +26,6 @@ from ptyrad.utils import (
     make_stem_probe,
     near_field_evolution,
     power_law,
-    safe_get_nested,
     vprint,
 )
 
@@ -77,7 +77,7 @@ class Initializer:
                 self.cache_contents = load_ptyrad(self.cache_path)
             elif self.cache_source == 'PtyShv':
                 vprint(f"Loading 'PtyShv' file from {self.cache_path} for caching", verbose=self.verbose)
-                self.cache_contents = load_fields_from_mat(self.cache_path, ['object', 'probe', 'outputs.probe_positions'])
+                self.cache_contents = load_mat(self.cache_path, key=['object', 'probe', 'outputs.probe_positions'], delimiter='.') # flattend dict with key using delimiter
             elif self.cache_source == 'py4DSTEM':
                 vprint(f"Loading 'py4DSTEM' file from {self.cache_path} for caching", verbose=self.verbose)
                 self.cache_contents = load_hdf5(self.cache_path, key=None)
@@ -97,7 +97,7 @@ class Initializer:
         meas_avg = meas.mean(0) # This is equivalent to PACBED in electron microscopy. Note that if pad/resample are set to "on_the_fly", this would be different from the final one used for reconstruction.
         meas_avg_sum = meas_avg.sum() # This is the total integrated intensity of the averaged diffraction pattern
         
-        pad_mode = safe_get_nested(self.init_params, ['meas_pad', 'mode'])
+        pad_mode = get_nested(self.init_params, key=['meas_pad', 'mode'], safe=True, default=None)
         if pad_mode == 'on_the_fly':
             padded = self.init_variables.get('on_the_fly_meas_padded')
             padded_int_sum = padded.sum() if padded is not None else 0
@@ -1133,7 +1133,7 @@ class Initializer:
         
         # Handle the case where file_dir is None
         if file_dir is None:
-            meas_path = safe_get_nested(self.init_params, ['meas_params', 'path'], '')
+            meas_path = get_nested(self.init_params, key=['meas_params', 'path'], safe=True, default='')
             export_params["file_dir"] = os.path.dirname(meas_path)
             
         # Ensure the directory exists if it's not empty
@@ -1188,29 +1188,31 @@ class Initializer:
         return probe
     
     def _load_probe_from_ptyshv(self, params: str):
-        """
-        Load the probe from a PtychoShelves (fold_slice) .mat file.
-        """
         mat_path = params
         mat_version = get_matfile_version(mat_path) #https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
         use_h5py = (mat_version[0] == 2)
-        probe = self.cache_contents[1] if self.use_cached_probe else load_fields_from_mat(mat_path, 'probe')
-        vprint(f"Input PtyShv probe has original shape {probe.shape}", verbose=self.verbose)
+        probe = self.cache_contents['probe'] if self.use_cached_probe else load_mat(mat_path, key='probe')
+        vprint(f"Input PtyShv probe has original shape {probe.shape}, while default PtyShv order is (Ny, Nx, pmode, vp)", verbose=self.verbose)
 
+        # First unify the axes order induced by loading with scipy / h5py, now it should be (Ny, Nx, pmode, vp)
         if use_h5py:
             probe = probe.transpose(range(probe.ndim)[::-1])
-            vprint(f"Reverse array axes because .mat (v7.3) is loaded with h5py, probe.shape = {probe.shape}", verbose=self.verbose)
-
+            vprint(f"Reverse array axes order of probe to {probe.shape} because use_h5py = {use_h5py}, which automatically reverse the order", verbose=self.verbose)
+        else:
+            vprint(f"Keep array axes order of probe at {probe.shape} because use_h5py = {use_h5py}", verbose=self.verbose)
+        
+        # Correct the probe dimension to 3 dimensions, now it should be (Ny, Nx, pmode)
         if probe.ndim == 4:
             vprint("Import only the 1st variable probe mode to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose) # I don't find variable probe modes are particularly useful for electon ptychography
             probe = probe[..., 0]
-            
         elif probe.ndim == 2:
             vprint("Expanding PtyShv probe dimension to make a final probe with (pmode, Ny, Nx)", verbose=self.verbose)
             probe = probe[..., None]
-            
-        vprint("Permuting PtyShv probe into (pmode, Ny, Nx)", verbose=self.verbose) # For PtychoShelves input, do the transpose
-        probe = probe.transpose(2, 0, 1)  # Permute to (pmode, Ny, Nx)
+        
+        # Final permutation to make it (pmode, Ny, Nx)
+        probe = probe.transpose(2,0,1)
+        vprint(f"Permute the array axes order of probe to {probe.shape} make it (pmode, Ny, Nx)", verbose=self.verbose)
+        
         return probe
     
     def _load_probe_from_py4dstem(self, params: str):
@@ -1351,15 +1353,17 @@ class Initializer:
         mat_path = params
         mat_version = get_matfile_version(mat_path) # https://docs.scipy.org/doc/scipy-1.11.3/reference/generated/scipy.io.matlab.matfile_version.html
         use_h5py = (mat_version[0] == 2)
-        mat_contents = self.cache_contents if self.use_cached_pos else load_fields_from_mat(mat_path, ['object', 'probe', 'outputs.probe_positions'])
+        mat_contents = self.cache_contents if self.use_cached_pos else load_mat(mat_path, key=['object', 'probe', 'outputs.probe_positions'], delimiter='.')
+        vprint(f"Input PtyShv probe positions has original shape {mat_contents['outputs.probe_positions'].shape}, while default PtyShv order is (N, 2)", verbose=self.verbose)
 
+        # First unify the axes order induced by loading with scipy / h5py, now it should be (N, 2)
         if use_h5py:
-            mat_contents = [arr.transpose(range(arr.ndim)[::-1]) for arr in mat_contents]
-            vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
+            mat_contents = {key: arr.transpose(range(arr.ndim)[::-1]) for key, arr in mat_contents.items()}
+            vprint(f"Reverse array axes order because use_h5py = {use_h5py}, which automatically reverse the order", verbose=self.verbose)
 
-        probe_positions = mat_contents[2]
-        probe_shape = mat_contents[1].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp) or (Ny,Nx,pmode)
-        obj_shape   = mat_contents[0].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
+        probe_positions = mat_contents['outputs.probe_positions']
+        probe_shape = mat_contents['probe'].shape[:2]   # Matlab probe is (Ny,Nx,pmode,vp) or (Ny,Nx,pmode)
+        obj_shape   = mat_contents['object'].shape[:2]   # Matlab object is (Ny, Nx, Nz) or (Ny,Nx)
         pos_offset = np.ceil((np.array(obj_shape)/2) - (np.array(probe_shape)/2)) - 1 # For Matlab - Python index shift
         probe_positions_yx   = probe_positions[:, [1,0]] # The first index after shifting is the row index (along vertical axis)
         pos                  = probe_positions_yx + pos_offset 
@@ -1510,15 +1514,15 @@ class Initializer:
         mat_path = params
         mat_version = get_matfile_version(mat_path)
         use_h5py = (mat_version[0] == 2)
-        obj = self.cache_contents[0] if self.use_cached_obj else load_fields_from_mat(mat_path, 'object')
-    
+        obj = self.cache_contents['object'] if self.use_cached_obj else load_mat(mat_path, key='object')
+        vprint(f"Input PtyShv object has original shape {obj.shape}, while default PtyShv order is (Ny, Nx, Nz)", verbose=self.verbose)
+
+        # First unify the axes order induced by loading with scipy / h5py, now it should be (Ny, Nx, Nz)
         if use_h5py:
             obj = obj.transpose(range(obj.ndim)[::-1])
-            vprint("Reverse array axes because .mat (v7.3) is loaded with h5py", verbose=self.verbose)
+            vprint(f"Reverse array axes order because use_h5py = {use_h5py}, which automatically reverse the order", verbose=self.verbose)
     
-        vprint(f"Input PtyShv object has original shape {obj.shape}", verbose=self.verbose)
-        vprint("Expanding PtyShv object dimension to (omode, Nz, Ny, Nx)", verbose=self.verbose)
-        
+        vprint("Expanding and permuting PtyShv object dimension to make a final object shape with (omode, Nz, Ny, Nx)", verbose=self.verbose)
         if len(obj.shape) == 2:  # Single-slice ptycho
             obj = obj[None, None, :, :]
         elif len(obj.shape) == 3:  # Multi-slice ptycho

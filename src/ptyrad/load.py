@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import scipy.io as sio
 
-from ptyrad.utils import handle_hdf5_types, list_hdf5_keys, tensors_to_ndarrays, vprint
+from ptyrad.utils import get_nested, handle_hdf5_types, list_nested_keys, tensors_to_ndarrays, vprint
 
 KeyType = Union[str, list[str], None]
 
@@ -48,7 +48,7 @@ def load_tif(file_path):
 
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
     
     data = imread(file_path)
     vprint("Success! Loaded .tif file path =", file_path)
@@ -59,7 +59,7 @@ def load_npy(file_path):
 
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
     
     data = np.load(file_path)
     vprint("Success! Loaded .npy file path =", file_path)
@@ -95,7 +95,7 @@ def load_measurements(
 
     # Check file existence
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
 
     # Infer file type from extension
     _, ext = os.path.splitext(file_path)
@@ -154,7 +154,7 @@ def load_ND_with_key(
     # Check if the file exists
     if not os.path.exists(file_path):
         raise FileNotFoundError(
-            f"The specified file '{file_path}' does not exist. Please check your file path."
+            f"The specified file '{file_path}' does not exist. Please check your file path and working directory."
         )
 
     # Infer file type from extension
@@ -163,7 +163,7 @@ def load_ND_with_key(
 
     # Select loader
     if ext == ".mat":
-        load_func = load_fields_from_mat
+        load_func = load_mat
     elif ext in [".h5", ".hdf5"]:
         load_func = load_hdf5
     else:
@@ -259,112 +259,104 @@ def collect_ND_datasets(
 ###### These are reconstruction file loading functions ######
 # Note that .mat and .hdf5 are also used for normal data
 
-def load_fields_from_mat(file_path, target_field=None, squeeze_me=True, simplify_cells=True):
+def load_mat(
+    file_path: str, key: KeyType = None, delimiter: str = ".",
+    squeeze_me=True, simplify_cells=True
+) -> Union[np.ndarray, dict[str, np.ndarray]]:
     """
-    Load and extract specified fields from a MATLAB .mat file.
-
-    https://docs.scipy.org/doc/scipy/reference/generated/scipy.io.loadmat.html
+    Load dataset(s) from a MATLAB .mat file, handling both default and v7.3 (HDF5) formats.
+    The version is used to switch between scipy.io.loadmat or h5py.
 
     Parameters:
-        file_path (str): The path to the MATLAB .mat file to be loaded and processed.
-        target_field (str or list of str): The target field name(s) to extract from the .mat file.
-            Specify a single field name as a string or multiple field names as a list of strings.
-            Use "All" to load the entire .mat file.
+    - file_path (str): Path to the .mat file.
+    - key (str | list[str] | None): Name(s) of the dataset(s) to load.
+        - If None, '', or []: Load all datasets, preserving the original nested structure.
+        - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
+        - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure.
+    - delimiter (str): Delimiter for hierarchical keys (default: ".").
+    - squeeze_me (bool): Whether to squeeze unit matrix dimensions (scipy.io.loadmat parameter).
+    - simplify_cells (bool): Whether to simplify cell arrays (scipy.io.loadmat parameter).
 
     Returns:
-        result_list (list or dict): A list containing the extracted field(s) as elements.
-            If target_field is "All," the entire .mat file is returned as a dictionary.
+    - data (np.ndarray or dict): The loaded dataset(s) with the same structure as load_hdf5.
 
     Raises:
-        ValueError: If the nesting depth of target_field exceeds the maximum supported depth of 3.
-        ValueError: If target_field is neither a string nor a list of strings.
-
-    Examples:
-        # Load the entire .mat file as a dictionary
-        file_path = "your_file.mat"
-        target_field = "All"
-        result = load_fields_from_mat(file_path, target_field)
-
-        # Extract a single field
-        file_path = "your_file.mat"
-        target_field = "object.sub_field"
-        result = load_fields_from_mat(file_path, target_field)
-
-        # Extract multiple fields
-        file_path = "your_file.mat"
-        target_field = ["object.sub_field", "another_object.field"]
-        results = load_fields_from_mat(file_path, target_field)
-
-        # Process the results
-        for i, result in enumerate(results):
-            if result is not None:
-                vprint(f"Result {i + 1}: {result}")
+    - FileNotFoundError: If the specified file does not exist.
+    - KeyError: If provided key(s) are not found in the file.
+    - TypeError: If the key is not None, a string, or a list of strings.
     """
-    # Check if the file exists
+
+    # Check if file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(
+            f"The specified file '{file_path}' does not exist. Please check your file path or working directory."
+        )
+
+    # Check file version
+    from scipy.io.matlab import matfile_version as get_matfile_version
+    try:
+        mat_version = get_matfile_version(file_path)
+    except ValueError as e:
+        vprint(f"WARNING: {e}. Switching to `load_hdf5` as it's probably not generated by MATLAB.")
+        mat_version = (2,0) # Since Scipy can't find the version, it's likely a fake mat file that's actually HDF5
+    is_hdf5_format = (mat_version[0] == 2)
     
-    result_list = []
-
-    # Load entire .mat
-    if target_field is None:
-        try:
-            mat_contents = sio.loadmat(
-                file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
+    # If v7.3 (HDF5), delegate to load_hdf5 directly
+    if is_hdf5_format:
+        vprint("Detected .mat v7.3 (HDF5 format). Delegating to `load_hdf5`.")
+        return load_hdf5(file_path, key=key, delimiter=delimiter)
+    
+    # Handle normal .mat formats
+    vprint("Detected .mat version less than v7.3. Using `scipy.io.loadmat`.")
+    
+    # Load the entire .mat file first
+    mat_contents = sio.loadmat(file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells) # mat_contents is already a nested dict
+    
+    # Handle different key scenarios
+    if key in (None, "", []):
+        vprint(f"Success! Loaded .mat file as a dict from path = '{file_path}'")
+        return mat_contents
+    
+    elif isinstance(key, str):
+        data = get_nested(mat_contents, key=key, delimiter=delimiter)
+        vprint(
+            f"Success! Loaded .mat file with key = '{key}' from path = '{file_path}'"
+        )
+        if isinstance(data, np.ndarray):
+            vprint(f"Imported .mat data shape = {data.shape}")
+            vprint(f"Imported .mat data type = {data.dtype}")
+        return data
+    
+    elif isinstance(key, list):
+        if not all(isinstance(k, str) for k in key):
+            raise TypeError(
+                f"All elements in 'key' list must be strings, got {[type(k).__name__ for k in key]}"
             )
-            vprint("Success! Loaded .mat File path =", file_path)
-            return mat_contents
-        except NotImplementedError:
-            # If loading from MATLAB file complains, switch to HDF5
-            vprint("Can't load .mat v7.3 with 'scipy.io.loadmat'. Switching to h5py.")
-            mat_contents = {}
-            with h5py.File(file_path, "r") as hdf_file:
-                for key in hdf_file.keys():
-                    mat_contents[key] = hdf_file[key][()]
-            vprint("Success! Loaded .mat file path =", file_path)
-            return mat_contents
+        missing = []
+        datasets_dict = {}
+        
+        for k in key:
+            try:
+                datasets_dict[k] = get_nested(mat_contents, key=k, delimiter=delimiter)
+            except KeyError:
+                missing.append(k)
+                
+        if missing:
+            raise KeyError(
+                f"Key(s) = {missing} not found. "
+                f"Available key(s) in this mat file are {list_nested_keys(mat_contents)}. "
+                "Tip: If you don't know the correct key, try 'key=None' to load the entire file as a dict."
+            )
 
-    # Check target_field type
-    if isinstance(target_field, str):
-        target_fields = [target_field]
-    elif isinstance(target_field, list):
-        target_fields = target_field
+        vprint(
+            f"Success! Loaded .hdf5 file as a dict with keys = {key} from path = '{file_path}'"
+        )
+        return datasets_dict
+
     else:
-        raise ValueError("target_field must be a string or a list of strings")
-
-    # Load field by field in target_fields (list)
-    for name in target_fields:
-        try:
-            mat_contents = sio.loadmat(
-                file_path, squeeze_me=squeeze_me, simplify_cells=simplify_cells
-            )
-            fields = name.split(".")
-            outputs = mat_contents
-
-            if len(fields) > 3:
-                raise ValueError("The maximum supported nesting depth is 3.")
-
-            for field in fields:
-                if field in outputs:
-                    if isinstance(outputs, sio.matlab.mio5.mat_struct):
-                        outputs = getattr(outputs, field)
-                    else:
-                        outputs = outputs[field]
-                else:
-                    vprint(f"Field '{field}' not found in file {file_path}")
-                    result_list.append(None)
-                    break
-            else:
-                result_list.append(outputs)
-        except NotImplementedError:
-            # If loading from MATLAB file complains, switch to HDF5
-            vprint("Can't load .mat v7.3 with scipy. Switching to h5py.")
-            if name == 'outputs.probe_positions': # Convert the scipy syntax to hdf5 syntax
-                name = 'outputs/probe_positions'
-            data = load_hdf5(file_path, name)
-            result_list.append(data)
-    vprint("Success! Loaded .mat file path =", file_path)
-    return result_list[0] if len(result_list)==1 else result_list
+        raise TypeError(
+            f"`key` must be None, a string, or a list of strings but got key = '{key}'"
+        )    
 
 def load_hdf5(
     file_path: str, key: KeyType = None, delimiter: str = "."
@@ -473,8 +465,8 @@ def load_hdf5(
                 if not isinstance(hobj, (h5py.Group, h5py.File)) or part not in hobj:
                     raise KeyError(
                         f"Key '{key}' not found. Failed at '{part}'. "
-                        f"Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
-                        "If you don't know the correct key, try 'key=None' to load the entire file as a dict."
+                        f"Available key(s) in this HDF5 file are {list_nested_keys(hf)}. "
+                        "Tip: If you don't know the correct key, try 'key=None' to load the entire file as a dict."
                     )
                 hobj = hobj[part]
 
@@ -489,7 +481,7 @@ def load_hdf5(
     # Check if the file exists
     if not os.path.exists(file_path):
         raise FileNotFoundError(
-            f"The specified file '{file_path}' does not exist. Please check your file path."
+            f"The specified file '{file_path}' does not exist. Please check your file path or working directory."
         )
 
     with h5py.File(file_path, "r") as hf:
@@ -513,20 +505,21 @@ def load_hdf5(
                 raise TypeError(
                     f"All elements in 'key' list must be strings, got {[type(k).__name__ for k in key]}"
                 )
+            datasets_dict = {}
             missing = []
+            
             for k in key:
                 try:
-                    _recursively_load(hf, key=k, delimiter=delimiter)
+                    datasets_dict[k] = _recursively_load(hf, key=k, delimiter=delimiter)
                 except KeyError:
                     missing.append(k)
+                
             if missing:
                 raise KeyError(
-                    f"Key(s) = {missing} not found. Available key(s) in this HDF5 file are {list_hdf5_keys(hf)}. "
-                    "If you don't know the correct key, try 'key=None' to load the entire file as a dict."
+                    f"Key(s) = {missing} not found. Available key(s) in this HDF5 file are {list_nested_keys(hf)}. "
+                    "Tip: If you don't know the correct key, try 'key=None' to load the entire file as a dict."
                 )
-            datasets_dict = {
-                k: _recursively_load(hf, key=k, delimiter=delimiter) for k in key
-            }
+
             vprint(
                 f"Success! Loaded .hdf5 file as a dict with keys = {key} from path = '{file_path}'"
             )
@@ -542,7 +535,7 @@ def load_pt(file_path, weights_only=False):
 
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
 
     data = torch.load(file_path, weights_only=weights_only) 
     # The default behavior of torch.load is `weights_only=True` since PyTorch 2.6 (2025.01.29)
@@ -584,7 +577,7 @@ def load_ptyrad(file_path: str) -> Dict[str, Any]:
     
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
     
     # Infer file type from extension
     _, ext = os.path.splitext(file_path)
@@ -609,7 +602,7 @@ def load_params(file_path):
     
     # Check if the file exists
     if not os.path.exists(file_path):
-        raise FileNotFoundError(f"The specified file '{file_path}' does not exist.")
+        raise FileNotFoundError(f"The specified file '{file_path}' does not exist. Please check your file path and working directory.")
     
     vprint("### Loading params file ###")
     param_path, param_type = os.path.splitext(file_path)
