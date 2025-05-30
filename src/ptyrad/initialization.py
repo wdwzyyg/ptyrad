@@ -1132,7 +1132,7 @@ class Initializer:
         file_dir = export_params.get("file_dir")
         
         # Handle the case where file_dir is None
-        if file_dir is None:
+        if file_dir in (None, ''):
             meas_path = get_nested(self.init_params, key=['meas_params', 'path'], safe=True, default='')
             export_params["file_dir"] = os.path.dirname(meas_path)
             
