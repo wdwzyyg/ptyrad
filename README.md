@@ -1,4 +1,9 @@
 # PtyRAD: Ptychographic Reconstruction with Automatic Differentiation
+![PyPI - Version](https://img.shields.io/pypi/v/ptyrad)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/version.svg)](https://anaconda.org/conda-forge/ptyrad)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/latest_release_date.svg)](https://anaconda.org/conda-forge/ptyrad)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/platforms.svg)](https://anaconda.org/conda-forge/ptyrad)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/ptyrad/badges/downloads.svg)](https://anaconda.org/conda-forge/ptyrad)
 
 *PtyRAD* performs ptychographic reconstruction using an [automatic differention](https://en.wikipedia.org/wiki/Automatic_differentiation) (AD) framework powered by [*PyTorch*](https://pytorch.org/), which enables flexible and efficient implementation of gradient descent optimization. See our [arXiv paper](https://arxiv.org/abs/2505.07814) and the [Zenodo record](https://doi.org/10.5281/zenodo.15273176) for more information and demo datasets.
 
@@ -194,3 +199,11 @@ Besides great support from the entire Muller group, this package gets inspiratio
 * [py4dstem](https://github.com/py4dstem/py4DSTEM)
 * [adorym](https://github.com/mdw771/adorym)
 * [SciComPty](https://www.mdpi.com/2410-3896/6/4/36)
+
+## Other resources
+
+* [ptycho-packages](https://github.com/chiahao3/ptycho-packages) lists many available ptychography packages
+* [Cornell Box folder](https://cornell.box.com/s/n5balzf88jixescp9l15ojx7di4xn1uo) compiled by myself that keeps demo data, tutorial recordings, and slides for PtyRAD
+* [Argonne Box folder](https://anl.box.com/s/f7lk410lf62rnia70fztd5l7n567btyv) compiled by Dr. Yi Jiang that holds tutorial slides of `fold_slice`
+* [Blog post](https://chiahao-blog.super.site/posts/theory-algorithm-and-code-structure-of-ptychoshelves) written by myself that details the algorithms and code structure of `PtychoShelves` / `fold_slice`
+* [arXiv paper](https://arxiv.org/abs/2505.07814) and the [Zenodo record](https://doi.org/10.5281/zenodo.15273176) for more information and demo datasets

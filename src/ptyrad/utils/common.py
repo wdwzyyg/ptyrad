@@ -157,8 +157,13 @@ class CustomLogger:
             log_file_path = os.path.join(log_dir, log_file)
 
             # Write the buffered logs to the specified file
-            with open(log_file_path, file_mode) as f:
-                f.write(self.log_buffer.getvalue())
+            try:
+                with open(log_file_path, file_mode, encoding="utf-8") as f:
+                    f.write(self.log_buffer.getvalue())
+            except UnicodeEncodeError as e:
+                vprint(f"[WARNING] Failed to write log due to Unicode issue: {e}")
+                with open(log_file_path, file_mode, encoding="ascii", errors="replace") as f:
+                    f.write(self.log_buffer.getvalue())
 
             # Clear the buffer
             self.log_buffer.truncate(0)
@@ -247,15 +252,15 @@ def print_gpu_info():
             vprint(f"Available CUDA GPUs: {[torch.cuda.get_device_name(d) for d in range(torch.cuda.device_count())]}")
             vprint(f"MIG (Multi-Instance GPU) mode = {is_mig_enabled()}")
             vprint("INFO: MIG splits a physical GPU into multiple GPU slices, but multiGPU does not support these MIG slices.")
-            vprint("      → If you're doing normal reconstruction/hypertune, you can safely ignore this.")
-            vprint("      → If you want to do multiGPU, you must provide multiple 'full' GPUs that are not in MIG mode.")
+            vprint("      -> If you're doing normal reconstruction/hypertune, you can safely ignore this.")
+            vprint("      -> If you want to do multiGPU, you must provide multiple 'full' GPUs that are not in MIG mode.")
         elif torch.backends.mps.is_built() and torch.backends.mps.is_available():
             vprint(f"MPS Available: {torch.backends.mps.is_available()}")
         elif torch.backends.cuda.is_built() or torch.backends.mps.is_built():
             vprint("WARNING: GPU support built with PyTorch, but could not find any existing / compatible GPU device.")
             vprint("         PtyRAD will fall back to CPU which is much slower in performance")
-            vprint("         → If you're using a CPU-only machine, you can safely ignore this.")
-            vprint("         → If you believe you *do* have a GPU, please check the compatibility:")
+            vprint("         -> If you're using a CPU-only machine, you can safely ignore this.")
+            vprint("         -> If you believe you *do* have a GPU, please check the compatibility:")
             vprint("           - Are the correct NVIDIA drivers installed?")
             vprint("           - Is your CUDA runtime version compatible with PyTorch?")
             vprint("           Tips: Run `nvidia-smi` in your terminal for NVIDIA driver and CUDA runtime information.")
@@ -295,20 +300,35 @@ def print_packages_info():
             vprint(f"Error retrieving version for {display_name}: {e}")
     
     # Check the version and path of the used PtyRAD package
+    # In general:
+    # - `ptyrad.__version__` reflects the actual code you're running (from source files).
+    # - `importlib.metadata.version("ptyrad")` reflects the version during install.
+    # 
     # Note that we're focusing on the version/path of the actual imported PtyRAD.
-    # If there are both an installed version of PtyRAD in the environment and a local copy in the working directory,
+    # If there are both an installed version of PtyRAD in the environment (site-packages/) and a local copy in the working directory (src/ptyrad),
     # Python will prioritize the version in the working directory.
     #
     # When using `pip install -e .`, only the version metadata gets recorded, which won't be updated until you reinstall.
     # As a result, a user who pulls new code from the repo will have their `__init__.py` updated, but the version metadata recorded by pip will remain unchanged.
     # Therefore, it is better to retrieve the version directly from `module.__version__` for now, as this will reflect the actual local version being used.
-    # Once we transition to using pip/conda for installation, all code updates will be paired with an installation, 
-    # and we can safely switch to retrieving the version via `importlib.metadata.version`.
+    # In a release install (pip or conda), metadata and __version__ will match due to the dynamic version in pyproject.toml
+    # During editable installs, metadata may lag behind source changes.
     try:
         # Import ptyrad (which will prioritize the local version if available)
         module = importlib.import_module('ptyrad')
-        vprint(f"PtyRAD Version (direct import): {module.__version__}") # This version is defined in __init__.py
-        vprint(f"PtyRAD is located at: {module.__file__}")
+        runtime_version = module.__version__
+        metadata_version = importlib.metadata.version("ptyrad")
+        vprint(f"PtyRAD Version (ptyrad/__init__.py): {runtime_version}")
+        vprint(f"PtyRAD is located at: {module.__file__}") # For editable install this will be in package src/, while full install would make a copy at site-packages/
+        
+        if runtime_version and metadata_version and runtime_version != metadata_version:
+            vprint("WARNING: Version mismatch detected!")
+            vprint(f"  Runtime version : {runtime_version} (retrieved from current source file: ptyrad/__init__.py)")
+            vprint(f"  Metadata version: {metadata_version} (recorded during previous `pip/conda install`)")
+            vprint("  This likely means you downloaded new codes from repo but forgot to update the installed metadata.")
+            vprint("  This does not affect the code execution because the runtime version of code is always used, but this can lead to misleading version logs.")
+            vprint("  To fix this, re-run: `pip install -e . --no-deps` at the package root directory.")
+        
     except ImportError:
         vprint("PtyRAD not found locally")
     except AttributeError:

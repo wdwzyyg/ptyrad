@@ -318,7 +318,7 @@ def create_optimizer(optimizer_params, optimizable_params, verbose=True):
         # Fix param_groups format if it was accidentally stored as a dict
         if isinstance(fixed.get("param_groups"), dict):
             param_groups_dict = fixed["param_groups"]
-            # Convert {0: {...}, 1: {...}} → [{...}, {...}]
+            # Convert {0: {...}, 1: {...}} -> [{...}, {...}]
             fixed["param_groups"] = [
                 param_groups_dict[k] for k in sorted(param_groups_dict, key=lambda x: int(x))
             ]

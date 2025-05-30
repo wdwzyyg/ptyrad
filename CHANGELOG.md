@@ -5,8 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b7] - 2025-05-30
+### Added
+- Add CLI command `ptyrad export-meas-init` to allow quick exporting initialized measurement arrays to disk with specified file types (.mat, .hdf5, .tif, .npy)
+- Add utils functions `get_nested` and `list_nested_keys` to better handle nested dicts / HDF5 files
+- Add `meas_export` to `init_params` so we can export the PtyRAD initialized diffraction patterns for further processing, analysis, or visulaization if needed. Currently supporting hdf5, tif, and npy that can be directly ported into `py4D-browser`.
+- Add `is_mig_enabled` util function and improve the overall error message related to multiGPU
+- Add `Nlayer` to hypertune optimizable params as suggested by @zb87
+### Changed
+- **Switch the PtyRAD model output from .pt to .hdf5 for better interoperability.** Previous .pt files are still supported via the wrapper function `load_ptyrad`. The full (de)serialization process is handled by `save_dict_to_hdf5`, `tensors_to_ndarrays`, `handle_hdf5_types`, and `ndarrays_to_tensor` specifically for optimizer state dicts
+- Significantly refactor and enhance `load_hdf5` and `load_mat` to handle different file version, list of keys and specified delimiter for nested keys
+- Allow key-less data loading for .mat and .hdf5, so users don't necessarily need to specify a key when loading diffraction patterns. Add a general purpose `load_measurements` function in `load.py` to automatically detect file extension and dispatch. This change is inspired by [py4D-browser](https://github.com/py4dstem/py4D-browser).
+- Internal clean up of the `model.forward` method to only return diffraction patterns. The object patches are cached in `model._current_object_patches`. An intermediate wrapper function `model.get_forward_meas` is added
+- Fix incorrect `dz` intermediate output folder name in hypertune mode from [issue 4](https://github.com/chiahao3/ptyrad/issues/4) pointed out by @HanHsuanWu
+
 ## [0.1.0b6] - 2025-05-24
-### Add
+### Added
 - Add `__main__.py` to allow `python -m ptyrad`. Now we can execute `ptyrad` package as a module/script for `accelerate launch`.
 - Add `.github/workflows/publish_pypi.yml` for automation. Future release will automatically be published to PyPI. 
 ### Changed
