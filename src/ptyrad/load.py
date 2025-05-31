@@ -268,22 +268,22 @@ def load_mat(
     The version is used to switch between scipy.io.loadmat or h5py.
 
     Parameters:
-    - file_path (str): Path to the .mat file.
-    - key (str | list[str] | None): Name(s) of the dataset(s) to load.
-        - If None, '', or []: Load all datasets, preserving the original nested structure.
-        - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
-        - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure.
-    - delimiter (str): Delimiter for hierarchical keys (default: ".").
-    - squeeze_me (bool): Whether to squeeze unit matrix dimensions (scipy.io.loadmat parameter).
-    - simplify_cells (bool): Whether to simplify cell arrays (scipy.io.loadmat parameter).
+        file_path (str): Path to the .mat file.
+        key (str | list[str] | None): Name(s) of the dataset(s) to load.
+            - If None, '', or []: Load all datasets, preserving the original nested structure.
+            - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
+            - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure.
+        delimiter (str): Delimiter for hierarchical keys (default: ".").
+        squeeze_me (bool): Whether to squeeze unit matrix dimensions (scipy.io.loadmat parameter).
+        simplify_cells (bool): Whether to simplify cell arrays (scipy.io.loadmat parameter).
 
     Returns:
-    - data (np.ndarray or dict): The loaded dataset(s) with the same structure as load_hdf5.
+        data (np.ndarray or dict): The loaded dataset(s) with the same structure as load_hdf5.
 
     Raises:
-    - FileNotFoundError: If the specified file does not exist.
-    - KeyError: If provided key(s) are not found in the file.
-    - TypeError: If the key is not None, a string, or a list of strings.
+        FileNotFoundError: If the specified file does not exist.
+        KeyError: If provided key(s) are not found in the file.
+        TypeError: If the key is not None, a string, or a list of strings.
     """
 
     # Check if file exists
@@ -365,93 +365,32 @@ def load_hdf5(
     Load dataset(s) from an HDF5 file, recursively if groups are encountered.
 
     Parameters:
-    - file_path (str): Path to the HDF5 file.
-    - key (str | list[str] | None): Name(s) of the dataset(s) to load.
-        - If None, '', or []: Load all datasets recursively, preserving the original nested structure.
-        - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
-        - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure with the hierarchical key strings as keys.
-    - delimiter (str): Delimiter for hierarchical keys (default: ".").
+        file_path (str): Path to the HDF5 file.
+        key (str | list[str] | None): Name(s) of the dataset(s) to load.
+            - If None, '', or []: Load all datasets recursively, preserving the original nested structure.
+            - If str: Load a single dataset or group. Supports hierarchical keys (e.g., 'group1.dataset1').
+            - If list[str]: Load multiple datasets. The returned dictionary will have a flattened structure with the hierarchical key strings as keys.
+        delimiter (str): Delimiter for hierarchical keys (default: ".").
 
     Returns:
-    - data (np.ndarray or dict): The loaded dataset(s).
-        - If `key` is a string, returns a single `np.ndarray` or a nested dictionary if the key points to a group.
-        - If `key` is a list of strings, returns a dictionary with the hierarchical key strings as keys and the corresponding datasets as values.
-        - If `key` is None, returns a nested dictionary preserving the original structure of the HDF5 file.
+        data (np.ndarray or dict): The loaded dataset(s).
+            - If `key` is a string, returns a single `np.ndarray` or a nested dictionary if the key points to a group.
+            - If `key` is a list of strings, returns a dictionary with the hierarchical key strings as keys and the corresponding datasets as values.
+            - If `key` is None, returns a nested dictionary preserving the original structure of the HDF5 file.
 
     Raises:
-    - FileNotFoundError: If the specified file does not exist.
-    - KeyError: If provided key(s) are not found in the file.
-    - TypeError: If the key is not None, a string, or a list of strings.
+        FileNotFoundError: If the specified file does not exist.
+        KeyError: If provided key(s) are not found in the file.
+        TypeError: If the key is not None, a string, or a list of strings.
 
     Notes:
-    - **Hierarchical Keys**: 
-        - The function supports hierarchical keys (e.g., 'group1.dataset1') to directly access nested datasets or groups.
-        - When a list of hierarchical keys is provided, the returned dictionary will have a flattened structure with the hierarchical key strings as keys.
-        - Example: If `key=["group1/dataset1", "group2/dataset2"]`, the returned dictionary will look like:
-          ```python
-          {
-              "group1/dataset1": <numpy.ndarray>,
-              "group2/dataset2": <numpy.ndarray>
-          }
-          ```
-
-    - **Preserving Original Structure**:
-        - If [key=None], the function recursively loads all datasets and groups, preserving the original nested structure of the HDF5 file.
-        - Example: If the HDF5 file has the following structure:
-          ```
-          /group1
-              /dataset1
-              /dataset2
-          /group2
-              /dataset3
-          ```
-          The returned dictionary will look like:
-          ```python
-          {
-              "group1": {
-                  "dataset1": <numpy.ndarray>,
-                  "dataset2": <numpy.ndarray>
-              },
-              "group2": {
-                  "dataset3": <numpy.ndarray>
-              }
-          }
-          ```
-
-    - **Performance Considerations**:
-        - Providing an exact key (e.g., [key="group1/dataset1"]) is significantly faster than recursively loading the entire file or traversing the hierarchy.
-        - Recursive loading ([key=None]) or traversing with a list of keys can be slow for large HDF5 files with deeply nested structures or many datasets.
-
-    Examples:
-    1. **Load a Single Dataset**:
-       ```python
-       data = load_hdf5("example.h5", key="group1/dataset1")
-       ```
-
-    2. **Load Multiple Datasets with Hierarchical Keys**:
-       ```python
-       data = load_hdf5("example.h5", key=["group1/dataset1", "group2/dataset3"])
-       # Output:
-       # {
-       #     "group1/dataset1": <numpy.ndarray>,
-       #     "group2/dataset3": <numpy.ndarray>
-       # }
-       ```
-
-    3. **Load All Datasets Preserving Original Structure**:
-       ```python
-       data = load_hdf5("example.h5", key=None)
-       # Output:
-       # {
-       #     "group1": {
-       #         "dataset1": <numpy.ndarray>,
-       #         "dataset2": <numpy.ndarray>
-       #     },
-       #     "group2": {
-       #         "dataset3": <numpy.ndarray>
-       #     }
-       # }
-       ```
+        - Hierarchical Keys:
+            - The function supports hierarchical keys (e.g., 'group1.dataset1') to directly access nested datasets or groups.
+            - When a list of hierarchical keys is provided, the returned dictionary will have a flattened structure with the hierarchical key strings as keys.
+        - Preserving Original Structure:
+            - If `key=None`, the function recursively loads all datasets and groups, preserving the original nested structure of the HDF5 file.
+        - Performance Considerations:
+            - Providing an exact key (e.g., `key="group1/dataset1"`) is significantly faster than recursively loading the entire file or traversing the hierarchy.
 
     """
 

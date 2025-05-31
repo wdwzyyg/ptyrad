@@ -22,25 +22,7 @@ class CombinedLoss(torch.nn.Module):
     Args:
         loss_params (dict): A dictionary containing the configuration and weights for each of the loss components.
         device (str, optional): The device on which the computations will be performed, e.g., 'cuda'. Defaults to 'cuda'.
-
-    Methods:
-        get_loss_single(model_DP, measured_DP):
-            Computes the loss based on Gaussian statistics of the diffraction patterns.
             
-        get_loss_poissn(model_DP, measured_DP):
-            Computes the loss based on Poisson statistics of the diffraction patterns.
-            
-        get_loss_pacbed(model_DP, measured_DP):
-            Computes the PACBED loss by comparing averaged diffraction patterns.
-            
-        get_loss_sparse(objp_patches, omode_occu):
-            Computes the sparsity regularization loss on object phase patches.
-            
-        get_loss_simlar(object_patches, omode_occu):
-            Computes the similarity loss between different object modes.
-            
-        forward(model_DP, measured_DP, object_patches, omode_occu):
-            Combines all the loss components and returns the total loss and individual losses.
     """
     def __init__(self, loss_params, device='cuda'):
         super(CombinedLoss, self).__init__()
@@ -49,6 +31,7 @@ class CombinedLoss(torch.nn.Module):
         self.mse = torch.nn.MSELoss(reduction='mean')
 
     def get_loss_single(self, model_DP, measured_DP):
+        """ Computes the loss based on Gaussian statistics of the diffraction patterns. """
         # Calculate loss_single
         # This loss function emulates the likelihood function of diffraction patterns with Gaussian statistics (higher dose)
         # For exact Gaussian statistics, the dp_pow should be 0.5
@@ -64,6 +47,7 @@ class CombinedLoss(torch.nn.Module):
         return loss_single
     
     def get_loss_poissn(self, model_DP, measured_DP):
+        """ Computes the loss based on Poisson statistics of the diffraction patterns. """
         # Calculate loss_poissn
         # This loss function emulates the likelihood function of diffraction patterns with Poisson statistics (low dose)
         # For exact Poisson statistics, the dp_pow should be 1
@@ -88,6 +72,8 @@ class CombinedLoss(torch.nn.Module):
         return loss_poissn
     
     def get_loss_pacbed(self, model_DP, measured_DP):
+        """ Computes the PACBED loss by comparing averaged diffraction patterns. """
+
         # Calculate loss_pacbed
         pacbed_params = self.loss_params['loss_pacbed']
         if pacbed_params['state']:
@@ -100,6 +86,7 @@ class CombinedLoss(torch.nn.Module):
         return loss_pacbed
         
     def get_loss_sparse(self, objp_patches, omode_occu):
+        """ Computes the sparsity regularization loss on object phase patches. """
         # Calculate loss_sparse by considering the ln norm
         # For obj-dependent regularization terms, the omode contribution should be weighting the individual loss for each omode.
         # Scaling the obj value by its omode_occu would make non-linear loss like l2 dependent on # of omode.
@@ -114,6 +101,8 @@ class CombinedLoss(torch.nn.Module):
         return loss_sparse
     
     def get_loss_simlar(self, object_patches, omode_occu):
+        """ Computes the similarity loss between different object modes. """
+
         # Calculate loss_simlar by calculating the similarity between different omodes
         # This loss term is specifically designed for regularizing omode by reducing the std of Gaussian_blurred / downsampled obj along the omode dimension
         # obja/p_patches = (N,omode,Nz,Ny,Nx) 
@@ -149,6 +138,10 @@ class CombinedLoss(torch.nn.Module):
         return loss_simlar
     
     def forward(self, model_DP, measured_DP, object_patches, omode_occu):
+        """
+        Combines all the loss components and returns the total loss and individual losses.
+
+        """
         losses = []
         losses.append(self.get_loss_single(model_DP, measured_DP))
         losses.append(self.get_loss_poissn(model_DP, measured_DP))

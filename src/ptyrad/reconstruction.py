@@ -46,22 +46,6 @@ class PtyRADSolver(object):
             if_quiet is set to True.
         device (str): The device to run the computations on (e.g., 'cuda' for GPU, 'cpu' for CPU). 
             Defaults to None to let `accelerate` automatically decide.
-
-    Methods:
-        init_initializer():
-            Initializes the variables and objects needed for the reconstruction process.
-        init_loss():
-            Initializes the loss function using the provided parameters.
-        init_constraint():
-            Initializes the constraint function using the provided parameters.
-        reconstruct():
-            Executes the ptychographic reconstruction process by creating the model, 
-            optimizer, and running the reconstruction loop.
-        hypertune():
-            Performs hyperparameter tuning using Optuna.
-        run():
-            A wrapper method to run the solver in either reconstruction or hyperparameter 
-            tuning mode based on the if_hypertune flag.
     """
     def __init__(self, params, device=None, acc=None, logger=None):
         self.params          = deepcopy(params)
@@ -80,12 +64,14 @@ class PtyRADSolver(object):
         vprint(" ")
     
     def init_initializer(self):
+        """Initializes the variables and objects needed for the reconstruction process."""
         # These components are organized into individual methods so we can re-initialize some of them if needed 
         vprint("### Initializing Initializer ###")
         self.init          = Initializer(self.params['init_params']).init_all()
         vprint(" ")
 
     def init_loss(self):
+        """Initializes the loss function using the provided parameters."""
         vprint("### Initializing loss function ###")
         loss_params = self.params['loss_params']
         
@@ -99,6 +85,7 @@ class PtyRADSolver(object):
         vprint(" ")
 
     def init_constraint(self):
+        """Initializes the constraint function using the provided parameters."""
         vprint("### Initializing constraint function ###")
         constraint_params = self.params['constraint_params']
 
@@ -112,6 +99,8 @@ class PtyRADSolver(object):
         vprint(" ")
         
     def reconstruct(self):
+        """Executes the ptychographic reconstruction process by creating the model, 
+            optimizer, and running the reconstruction loop."""
         params = self.params
         device = self.device
         logger = self.logger
@@ -151,6 +140,7 @@ class PtyRADSolver(object):
         self.optimizer = optimizer
     
     def hypertune(self):
+        """Performs hyperparameter tuning using Optuna."""
         import optuna
         hypertune_params = self.params['hypertune_params']
         params_path      = self.params.get('params_path')
@@ -245,6 +235,8 @@ class PtyRADSolver(object):
     
     # Wrapper function to run either "reconstruction" or "hypertune" modes    
     def run(self):
+        """A wrapper method to run the solver in either reconstruction or hyperparameter 
+            tuning mode based on the if_hypertune flag"""
         start_t = time_sync()
         solver_mode = 'hypertune' if self.if_hypertune else 'reconstruct'
         

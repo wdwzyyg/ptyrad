@@ -21,40 +21,6 @@ class CombinedConstraint(torch.nn.Module):
             frequency and other parameters necessary for its application.
         device (str, optional): The device on which the tensors are located (e.g., 'cuda' or 'cpu'). Defaults to 'cuda'.
         verbose (bool, optional): If True, prints messages during the application of constraints. Defaults to True.
-
-    Methods:
-        apply_ortho_pmode(model, niter):
-            Applies an orthogonality constraint to the probe modes at a specified iteration frequency.
-
-        apply_probe_mask_k(model, niter):
-            Applies a probe amplitude constraint in Fourier space at a specified iteration frequency.
-
-        apply_fix_probe_int(model, niter):
-            Applies a probe intensity constraint at a specified iteration frequency.
-
-        apply_obj_rblur(model, niter):
-            Applies Gaussian blur to the object in the spatial dimensions at a specified iteration frequency.
-
-        apply_obj_zblur(model, niter):
-            Applies Gaussian blur to the object in the z-dimension at a specified iteration frequency.
-
-        apply_kr_filter(model, niter):
-            Applies a kr Fourier filter constraint on the object at a specified iteration frequency.
-
-        apply_kz_filter(model, niter):
-            Applies a kz Fourier filter constraint on the object at a specified iteration frequency.
-
-        apply_obja_thresh(model, niter):
-            Applies thresholding on the object amplitude at a voxel level at a specified iteration frequency.
-
-        apply_objp_postiv(model, niter):
-            Applies a positivity constraint on the object phase at a voxel level at a specified iteration frequency.
-
-        apply_tilt_smooth(model, niter):
-            Applies Gaussian blur to object tilts at a specified iteration frequency.
-
-        forward(model, niter):
-            Applies all the defined constraints at the appropriate iteration frequency.
     """
     def __init__(self, constraint_params, device='cuda', verbose=True):
         super(CombinedConstraint, self).__init__()

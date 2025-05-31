@@ -1,0 +1,19 @@
+# Sphinx + themes + plugins
+sphinx==8.2.3
+sphinx-book-theme==1.1.4
+myst-parser[linkify]==4.0.1
+sphinx-autodoc-typehints==3.2.0
+
+# Runtime deps (required for import-time during autodoc)
+accelerate==1.7.0
+h5py==3.13.0
+matplotlib==3.10.3
+optuna==4.3.0
+torch==2.5.1
+scikit-learn==1.6.1
+scipy==1.15.2
+tifffile==2025.5.26
+torchvision==0.20.1
+
+# Install ptyrad
+-e .

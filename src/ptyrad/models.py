@@ -59,24 +59,6 @@ class PtychoAD(torch.nn.Module):
         model_params (dict): Dictionary of model parameters including learning rates and blur stds.
         device (str): Device to run computations on. Default is 'cuda:0'.
         verbose (bool): If True, prints model summary. Default is True.
-
-    Methods:
-        create_grids():
-            Creates the grids for object ROI and probe shifts.
-        set_optimizer(lr_params, verbose=True):
-            Sets up the optimizer with learning rate parameters.
-        print_model_summary():
-            Prints a summary of the model's optimizable variables and statistics.
-        get_obj_ROI(indices):
-            Retrieves object ROI based on integer coordinates.
-        get_probes(indices):
-            Retrieves probe functions for each position.
-        get_propagators(indices):
-            Retrieves propagator matrices for each position.
-        get_measurements(indices=None):
-            Retrieves measurements based on input indices.
-        forward(indices):
-            Performs the forward pass and computes diffraction patterns for given indices.
     """
 
     def __init__(self, init_variables, model_params, device='cuda', verbose=True):
@@ -221,6 +203,7 @@ class PtychoAD(torch.nn.Module):
             self.print_model_summary()
         
     def print_model_summary(self):
+        """ Prints a summary of the model's optimizable variables and statistics. """
         # Set all the print as vprint so that it'll only print once in DDP, the actual `if verbose` is set outside of the function
         vprint('### PtychoAD optimizable variables ###')
         for name, tensor in self.optimizable_tensors.items():
