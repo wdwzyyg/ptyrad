@@ -1,4 +1,7 @@
-## Define the constraint class for iter-wist constraints
+"""
+Physical constraints that directly modify optimizable tensors with specified intervals of iterations
+
+"""
 
 import torch
 from torch.fft import fft2, fftfreq, fftn, ifft2, ifftn

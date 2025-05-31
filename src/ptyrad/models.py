@@ -1,4 +1,10 @@
-## Defining PtychoAD class for the optimization object
+"""
+Optimizable model of the ptychographic reconstruction using automatic differentiation (AD)
+
+This is the PyTorch model that holds optimizable tensors and interacts with loss and constraints.
+
+"""
+
 from math import prod
 import torch
 from torch.fft import fft2, ifft2, fftfreq

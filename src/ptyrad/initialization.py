@@ -1,4 +1,11 @@
-## Define the Initialization class to initialize 4D-STEM data, object, probe, probe positions, tilts, and other variables
+"""
+Initialize measurements, object, probe, probe positions, tilts, and other variables
+
+This module is completely using NumPy for interoperability, 
+
+so users can initialize their data with PtyRAD first and reconstruct with other approaches later.
+
+"""
 
 import os
 from copy import deepcopy

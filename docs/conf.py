@@ -18,21 +18,24 @@ author = 'Chia-Hao Lee'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    "myst_parser",            
     "sphinx.ext.autodoc",      
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon", 
     "sphinx.ext.viewcode",
+    "myst_parser",            
 ]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 autodoc_default_options = {
-    "members": True,
-    "undoc-members": True,
-    "show-inheritance": True,
+    'members': False,
+    'inherited-members': False,
+    'show-inheritance': False,
 }
+
+autosummary_generate = True  # <-- Important
+templates_path = ["_templates"]  # Make sure this exists
 
 # More comprehensive MyST configuration
 myst_enable_extensions = [
@@ -58,7 +61,6 @@ autodoc_member_order = 'bysource'
 
 source_suffix = {
     '.rst': 'restructuredtext',
-    '.txt': 'markdown',
     '.md': 'markdown',
 }
 

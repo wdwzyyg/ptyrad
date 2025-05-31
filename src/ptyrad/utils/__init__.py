@@ -1,3 +1,8 @@
+"""
+Utility functions for logging, timing, image processing, etc.
+
+"""
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │ PROMOTING COMMONLY USED FUNCTIONS FROM SUBMODULES                          │
 # └────────────────────────────────────────────────────────────────────────────┘

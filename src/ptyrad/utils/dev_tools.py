@@ -1,3 +1,8 @@
+"""
+Developer tools for logging, testing, checking sizes and types, etc.
+
+"""
+
 import ast
 import os
 from collections import defaultdict

@@ -1,6 +1,6 @@
 # Command-line Interface (CLI)
 
-PtyRAD provides a command-line interface to execute common commands from your terminal once you installed `ptyrad` in your Python environment.
+*PtyRAD* also provides a command-line interface to execute common commands from your terminal once you installed `ptyrad` in your Python environment.
 
 **Run reconstructions**
 
@@ -23,5 +23,5 @@ ptyrad print-system-info
 **Export PtyRAD preprocessed measurements data**
 ```bash
 # Exporting measurements data for easy visualization and analysis
-ptyrad export-init-meas --params_path params/tBL_WSe2_reconstruct.yaml --output data/ptyrad_init_meas.hdf5 --reshape 128 128 128 128 --append
+ptyrad export-meas-init --params_path params/tBL_WSe2_reconstruct.yaml --output data/ptyrad_init_meas.hdf5 --reshape 128 128 128 128 --append
 ```

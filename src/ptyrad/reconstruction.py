@@ -1,4 +1,7 @@
-## Define the ptycho reconstruction solver class and functions
+"""
+Reconstruction and hypertune workflows for ptychographic reconstructions
+
+"""
 
 from copy import deepcopy
 import logging

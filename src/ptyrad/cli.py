@@ -1,4 +1,7 @@
-## Command line Interface module
+"""
+Command line Interface of PtyRAD, including running reconstructions, checking system information, and others
+
+"""
 
 import argparse
 

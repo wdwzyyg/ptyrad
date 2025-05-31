@@ -1,3 +1,8 @@
+"""
+Physics-related functions of probes, propagators, and constants, etc.
+
+"""
+
 from typing import Optional
 
 import numpy as np
@@ -21,7 +26,7 @@ def infer_dx_from_params(
 ) -> float:
     """
     Infer the real-space pixel size (dx) based on available unit-related parameters.
-    Accepts keyword arguments directly, or a dictionary via **params.
+    Accepts keyword arguments directly, or a dictionary via `infer_dx_from_params(**params)`.
 
     Args:
         dx (Optional[float], optional): Real space pixel size for object, probe, and scan position coordinates in unit of Ang (electron) or m (X-ray).
@@ -119,26 +124,27 @@ def complex_object_interp3d(complex_object, zoom_factors, z_axis, use_np_or_cp='
     Interpolate a 3D complex object while preserving multiscattering behavior.
 
     Parameters:
-    - complex_object (ndarray): Input complex object with shape (z, y, x).
-    - zoom_factors (tuple): Tuple of zoom factors for (z, y, x).
-    = z_axis: int indicating the z-axis posiiton
-    - use_np_or_cp (str): Specify the library to use, 'np' for NumPy or 'cp' for CuPy.
+        - complex_object (ndarray): Input complex object with shape (z, y, x).
+        - zoom_factors (tuple): Tuple of zoom factors for (z, y, x).
+        - z_axis: int indicating the z-axis posiiton
+        - use_np_or_cp (str): Specify the library to use, 'np' for NumPy or 'cp' for CuPy.
 
     Returns:
-    ndarray: Interpolated complex object with the same dtype as the input.
+        ndarray: Interpolated complex object with the same dtype as the input.
 
     Notes:
-    - Amplitude and phase are treated separately as they obey different conservation laws.
-    - Phase shift for multiple z-slices is additive, ensuring the sum of all z-slices remains the same.
-    - Amplitude between each z-slice is multiplicative. Linear interpolation of log(amplitude) is performed
-      while maintaining the conservation law.
-    - The phase of the object should be unwrapped and smooth.
-    - If possible, use cupy for 40x faster speed (I got 1 sec vs 40 sec for 320*320*420 target size in a one-shot calculation on my Quadro P5000)
+        - Amplitude and phase are treated separately as they obey different conservation laws.
+        - Phase shift for multiple z-slices is additive, ensuring the sum of all z-slices remains the same.
+        - Amplitude between each z-slice is multiplicative. Linear interpolation of log(amplitude) is performed while maintaining the conservation law.
+        - The phase of the object should be unwrapped and smooth.
+        - If possible, use cupy for 40x faster speed (I got 1 sec vs 40 sec for 320*320*420 target size in a one-shot calculation on my Quadro P5000)
 
     Example:
-    >>> complex_object = np.random.rand(10, 10, 10) + 1j * np.random.rand(10, 10, 10)
-    >>> zoom_factors = (2, 2, 1.5)
-    >>> result = complex_object_interp3d(complex_object, zoom_factors, use_np_or_cp='np')
+        ```python
+        complex_object = np.random.rand(10, 10, 10) + 1j * np.random.rand(10, 10, 10)
+        zoom_factors = (2, 2, 1.5)
+        result = complex_object_interp3d(complex_object, zoom_factors, use_np_or_cp='np')
+        ```
     """
     
     if use_np_or_cp == 'cp':

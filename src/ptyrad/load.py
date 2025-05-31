@@ -1,3 +1,8 @@
+"""
+Loading functions for different file types including .mat, .hdf5, .tif, .raw, .yaml, etc.
+
+"""
+
 import os
 from typing import Any, Dict, List, Optional, Tuple, Union
 

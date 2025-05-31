@@ -1,3 +1,8 @@
+"""
+Math operations of FFTs, masks, affine transformation matrices, etc.
+
+"""
+
 from typing import Optional, Tuple
 
 import numpy as np

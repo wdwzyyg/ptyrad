@@ -1,6 +1,6 @@
-# Params files for PtyRAD
+# Params files of PtyRAD
 
-PtyRAD uses a single parameters file to hold a nested dictionary structure for all parameters relevant to each reconstruction task. These nested dictionaries are usually held by structured text format via `.json`, `.yaml`, or `.toml`. The recommended file format for PtyRAD is `.yaml`, or **YAML** for its readability and excellent compatibility. 
+*PtyRAD* uses a single parameters file to hold a nested dictionary structure for all parameters relevant to each reconstruction task. These nested dictionaries are usually held by structured text format via `.json`, `.yaml`, or `.toml`. The recommended file format for *PtyRAD* is `.yaml`, or **YAML** for its readability and excellent compatibility. 
 
 A complete PtyRAD params file contains 6 main params dictionaries:
 1. `init_params`

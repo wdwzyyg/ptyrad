@@ -1,4 +1,7 @@
-## Defining multislice forward model for electron diffraction with mixed probe/object modes of 3D objects
+"""
+Physical forwad model that generates diffraction patterns from mixed-state probe/object in a fully vectorized way
+
+"""
 
 import torch
 from torch.fft import fft2, ifft2

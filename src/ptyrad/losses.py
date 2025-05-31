@@ -1,4 +1,7 @@
-## Define the loss function class with loss and regularizations
+"""
+Loss functions and soft regularizations calculated using forward simulations against experimental measurements
+
+"""
 
 import torch
 from torch.nn.functional import interpolate

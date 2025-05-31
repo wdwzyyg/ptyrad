@@ -1,3 +1,8 @@
+"""
+General purpose utility tools for logging, converting types, parsing dicts and strings, etc.
+
+"""
+
 import io
 import logging
 import os

@@ -1,3 +1,8 @@
+"""
+Image processing tools for CoM, fitting, normalization, shifting, etc.
+
+"""
+
 import numpy as np
 import torch
 from scipy.optimize import minimize
@@ -494,7 +499,7 @@ def imshift_batch(img, shifts, grid):
     This function shifts a complex/real-valued input image by applying phase shifts in the Fourier domain,
     achieving subpixel shifts in both x and y directions.
 
-    Inputs:
+    Args:
         img (torch.Tensor): The input image to be shifted. 
                             img could be either a mixed-state complex probe (pmode, Ny, Nx) complex64 tensor, 
                             or a mixed-state pseudo-complex object stack (2,omode,Nz,Ny,Nx) float32 tensor.
@@ -503,7 +508,7 @@ def imshift_batch(img, shifts, grid):
                              where Ny and Nx are the height and width of the images, respectively. Note that the grid is normalized so the value spans
                              from 0 to 1
 
-    Outputs:
+    Returns:
         shifted_img (torch.Tensor): The batch of shifted images. It has an extra dimension than the input image, i.e., shape=(Nb, ..., Ny, Nx),
                                     where Nb is the number of samples in the input batch.
 
@@ -512,8 +517,8 @@ def imshift_batch(img, shifts, grid):
         - The function utilizes the fast Fourier transform (FFT) to perform the shifting operation efficiently.
         - Make sure to convert the input image and shifts tensor to the desired device before passing them to this function.
         - The fft2 and fftshifts are all applied on the last 2 dimensions, therefore it's only shifting along y and x directions
-        - tensor[None, ...] would add an extra dimension at 0, so *[None]*ndim means unwrapping a list of ndim None as [None, None, ...]
-        - The img is automatically broadcast to (Nb, *img.shape), so if a batch of images are passed in, each image would be shifted independently
+        - tensor[None, ...] would add an extra dimension at 0, so `*[None]*ndim` means unwrapping a list of ndim None as [None, None, ...]
+        - The img is automatically broadcast to `(Nb, *img.shape)`, so if a batch of images are passed in, each image would be shifted independently
     """
     
     assert img.shape[-2:] == grid.shape[-2:], f"Found incompatible dimensions. img.shape[-2:] = {img.shape[-2:]} while grid.shape[-2:] = {grid.shape[-2:]}"

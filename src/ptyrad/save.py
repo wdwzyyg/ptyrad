@@ -1,4 +1,7 @@
-# Saving
+"""
+Saving functions for PtyRAD outputs including model, arrays, params files, etc.
+
+"""
 
 import os
 from typing import Any, Dict

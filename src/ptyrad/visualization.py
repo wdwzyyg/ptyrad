@@ -1,3 +1,8 @@
+"""
+Plotting functions for output figures including forward passes, loss curves, positions, etc.
+
+"""
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
