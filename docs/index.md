@@ -5,9 +5,26 @@
 ```{toctree}
 :maxdepth: 3
 :hidden:
+```
 
+```{toctree}
+:hidden:
+:caption: Get Started
+overview
 installation
-python
-cli
-params
+quickstart
+```
+
+```{toctree}
+:hidden:
+:caption: User Guide
+params/index
+launch/index
+```
+
+```{toctree}
+:hidden:
+:caption: Reference
+changelog
 api/index
+```

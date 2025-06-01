@@ -3,7 +3,6 @@
 *PtyRAD* also provides a command-line interface to execute common commands from your terminal once you installed `ptyrad` in your Python environment.
 
 **Run reconstructions**
-
 ```bash
 # This is used to quickly launch a reconstruction / hypertune task
 ptyrad run --params_path params/tBL_WSe2_reconstruct.yaml

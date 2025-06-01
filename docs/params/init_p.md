@@ -1,18 +1,6 @@
-# Params files of PtyRAD
+# init_params
 
-*PtyRAD* uses a single parameters file to hold a nested dictionary structure for all parameters relevant to each reconstruction task. These nested dictionaries are usually held by structured text format via `.json`, `.yaml`, or `.toml`. The recommended file format for *PtyRAD* is `.yaml`, or **YAML** for its readability and excellent compatibility. 
-
-A complete PtyRAD params file contains 6 main params dictionaries:
-1. `init_params`
-2. `hypertune_params`
-3. `model_params`
-4. `loss_params`
-5. `constraint_params`
-6. `recon_params`
-
-Each of them contains a few to a dozen of fields that define the reconstuction configuration.
-
-For example:
+`init_params` determines the experimental parameters, model complexity, preprocessing steps, and where to load the input data.
 
 ```yaml
 init_params : {

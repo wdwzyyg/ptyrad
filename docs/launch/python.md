@@ -2,7 +2,10 @@
 
 *PtyRAD* provides an easy Python interface for programmatically control of  `ptyrad` in your Python environment.
 
-**Run reconstructions**
+## Run reconstructions
+
+A simple python script for launching *PtyRAD* in **"reconstruction mode"**, which is fully configured by the params file.
+
 ```python
 from ptyrad.load import load_params
 from ptyrad.reconstruction import PtyRADSolver
@@ -21,4 +24,6 @@ ptycho_solver = PtyRADSolver(params, device=device, logger=logger)
 ptycho_solver.run()
 ```
 
-This is the same example of `demo/scripts/run_ptyrad_quick_example.ipynb`.
+> 💡 This is the same example as `ptyrad/demo/scripts/run_ptyrad_quick_example.ipynb`.
+
+If you want to see more internal working mechanism of *PtyRAD*, the `ptyrad/demo/scripts/run_ptyrad_detailed_walkthrough.ipynb` would be a good example.

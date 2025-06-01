@@ -74,7 +74,8 @@ html_theme_options = {
     "use_repository_button": True,
     "use_edit_page_button": True,
     "use_issues_button": True,
-    "show_navbar_depth": 2,
+    "show_navbar_depth": 1,
+    "show_toc_level": 1, # The 2nd (in content TOC on the right)
     "home_page_in_toc": True,
+    "collapse_navigation": True # This collapses all sections by default
 }
-
