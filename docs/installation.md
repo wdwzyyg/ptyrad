@@ -6,14 +6,14 @@
 
 *PtyRAD* uses PyTorch as the computation backend, which supports a wide range of machines as shown below.
 
-Assuming you have created and activated a fresh Python environment for *PtyRAD*, click on the corresponding ✔️ to jump to your options:
+Assuming you have created and activated a fresh Python environment for *PtyRAD*, click on the corresponding {fas}`check text-success` to jump to your options:
 
-|                  | {fab}`windows` Windows  | {fab}`apple` macOS    | {fab}`linux` Linux     |
-|:----------------:|:-----------------------:|:---------------------:|:----------------------:|
-| CPU              | [✔️](#install-cpu)     | [✔️](#install-macos)  | [✔️](#install-cpu)     |
-| NVIDIA GPU       | [✔️](#install-nvidia)  | n/a                   |  [✔️](#install-nvidia) |
-| AMD GPU          |  ❌                    | n/a                   |  [✔️](#install-amd)    |
-| Apple GPU        | n/a                     | [✔️](#install-macos) |   n/a                  |
+|                  | {fab}`windows` Windows                        | {fab}`apple` macOS                           | {fab}`linux` Linux                           |
+|:----------------:|:---------------------------------------------:|:--------------------------------------------:|:--------------------------------------------:|
+| CPU              | [{fas}`check text-success`](#install-cpu)     | [{fas}`check text-success`](#install-macos)  | [{fas}`check text-success`](#install-cpu)    |
+| NVIDIA GPU       | [{fas}`check text-success`](#install-nvidia)  | n/a                                          | [{fas}`check text-success`](#install-nvidia) |
+| AMD GPU          |  {fas}`times text-danger`                     | n/a                                          | [{fas}`check text-success`](#install-amd)    |
+| Apple GPU        | n/a                                           | [{fas}`check text-success`](#install-macos)  |   n/a                                        |
 
 ## Installation options
 
