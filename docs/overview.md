@@ -1,3 +1,4 @@
+(reference:overview)=
 # Overview
 
 Ptychographic reconstruciton is often solved as an optimization problem using gradient descent methods. Typical ptychographic reconstruction packages (e.g. *PtychoShelves*, *PtyPy*, *py4DSTEM*) use an analytically derived or approximated gradients and apply them for the updates, while *PtyRAD* utilizes automatic differention (AD) to automatically calculate the needed gradients.

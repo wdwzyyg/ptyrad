@@ -1,0 +1,30 @@
+/* Remove alternating row colors (zebra striping) */
+table tbody tr:nth-child(even) {
+    background-color: transparent !important;
+}
+
+table tbody tr:nth-child(odd) {
+    background-color: transparent !important;
+}
+
+/* Remove row-level hover effects */
+table tbody tr:hover {
+    background-color: inherit !important;
+}
+
+/* Add cell-level hover effects */
+table tbody td:hover {
+    background-color: var(--pst-color-surface) !important;
+    transition: background-color 0.2s ease;
+}
+
+/* Remove hover effects from header cells */
+table thead th:hover {
+    background-color: inherit !important;
+}
+
+/* Ensure clickable elements in cells maintain pointer cursor */
+table tbody td a:hover,
+table tbody td button:hover {
+    cursor: pointer;
+}

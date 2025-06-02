@@ -12,7 +12,6 @@ dist/
 
 # Ignore Sphinx build artifacts
 docs/_build/
-docs/_static/
 docs/_autosummary/
 docs/.doctrees/
 docs/.ipynb_checkpoints/

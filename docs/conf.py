@@ -22,6 +22,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon", 
     "sphinx.ext.viewcode",
+    "sphinx_design", # Allows tab, grid card, drop down and more
     "myst_parser",            
 ]
 
@@ -34,8 +35,9 @@ autodoc_default_options = {
     'show-inheritance': False,
 }
 
-autosummary_generate = True  # <-- Important
-templates_path = ["_templates"]  # Make sure this exists
+exclude_patterns = [] # Exclude api could also make the build much faster
+autosummary_generate = True # This controls the api autosummary, which is quite slow. Toggle off for faster build while testing other pages.
+templates_path = ["_templates"]
 
 # More comprehensive MyST configuration
 myst_enable_extensions = [
@@ -79,3 +81,10 @@ html_theme_options = {
     "home_page_in_toc": True,
     "collapse_navigation": True # This collapses all sections by default
 }
+
+# Add your _static directory to the static path
+html_static_path = ['_static']
+
+html_css_files = ['custom.css'] # To allow table hover effects in `installation.md`
+
+html_js_files = ['custom.js'] # To allow ref switch the tab in `installation.md`
