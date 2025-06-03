@@ -256,7 +256,7 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
     dz_lr        = format(model.lr_params['slice_thickness'],  '.0e').replace("e-0", "e-") if model.lr_params['slice_thickness'] !=0 else 0
     pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
     scan_affine  = model.scan_affine # Note that scan_affine could be None
-    init_tilts   = model.opt_obj_tilts.detach().cpu().numpy()
+    init_tilts   = model.opt_obj_tilts.mean(0).detach().cpu().numpy() # (2,) regardless tilt_type = 'all' or 'each'
     optimizer_str   = model.optimizer_params['name']
     start_iter_dict = model.start_iter
 
@@ -416,9 +416,9 @@ def make_output_folder(output_dir, indices, init_params, recon_params, model, co
         affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
         output_path += f"_aff{affine_str}"
     
-    if np.any(init_tilts):
-        tilts_str = '_'.join(f'{x:.2g}' for x in init_tilts.ravel())
-        output_path += f"_tilt{tilts_str}"
+    # Attach init tilts (optional)
+    if 'tilt' in recon_dir_affixes and np.any(init_tilts):
+        output_path += f"_tilt{init_tilts[0]:.2g}_{init_tilts[1]:.2g}"
     
     output_path += postfix
     
