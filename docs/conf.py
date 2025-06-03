@@ -23,6 +23,7 @@ extensions = [
     "sphinx.ext.napoleon", 
     "sphinx.ext.viewcode",
     "sphinx_design", # Allows tab, grid card, drop down and more
+    "sphinx_togglebutton", 
     "myst_parser",            
 ]
 

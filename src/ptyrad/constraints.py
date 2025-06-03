@@ -156,7 +156,7 @@ class CombinedConstraint(torch.nn.Module):
             if obj_type in ['amplitude', 'both']:
                 model.opt_obja.data = objac
                 amin, amax = model.opt_obja.min().item(), model.opt_obja.max().item()
-                vprint(f"Apply complex ratio constraint with alpha1: {alpha1}, alpha2: {alpha2}, amd Cbar: {Cbar.item():.3f} on obja at iter {niter}. obja range becomes ({amin:.3f}, {amax:.3f})", verbose=self.verbose)
+                vprint(f"Apply complex ratio constraint with alpha1: {alpha1}, alpha2: {alpha2}, and Cbar: {Cbar.item():.3f} on obja at iter {niter}. obja range becomes ({amin:.3f}, {amax:.3f})", verbose=self.verbose)
             if obj_type in ['phase', 'both']:
                 model.opt_objp.data = objpc
                 pmin, pmax = model.opt_objp.min().item(), model.opt_objp.max().item()
