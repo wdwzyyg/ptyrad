@@ -21,16 +21,17 @@ classifiers = [
 ]
 
 dependencies = [
-  "accelerate",
-  "h5py",
-  "jupyter",
-  "matplotlib",
-  "optuna",
-  "torch>=2.0,<2.7",
-  "scikit-learn",
-  "scipy",
-  "tifffile",
-  "torchvision"
+    "accelerate",
+    "h5py",
+    "jupyter",
+    "matplotlib",
+    "optuna",
+    "torch>=2.0,<2.7",
+    "scikit-learn",
+    "scipy",
+    "tifffile",
+    "torchvision",
+    "redis[hiredis]",
 ]
 
 [project.scripts]
