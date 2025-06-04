@@ -30,6 +30,8 @@ from ptyrad.utils import (
 )
 from ptyrad.visualization import plot_pos_grouping, plot_summary
 
+from optuna.storages import JournalStorage
+from optuna.storages.journal import JournalRedisBackend
 
 class PtyRADSolver(object):
     """
@@ -192,6 +194,12 @@ class PtyRADSolver(object):
         # Redirect Optuna's logger to custom logger
         optuna_logger.addHandler(logger.buffer_handler)
         optuna_logger.addHandler(logger.console_handler)
+
+        # set up redis storage for supercloud
+        if storage_path.startswith('redis'):
+            storage_path = JournalStorage(
+                JournalRedisBackend(storage_path, use_cluster=False)
+        )
                 
         # Create a study object and optimize the objective function
         study = optuna.create_study(
