@@ -232,196 +232,260 @@ def save_dict_to_hdf5(
     with h5py.File(output_path, "w") as hf:
         _recursively_save_dict_to_hdf5(d, hf)
 
-def make_output_folder(output_dir, indices, init_params, recon_params, model, constraint_params, loss_params, recon_dir_affixes=['lr', 'constraint', 'model', 'loss', 'init'], verbose=True):
-    ''' 
-    Generate the output folder given indices, recon_params, model, constraint_params, and loss_params 
-    '''
+def make_output_folder(
+    output_dir,
+    indices,
+    init_params,
+    recon_params,
+    model,
+    constraint_params,
+    loss_params,
+    recon_dir_affixes=[
+        "indices",
+        "meas",
+        "batch",
+        "pmode",
+        "omode",
+        "nlayer",
+        "lr",
+        "constraint",
+        "model",
+        "loss",
+        "init",
+    ],
+    verbose=True,
+):
+    """
+    Generate the output folder given indices, recon_params, model, constraint_params, and loss_params
+    """
 
-    output_path  = output_dir
-    illumination = init_params['probe_illum_type']
-    meas_flipT   = init_params['meas_flipT']
-    indices_mode = recon_params['INDICES_MODE'].get('mode')
-    group_mode   = recon_params['GROUP_MODE']
-    batch_size   = recon_params['BATCH_SIZE'].get('size') * recon_params['BATCH_SIZE'].get('grad_accumulation') # Affix the effective batch size
-    prefix_date  = recon_params['prefix_date']
-    prefix       = recon_params['prefix']
-    postfix      = recon_params['postfix']
-    pmode        = model.get_complex_probe_view().size(0)
-    dp_size      = model.get_complex_probe_view().size(-1)
-    obj_shape    = model.opt_objp.shape
-    probe_lr     = format(model.lr_params['probe'],            '.0e').replace("e-0", "e-") if model.lr_params['probe'] !=0 else 0
-    objp_lr      = format(model.lr_params['objp'],             '.0e').replace("e-0", "e-") if model.lr_params['objp'] !=0 else 0
-    obja_lr      = format(model.lr_params['obja'],             '.0e').replace("e-0", "e-") if model.lr_params['obja'] !=0 else 0
-    tilt_lr      = format(model.lr_params['obj_tilts'],        '.0e').replace("e-0", "e-") if model.lr_params['obj_tilts'] !=0 else 0
-    dz_lr        = format(model.lr_params['slice_thickness'],  '.0e').replace("e-0", "e-") if model.lr_params['slice_thickness'] !=0 else 0
-    pos_lr       = format(model.lr_params['probe_pos_shifts'], '.0e').replace("e-0", "e-") if model.lr_params['probe_pos_shifts'] !=0 else 0
-    scan_affine  = model.scan_affine # Note that scan_affine could be None
-    init_tilts   = model.opt_obj_tilts.mean(0).detach().cpu().numpy() # (2,) regardless tilt_type = 'all' or 'each'
-    optimizer_str   = model.optimizer_params['name']
-    start_iter_dict = model.start_iter
+    prefix_date = recon_params.get("prefix_date", False)
+    prefix = recon_params.get("prefix", "")
+    postfix = recon_params.get("postfix", "")
+    parts = []
 
-    # Preprocess prefix and postfix
-    prefix  = prefix + '_' if prefix  != '' else ''
-    postfix = '_'+ postfix if postfix != '' else ''
+    # Attach date string if prefix_date is true-ish
     if prefix_date:
-        prefix = get_date() + '_' + prefix 
-    
-    # Setup basic params   
-    output_path  = output_dir + "/" + prefix + f"{indices_mode}_N{len(indices)}_dp{dp_size}"
-    
-    # Attach meas flipping
-    if meas_flipT is not None:
-        output_path = output_path + '_flipT' + ''.join(str(x) for x in meas_flipT)
-    
-    # Attach recon mode and pmode 
-    output_path += f"_{group_mode}{batch_size}_p{pmode}"
-    
-    # Attach obj shape and dz
-    output_path += f"_{obj_shape[0]}obj_{obj_shape[1]}slice"
-    if obj_shape[1] != 1:
-        slice_thickness = model.slice_thickness.detach().cpu().numpy().round(2) # This is the initialized slice thickness
-        output_path += f"_dz{slice_thickness:.3g}"
-    
-    # Attach optimizer name (optional)
-    if 'optimizer' in recon_dir_affixes:
-        output_path += f"_{optimizer_str}"
-    
-    # Attach start_iter (optional)
-    if 'start_iter' in recon_dir_affixes:
-        if start_iter_dict['probe'] is not None and start_iter_dict['probe'] > 1:
-            output_path += f"_ps{start_iter_dict['probe']}"
-        if start_iter_dict['obja'] is not None and start_iter_dict['obja'] > 1:
-            output_path += f"_oas{start_iter_dict['obja']}"
-        if start_iter_dict['objp'] is not None and start_iter_dict['objp'] > 1:
-            output_path += f"_ops{start_iter_dict['objp']}"
-        if start_iter_dict['probe_pos_shifts'] is not None and start_iter_dict['probe_pos_shifts'] > 1:
-            output_path += f"_ss{start_iter_dict['probe_pos_shifts']}"
-        if start_iter_dict['obj_tilts'] is not None and start_iter_dict['obj_tilts'] > 1:
-            output_path += f"_ts{start_iter_dict['obj_tilts']}"
-        if start_iter_dict['slice_thickness'] is not None and start_iter_dict['slice_thickness'] > 1:
-            output_path += f"_dzs{start_iter_dict['slice_thickness']}"
-    
-    # Attach learning rate (optional)
-    if 'lr' in recon_dir_affixes:
-        if probe_lr != 0:
-            output_path += f"_plr{probe_lr}"
-        if obja_lr != 0:
-            output_path += f"_oalr{obja_lr}"
-        if objp_lr != 0:
-            output_path += f"_oplr{objp_lr}"
-        if pos_lr != 0:
-            output_path += f"_slr{pos_lr}" 
-        if tilt_lr != 0:
-            output_path += f"_tlr{tilt_lr}"
-        if dz_lr != 0:
-            output_path += f"_dzlr{dz_lr}"
-            
-    # Attach model params (optional)
-    if 'model' in recon_dir_affixes:    
-        if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
-            output_path += f"_opreb{model.obj_preblur_std}"
-            
-        if model.detector_blur_std is not None and model.detector_blur_std != 0:
-            output_path += f"_dpblur{model.detector_blur_std}"
-    
-    # Attach constraint params (optional)
-    if 'constraint' in recon_dir_affixes:
-        if constraint_params['kr_filter']['freq'] is not None:
-            obj_type = constraint_params['kr_filter']['obj_type']
-            kr_str = {'both': 'kr', 'amplitude': 'kra', 'phase': 'krp'}.get(obj_type)
-            radius = constraint_params['kr_filter']['radius']
-            output_path += f"_{kr_str}f{radius}"
-        
-        if constraint_params['kz_filter']['freq'] is not None:
-            obj_type = constraint_params['kz_filter']['obj_type']
-            kz_str = {'both': 'kz', 'amplitude': 'kza', 'phase': 'kzp'}.get(obj_type)
-            beta = constraint_params['kz_filter']['beta']
-            output_path += f"_{kz_str}f{beta}"
-            
-        if constraint_params['obj_rblur']['freq'] is not None and constraint_params['obj_rblur']['std'] != 0:
-            obj_type = constraint_params['obj_rblur']['obj_type']
-            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-            output_path += f"_{obj_str}rblur{constraint_params['obj_rblur']['std']}"
+        date_str = get_date()  # e.g. '20250606'
+        parts.append(date_str)
 
-        if constraint_params['obj_zblur']['freq'] is not None and constraint_params['obj_zblur']['std'] != 0:
-            obj_type = constraint_params['obj_zblur']['obj_type']
-            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-            output_path += f"_{obj_str}zblur{constraint_params['obj_zblur']['std']}"
-        
-        if constraint_params['complex_ratio']['freq'] is not None:
-            obj_type = constraint_params['complex_ratio']['obj_type']
-            obj_str = {'both': 'o', 'amplitude': 'oa', 'phase': 'op'}.get(obj_type)
-            alpha1 = round(constraint_params['complex_ratio']['alpha1'],2)
-            alpha2 = round(constraint_params['complex_ratio']['alpha2'],2)
-            output_path += f"_{obj_str}cplx{alpha1}_{alpha2}"
-        
-        if constraint_params['mirrored_amp']['freq'] is not None:
-            scale = round(constraint_params['mirrored_amp']['scale'],2)
-            power = round(constraint_params['mirrored_amp']['power'],2)
-            output_path += f"_mamp{scale}_{power}"
-        
-        if constraint_params['obja_thresh']['freq'] is not None:
-            output_path += f"_oathr{round(constraint_params['obja_thresh']['thresh'][0],2)}"
-        
-        if constraint_params['objp_postiv']['freq'] is not None:
-            mode  = constraint_params['objp_postiv'].get('mode', 'clip_neg')
-            mode_str = 's' if mode == 'subtract_min' else 'c'
-            relax = constraint_params['objp_postiv']['relax']
-            relax_str = '' if relax == 0 else f'{round(relax,2)}'
-            output_path += f"_opos{mode_str}{relax_str}"
-        
-        if constraint_params['tilt_smooth']['freq'] is not None:
-            output_path += f"_tsm{round(constraint_params['tilt_smooth']['std'],2)}"
-            
-        if constraint_params['probe_mask_k']['freq'] is not None:
-            output_path += f"_pmk{round(constraint_params['probe_mask_k']['radius'],2)}"
+    # Attach prefix (only if prefix is non-empty str)
+    if isinstance(prefix, str) and prefix:
+        parts.append(prefix)
+
+    # Attach indices mode (optional)
+    if "indices" in recon_dir_affixes:
+        indices_mode = recon_params["INDICES_MODE"].get("mode")
+        parts.append(f"{indices_mode}_N{len(indices)}")
+
+    # Attach DP size and meas flip (optional)
+    if "meas" in recon_dir_affixes:
+        dp_size = model.get_complex_probe_view().size(-1)
+        parts.append(f"dp{dp_size}")
+
+        meas_flipT = init_params["meas_flipT"]
+        # Attach meas flipping
+        if meas_flipT is not None:  # Note that [0,0,0] will be attached is specified for clarity
+            flipT_str = "flipT" + "".join(str(x) for x in meas_flipT)
+            parts.append(flipT_str)
+
+    # Attach group mode and batch size (optional)
+    if "batch" in recon_dir_affixes:
+        group_mode = recon_params["GROUP_MODE"]
+        batch_size = recon_params["BATCH_SIZE"].get("size")
+        grad_accum = recon_params["BATCH_SIZE"].get("grad_accumulation", 1)
+        batch_size *= grad_accum  # Affix the effective batch size
+        parts.append(f"{group_mode}{batch_size}")
+
+    # Attach pmode (optional)
+    if "pmode" in recon_dir_affixes:
+        pmode = model.get_complex_probe_view().size(0)
+        parts.append(f"p{pmode}")
+
+    # Attach omode (optional)
+    if "omode" in recon_dir_affixes:
+        omode = model.opt_objp.size(0)
+        parts.append(f"{omode}obj")
+
+    # Attach obj Nlayer and dz (optional)
+    if "nlayer" in recon_dir_affixes:
+        nlayer = model.opt_objp.size(1)
+        parts.append(f"{nlayer}slice")
+
+        if nlayer != 1:
+            slice_thickness = (
+                model.slice_thickness.detach().cpu().numpy()
+            )  # This is the initialized slice thickness
+            parts.append(f"dz{slice_thickness:.3g}")
+
+    # Attach optimizer name (optional)
+    if "optimizer" in recon_dir_affixes:
+        optimizer_str = model.optimizer_params["name"]
+        parts.append(f"{optimizer_str}")
+
+    # Attach start_iter (optional)
+    if "start_iter" in recon_dir_affixes:
+        start_iter_map = {
+            "probe": "ps",
+            "obja": "oas",
+            "objp": "ops",
+            "probe_pos_shifts": "ss",
+            "obj_tilts": "ts",
+            "slice_thickness": "dzs",
+        }
+
+        for key, tag in start_iter_map.items():
+            start_val = model.start_iter.get(key)
+            if start_val is not None and start_val > 1:
+                parts.append(f"{tag}{start_val}")
+
+    # Attach learning rate (optional)
+    if "lr" in recon_dir_affixes:
+        lr_map = {
+            "probe": "plr",
+            "obja": "oalr",
+            "objp": "oplr",
+            "probe_pos_shifts": "slr",
+            "obj_tilts": "tlr",
+            "slice_thickness": "dzlr",
+        }
+
+        for key, tag in lr_map.items():
+            lr_val = model.lr_params[key]
+            if lr_val != 0:
+                lr_str = format(lr_val, ".0e").replace("e-0", "e-")
+                parts.append(f"{tag}{lr_str}")
+
+    # Attach model params (optional)
+    if "model" in recon_dir_affixes:
+        if model.obj_preblur_std is not None and model.obj_preblur_std != 0:
+            parts.append(f"opreb{model.obj_preblur_std}")
+
+        if model.detector_blur_std is not None and model.detector_blur_std != 0:
+            parts.append(f"dpblur{model.detector_blur_std}")
+
+    # Attach constraint params (optional)
+    if "constraint" in recon_dir_affixes:
+        if constraint_params["kr_filter"]["freq"] is not None:
+            obj_type = constraint_params["kr_filter"]["obj_type"]
+            kr_str = {"both": "kr", "amplitude": "kra", "phase": "krp"}.get(obj_type)
+            radius = constraint_params["kr_filter"]["radius"]
+            parts.append(f"{kr_str}f{radius}")
+
+        if constraint_params["kz_filter"]["freq"] is not None:
+            obj_type = constraint_params["kz_filter"]["obj_type"]
+            kz_str = {"both": "kz", "amplitude": "kza", "phase": "kzp"}.get(obj_type)
+            beta = constraint_params["kz_filter"]["beta"]
+            parts.append(f"{kz_str}f{beta}")
+
+        if (
+            constraint_params["obj_rblur"]["freq"] is not None
+            and constraint_params["obj_rblur"]["std"] != 0
+        ):
+            obj_type = constraint_params["obj_rblur"]["obj_type"]
+            obj_str = {"both": "o", "amplitude": "oa", "phase": "op"}.get(obj_type)
+            parts.append(f"{obj_str}rblur{constraint_params['obj_rblur']['std']}")
+
+        if (
+            constraint_params["obj_zblur"]["freq"] is not None
+            and constraint_params["obj_zblur"]["std"] != 0
+        ):
+            obj_type = constraint_params["obj_zblur"]["obj_type"]
+            obj_str = {"both": "o", "amplitude": "oa", "phase": "op"}.get(obj_type)
+            parts.append(f"{obj_str}zblur{constraint_params['obj_zblur']['std']}")
+
+        if constraint_params["complex_ratio"]["freq"] is not None:
+            obj_type = constraint_params["complex_ratio"]["obj_type"]
+            obj_str = {"both": "o", "amplitude": "oa", "phase": "op"}.get(obj_type)
+            alpha1 = round(constraint_params["complex_ratio"]["alpha1"], 2)
+            alpha2 = round(constraint_params["complex_ratio"]["alpha2"], 2)
+            parts.append(f"{obj_str}cplx{alpha1}_{alpha2}")
+
+        if constraint_params["mirrored_amp"]["freq"] is not None:
+            scale = round(constraint_params["mirrored_amp"]["scale"], 2)
+            power = round(constraint_params["mirrored_amp"]["power"], 2)
+            parts.append(f"mamp{scale}_{power}")
+
+        if constraint_params["obja_thresh"]["freq"] is not None:
+            parts.append(f"oathr{round(constraint_params['obja_thresh']['thresh'][0], 2)}")
+
+        if constraint_params["objp_postiv"]["freq"] is not None:
+            mode = constraint_params["objp_postiv"].get("mode", "clip_neg")
+            mode_str = "s" if mode == "subtract_min" else "c"
+            relax = constraint_params["objp_postiv"]["relax"]
+            relax_str = "" if relax == 0 else f"{round(relax, 2)}"
+            parts.append(f"opos{mode_str}{relax_str}")
+
+        if constraint_params["tilt_smooth"]["freq"] is not None:
+            parts.append(f"tsm{round(constraint_params['tilt_smooth']['std'], 2)}")
+
+        if constraint_params["probe_mask_k"]["freq"] is not None:
+            parts.append(f"pmk{round(constraint_params['probe_mask_k']['radius'], 2)}")
 
     # Attach loss params (optional)
-    if 'loss' in recon_dir_affixes:    
-        if loss_params['loss_single']['state']:
-            output_path += f"_sng{round(loss_params['loss_single']['weight'],2)}"
+    if "loss" in recon_dir_affixes:
+        loss_map = {
+            "loss_single": ("sng", 2),
+            "loss_poissn": ("psn", 2),
+            "loss_pacbed": ("pcb", 2),
+            "loss_sparse": ("spr", 2),
+            "loss_simlar": ("sml", 2),
+        }
 
-        if loss_params['loss_poissn']['state']:
-            output_path += f"_psn{round(loss_params['loss_poissn']['weight'],2)}"
+        for key, (tag, digits) in loss_map.items():
+            loss = loss_params.get(key, {})
+            if loss.get("state"):
+                parts.append(f"{tag}{round(loss.get('weight', 0), digits)}")
 
-        if loss_params['loss_pacbed']['state']:
-            output_path += f"_pcb{round(loss_params['loss_pacbed']['weight'],2)}"
-        
-        if loss_params['loss_sparse']['state']:
-            output_path += f"_spr{round(loss_params['loss_sparse']['weight'],2)}"
-
-        if loss_params['loss_simlar']['state']:
-            output_path += f"_sml{round(loss_params['loss_simlar']['weight'],2)}"
-
-    # # Attach init params (optional)
-    if 'init' in recon_dir_affixes:
-        if illumination == 'electron':
-            init_conv_angle = init_params['probe_conv_angle']
-            init_defocus    = init_params['probe_defocus']
-            init_c3    = init_params['probe_c3']
-            init_c5    = init_params['probe_c5']
-            output_path += f"_ca{init_conv_angle:.3g}"
-            output_path += f"_df{init_defocus:.3g}"
+    # Attach illumination params (optional)
+    if "illumination" in recon_dir_affixes:
+        illumination = init_params["probe_illum_type"]
+        if illumination == "electron":
+            init_conv_angle = init_params["probe_conv_angle"]
+            init_defocus = init_params["probe_defocus"]
+            init_c3 = init_params["probe_c3"]
+            init_c5 = init_params["probe_c5"]
+            parts.append(f"ca{init_conv_angle:.3g}")
+            if init_defocus != 0:
+                parts.append(f"df{init_defocus:.3g}")
             if init_c3 != 0:
-                output_path += f"_c3{format(init_c3, '.0e')}"
+                parts.append(f"c3{format(init_c3, '.0e')}")
             if init_c5 != 0:
-                output_path += f"_c5{format(init_c5, '.0e')}"
-        elif illumination =='xray':
-            init_Ls = init_params['Ls']
-            output_path += f"_Ls{init_Ls* 1e9:.0f}"
+                parts.append(f"c5{format(init_c5, '.0e')}")
+        elif illumination == "xray":
+            init_Ls = init_params["Ls"]
+            parts.append(f"Ls{init_Ls * 1e9:.0f}")
         else:
-            raise ValueError(f"init_params['probe_illum_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!")
-            
-    if scan_affine is not None:
-        affine_str = '_'.join(f'{x:.2g}' for x in scan_affine)
-        output_path += f"_aff{affine_str}"
-    
+            raise ValueError(
+                f"init_params['probe_illum_type'] = {illumination} not implemented yet, please use either 'electron' or 'xray'!"
+            )
+
+    # Attach dx (optional)
+    if "dx" in recon_dir_affixes:
+        dx = model.dx.detach().cpu().numpy()
+        parts.append(f"dx{dx:.4g}")
+
+    # Attach scan_affine (optional)
+    if "affine" in recon_dir_affixes:
+        scan_affine = model.scan_affine  # Note that scan_affine could be None
+        if scan_affine is not None and not np.allclose(scan_affine, [1, 0, 0, 0]):
+            affine_str = "aff" + "_".join(f"{x:.2g}" for x in scan_affine)  # (4,)
+            parts.append(f"{affine_str}")
+
     # Attach init tilts (optional)
-    if 'tilt' in recon_dir_affixes and np.any(init_tilts):
-        output_path += f"_tilt{init_tilts[0]:.2g}_{init_tilts[1]:.2g}"
-    
-    output_path += postfix
-    
+    if "tilt" in recon_dir_affixes:
+        init_tilts = (
+            model.opt_obj_tilts.mean(0).detach().cpu().numpy()
+        )  # (2,) regardless tilt_type = 'all' or 'each'
+        if np.any(init_tilts):
+            parts.append(f"tilt{init_tilts[0]:.2g}_{init_tilts[1]:.2g}")
+
+    # Attach postfix (only if postfix is non-empty str)
+    if isinstance(postfix, str) and postfix:
+        parts.append(postfix)
+
+    # Make output folder
+    output_path = os.path.join(output_dir, "_".join(parts)) if parts else output_dir
     output_path = safe_filename(output_path)
     os.makedirs(output_path, exist_ok=True)
     vprint(f"output_path = '{output_path}' is generated!", verbose=verbose)
