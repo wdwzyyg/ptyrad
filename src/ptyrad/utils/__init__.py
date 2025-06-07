@@ -7,7 +7,7 @@ Utility functions for logging, timing, image processing, etc.
 # │ PROMOTING COMMONLY USED FUNCTIONS FROM SUBMODULES                          │
 # └────────────────────────────────────────────────────────────────────────────┘
 # These relative imports make selected functions/classes available directly via:
-#     from ptyrad.utils import vprint, get_date, fftshift2, ...
+#     from ptyrad.utils import vprint, get_time, fftshift2, ...
 #
 # This creates a *clean and stable public interface* for utils, while allowing
 # internal code organization (e.g., separating utils functions for image_proc, 
@@ -20,7 +20,7 @@ Utility functions for logging, timing, image processing, etc.
 
 from .common import (  # noqa: F401
     CustomLogger,
-    get_date,
+    get_time,
     get_nested,
     handle_hdf5_types,
     list_nested_keys,

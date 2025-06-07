@@ -8,7 +8,9 @@ import logging
 import os
 import platform
 import subprocess
+import warnings
 from time import perf_counter
+from typing import Union
 
 import numpy as np
 import torch
@@ -88,7 +90,7 @@ def set_accelerator():
 
 # System level utils
 class CustomLogger:
-    def __init__(self, log_file='output.log', log_dir='auto', prefix_date=True, prefix_jobid=0, append_to_file=True, show_timestamp=True):
+    def __init__(self, log_file='ptyrad_log.txt', log_dir='auto', prefix_time='datetime', prefix_date=None, prefix_jobid=0, append_to_file=True, show_timestamp=True, **kwargs):
         self.logger = logging.getLogger('PtyRAD')
         self.logger.setLevel(logging.INFO)
         
@@ -98,7 +100,17 @@ class CustomLogger:
         self.log_file       = log_file
         self.log_dir        = log_dir
         self.flush_file     = log_file is not None
-        self.prefix_date    = prefix_date
+        # Backward compatibility: if prefix_date is set (legacy), use it, else use prefix_time
+        if prefix_date is not None:
+            warnings.warn(
+                "The 'prefix_date' argument is deprecated and will be removed by 2025 Aug."
+                "Please use 'prefix_time' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self.prefix_time = prefix_date
+        else:
+            self.prefix_time = prefix_time
         self.prefix_jobid   = prefix_jobid
         self.append_to_file = append_to_file
         self.show_timestamp = show_timestamp
@@ -124,7 +136,7 @@ class CustomLogger:
         vprint(f"log_file       = '{self.log_file}'. If log_file = None, no log file will be created.")
         vprint(f"log_dir        = '{self.log_dir}'. If log_dir = 'auto', then log will be saved to `output_path` or 'logs/'.")
         vprint(f"flush_file     = {self.flush_file}. Automatically set to True if `log_file is not None`")
-        vprint(f"prefix_date    = {self.prefix_date}. If true, a datetime str is prefixed to the `log_file`.")
+        vprint(f"prefix_time    = {self.prefix_time}. If true, preset strings ('date', 'time', 'datetime'), or a string of time format, a datetime str is prefixed to the `log_file`.")
         vprint(f"prefix_jobid   = '{self.prefix_jobid}'. If not 0, it'll be prefixed to the log file. This is used for hypertune mode with multiple GPUs.")
         vprint(f"append_to_file = {self.append_to_file}. If true, logs will be appended to the existing file. If false, the log file will be overwritten.")
         vprint(f"show_timestamp = {self.show_timestamp}. If true, the printed information will contain a timestamp.")
@@ -151,8 +163,12 @@ class CustomLogger:
         log_file = self.log_file
         if self.prefix_jobid != 0:
             log_file = str(self.prefix_jobid).zfill(2) + '_' + log_file
-        if self.prefix_date:
-            log_file = get_date() + '_' + log_file
+        
+        # Set prefix_time
+        prefix_time = self.prefix_time
+        if prefix_time is True or (isinstance(prefix_time, str) and prefix_time):
+            time_str = get_time(prefix_time)
+            log_file = f"{time_str}_{log_file}"
         
         show_timestamp = self.show_timestamp
         
@@ -481,15 +497,47 @@ def get_nested(d, key, delimiter='.', safe=False, default=None):
             d = d[k]
         return d
     
-def get_date(date_format='%Y%m%d'):
+def get_time(time_format: Union[bool, str, None] = 'date') -> str:
+    """
+    Returns a formatted timestamp string based on `time_format`.
+
+    Args:
+        time_format (bool or str): Controls the time formatting behavior.
+            - True: Use default date format ("%Y%m%d").
+            - False, None, or "": Disable timestamp and return an empty string.
+            - "date": Use date format ("%Y%m%d").
+            - "datetime": Use date and time format ("%Y%m%d_%H%M%S").
+            - "time": Use time-only format ("%H%M%S").
+            - Custom strftime format (e.g., "%Y-%m-%d %H:%M") is also supported.
+
+    Returns:
+        str: Formatted timestamp string, or an empty string if disabled.
+    """
     from datetime import date, datetime
-    
-    # If the format includes time-specific placeholders, return full datetime
-    if any(fmt in date_format for fmt in ['%H', '%M', '%S']):
-        return datetime.now().strftime(date_format)
-    
-    # Otherwise, just return the date
-    return date.today().strftime(date_format)
+
+    if not time_format:
+        return ""
+
+    if isinstance(time_format, bool):
+        fmt = "%Y%m%d"
+    elif isinstance(time_format, str):
+        presets = {
+            "date": "%Y%m%d",
+            "datetime": "%Y%m%d_%H%M%S",
+            "time": "%H%M%S",
+        }
+        fmt = presets.get(time_format.lower(), time_format)
+    else:
+        raise TypeError(f"time_format must be a bool or str, got {type(time_format).__name__}")
+
+    # Choose datetime vs date object depending on format
+    try:
+        if any(tok in fmt for tok in ("%H", "%M", "%S")):
+            return datetime.now().strftime(fmt)
+        else:
+            return date.today().strftime(fmt)
+    except ValueError as e:
+        raise ValueError(f"Invalid time format string: {fmt!r}") from e
 
 def time_sync():
     # PyTorch doesn't have a direct exposed API to check the selected default device 

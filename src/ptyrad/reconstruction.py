@@ -20,7 +20,7 @@ from ptyrad.models import PtychoAD
 from ptyrad.save import copy_params_to_dir, make_output_folder, save_results
 from ptyrad.utils import (
     get_blob_size,
-    get_date,
+    get_time,
     ndarrays_to_tensors,
     parse_hypertune_params_to_str,
     parse_sec_to_time_str,
@@ -178,7 +178,7 @@ class PtyRADSolver(object):
         
         copy_params = self.params['recon_params']['copy_params']
         output_dir  = self.params['recon_params']['output_dir'] # This will be later modified     
-        prefix_date = self.params['recon_params']['prefix_date']
+        prefix_time = self.params['recon_params']['prefix_time']
         prefix      = self.params['recon_params']['prefix']
         postfix     = self.params['recon_params']['postfix']
 
@@ -206,14 +206,17 @@ class PtyRADSolver(object):
         # Note this will change the params saved with model.pt, but has no effect to the 'copy_params'
         prefix  = prefix + '_' if prefix  != '' else ''
         postfix = '_'+ postfix if postfix != '' else ''
-        if prefix_date:
-            prefix = get_date() + '_' + prefix 
+        
+        # Attach time string if prefix_time is true or non-empty str
+        if prefix_time is True or (isinstance(prefix_time, str) and prefix_time):
+            time_str = get_time(prefix_time)  # e.g. '20250606'
+            prefix = f"{time_str}_{prefix}" 
         sampler_str = sampler_params['name']
         pruner_str = '_' + pruner_params['name'] if pruner_params is not None else ''
         
         output_dir += f"/{prefix}hypertune_{sampler_str}{pruner_str}_{error_metric}{postfix}"
         self.params['recon_params']['output_dir'] = output_dir 
-        self.params['recon_params']['prefix_date'] = ''
+        self.params['recon_params']['prefix_time'] = ''
         self.params['recon_params']['prefix'] = ''
         self.params['recon_params']['postfix'] = ''
         

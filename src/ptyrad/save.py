@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from tifffile import imwrite
 
-from ptyrad.utils import get_date, normalize_by_bit_depth, safe_filename, vprint
+from ptyrad.utils import get_time, normalize_by_bit_depth, safe_filename, vprint
 
 ###### These are data saving functions ######
 
@@ -259,15 +259,15 @@ def make_output_folder(
     Generate the output folder given indices, recon_params, model, constraint_params, and loss_params
     """
 
-    prefix_date = recon_params.get("prefix_date", False)
+    prefix_time = recon_params.get("prefix_time", False)
     prefix = recon_params.get("prefix", "")
     postfix = recon_params.get("postfix", "")
     parts = []
 
-    # Attach date string if prefix_date is true-ish
-    if prefix_date:
-        date_str = get_date()  # e.g. '20250606'
-        parts.append(date_str)
+    # Attach time string if prefix_time is true or non-empty str
+    if prefix_time is True or (isinstance(prefix_time, str) and prefix_time):
+        time_str = get_time(prefix_time)  # e.g. '20250606'
+        parts.append(time_str)
 
     # Attach prefix (only if prefix is non-empty str)
     if isinstance(prefix, str) and prefix:

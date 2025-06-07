@@ -15,7 +15,7 @@ def run(args):
     logger = CustomLogger(
         log_file='ptyrad_log.txt',
         log_dir='auto',
-        prefix_date=True,
+        prefix_time='datetime',
         prefix_jobid=args.jobid,
         append_to_file=True,
         show_timestamp=True
