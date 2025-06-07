@@ -445,6 +445,15 @@ def vprint_nested_dict(d, indent=0, verbose=True, leaf_inline_threshold=6):
         else:
             vprint(f"{indent_str}{key}: {repr(value)}", verbose=verbose)
 
+def expand_presets(input_list, presets):
+    expanded = []
+    for tag in input_list:
+        if tag in presets:
+            expanded.extend(presets[tag])
+        else:
+            expanded.append(tag)
+    return list(dict.fromkeys(expanded))  # Removes duplicates, keeps order
+
 def get_nested(d, key, delimiter='.', safe=False, default=None):
     """
     Get a value from a nested dictionary either safely (return default if not found) or stricly to fail early.

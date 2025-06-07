@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from tifffile import imwrite
 
-from ptyrad.utils import get_time, normalize_by_bit_depth, safe_filename, vprint
+from ptyrad.utils import get_time, normalize_by_bit_depth, safe_filename, vprint, expand_presets
 
 ###### These are data saving functions ######
 
@@ -240,19 +240,7 @@ def make_output_folder(
     model,
     constraint_params,
     loss_params,
-    recon_dir_affixes=[
-        "indices",
-        "meas",
-        "batch",
-        "pmode",
-        "omode",
-        "nlayer",
-        "lr",
-        "constraint",
-        "model",
-        "loss",
-        "init",
-    ],
+    recon_dir_affixes=["default"],
     verbose=True,
 ):
     """
@@ -264,6 +252,24 @@ def make_output_folder(
     postfix = recon_params.get("postfix", "")
     parts = []
 
+    recon_dir_presets = {
+        "minimal": ['indices', 'meas', 'batch', 'pmode', 'omode', 'nlayer'],
+        
+        "default": ['indices', 'meas', 'batch', 'pmode', 'omode', 'nlayer',
+                    'lr', 'model', 'constraint',
+                    'loss', 'affine', 'tilt'],
+        
+        "all":     ['indices', 'meas', 'batch', 'pmode', 'omode', 'nlayer',
+                    'optimizer', 'start_iter', 'lr', 'model', 'constraint',
+                    'loss', 'illumination', 'dx', 'affine', 'tilt']        
+        }
+    
+    # Process recon_dir_affixes to expand presets
+    if any(tag in recon_dir_presets for tag in recon_dir_affixes):
+        vprint(f"Original recon_dir_affixes = {recon_dir_affixes}", verbose=verbose)
+        recon_dir_affixes = expand_presets(recon_dir_affixes, recon_dir_presets)
+        vprint(f"Expanded recon_dir_affixes = {recon_dir_affixes}", verbose=verbose)
+    
     # Attach time string if prefix_time is true or non-empty str
     if prefix_time is True or (isinstance(prefix_time, str) and prefix_time):
         time_str = get_time(prefix_time)  # e.g. '20250606'
