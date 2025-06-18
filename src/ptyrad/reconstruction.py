@@ -15,7 +15,7 @@ from torch.utils.data import Dataset
 
 from ptyrad.constraints import CombinedConstraint
 from ptyrad.initialization import Initializer
-from ptyrad.losses import CombinedLoss, get_objp_contrast
+from ptyrad.losses import CombinedLoss, get_objp_contrast, get_objp_contrast_bw
 from ptyrad.models import PtychoAD
 from ptyrad.save import copy_params_to_dir, make_output_folder, save_results
 from ptyrad.utils import (
@@ -32,6 +32,7 @@ from ptyrad.visualization import plot_pos_grouping, plot_summary
 
 from optuna.storages import JournalStorage
 from optuna.storages.journal import JournalRedisBackend
+
 
 class PtyRADSolver(object):
     """
@@ -1119,6 +1120,8 @@ def compute_optuna_error(model, indices, metric):
     """
     if metric == 'contrast':
         return get_objp_contrast(model, indices)
+    elif metric == 'contrast_bw':
+        return get_objp_contrast_bw(model, indices)
     elif metric == 'loss':
         return model.loss_iters[-1][-1]
     else:

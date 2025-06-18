@@ -174,3 +174,118 @@ def get_objp_contrast(model, indices):
         contrast = torch.std(objp_crop) / (torch.mean(objp_crop) + 1e-8)  # Avoid division by zero
 
     return -contrast  # Negative for minimization
+
+
+def butterworth_torch(image, cutoff_frequency_ratio, order=3.0, high_pass=False,
+                      squared_butterworth=True, npad=0):
+    """
+    Apply Butterworth filter to a PyTorch tensor image.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        The image tensor to be filtered (2D or batch of 2D images)
+    cutoff_frequency_ratio : float
+        Cutoff frequency as a fraction of maximum frequency (< 0.5)
+    order : float
+        Order of the Butterworth filter
+    high_pass : bool
+        If True, apply high-pass filter; if False, apply low-pass filter
+    squared_butterworth : bool
+        Whether to use squared Butterworth filter
+    npad : int
+        Padding size (currently not implemented for simplicity)
+
+    Returns
+    -------
+    torch.Tensor
+        Filtered image tensor
+    """
+    device = image.device
+    dtype = image.dtype
+
+    # Handle batch dimension
+    if image.dim() == 2:
+        h, w = image.shape
+        batch_mode = False
+    elif image.dim() == 3:
+        batch_size, h, w = image.shape
+        batch_mode = True
+    else:
+        raise ValueError("Image must be 2D or 3D (batch of 2D images)")
+
+    # Create frequency grid
+    freq_y = torch.fft.fftfreq(h, device=device)
+    freq_x = torch.fft.fftfreq(w, device=device)
+    freq_y_grid, freq_x_grid = torch.meshgrid(freq_y, freq_x, indexing='ij')
+
+    # Calculate distance from center in frequency domain
+    freq_dist = torch.sqrt(freq_x_grid ** 2 + freq_y_grid ** 2)
+
+    # Create Butterworth filter
+    cutoff = cutoff_frequency_ratio
+    if squared_butterworth:
+        filter_response = 1.0 / (1.0 + (freq_dist / cutoff) ** (2 * order))
+    else:
+        filter_response = 1.0 / torch.sqrt(1.0 + (freq_dist / cutoff) ** (2 * order))
+
+    if high_pass:
+        filter_response = 1.0 - filter_response
+
+    # Apply filter in frequency domain
+    if batch_mode:
+        # Handle batch of images
+        filtered_images = []
+        for i in range(batch_size):
+            img_fft = torch.fft.fft2(image[i].to(torch.complex64))
+            filtered_fft = img_fft * filter_response
+            filtered_img = torch.fft.ifft2(filtered_fft).real
+            filtered_images.append(filtered_img)
+        result = torch.stack(filtered_images, dim=0)
+    else:
+        # Handle single image
+        img_fft = torch.fft.fft2(image.to(torch.complex64))
+        filtered_fft = img_fft * filter_response
+        result = torch.fft.ifft2(filtered_fft).real
+
+    return result.to(dtype)
+
+
+def get_objp_contrast_bw(model, indices):
+    """ Calculate the contrast from objp imgage for Hypertune purpose"""
+    with torch.no_grad():
+        probe = model.get_complex_probe_view()
+        objp = model.opt_objp.detach().squeeze()  # squeeze the omode dimension and keep the non-surface slices
+
+        # Get crop positions and compute bounds
+        crop_pos = model.crop_pos[indices].detach() + torch.tensor(probe.shape[-2:], device=model.crop_pos.device) // 2
+        y_min, y_max = crop_pos[:, 0].min().item(), crop_pos[:, 0].max().item()
+        x_min, x_max = crop_pos[:, 1].min().item(), crop_pos[:, 1].max().item()
+
+        # Crop object phase tensor
+        objp_crop = objp[:, y_min - 1:y_max, x_min - 1:x_max]
+
+        exclude = int(objp_crop.shape[0] * 0.15)
+        objp_cut_surface = objp_crop[exclude:-exclude]
+
+        # Calculate cutoff frequencies
+        cut_off_low = min(1 / 0.3 * model.dx.detach(), 0.49)  # 0.3Å atomic diameter
+        cut_off_high = min(1 / 7.0 * model.dx.detach(), 0.49)
+        # Apply filtering sequence to get midband frequencies
+        remove_high = butterworth_torch(objp_cut_surface,
+                                        cutoff_frequency_ratio=cut_off_low,
+                                        order=3.0,
+                                        high_pass=False,
+                                        squared_butterworth=True,
+                                        npad=0)
+
+        midband = butterworth_torch(remove_high,
+                                    cutoff_frequency_ratio=cut_off_high,
+                                    order=3.0,
+                                    high_pass=True,
+                                    squared_butterworth=True,
+                                    npad=0)
+        contrast_bw = [(single.std())**2 for single in midband]
+        contrast_bw_mean = torch.mean(torch.as_tensor(contrast_bw))
+
+    return 1 - 1e2 * contrast_bw_mean
