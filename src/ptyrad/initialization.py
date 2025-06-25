@@ -1474,8 +1474,9 @@ class Initializer:
         return pos
     
     def _pos_scan_add_random_displacement(self, pos, scan_rand_std):
-        vprint(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions", verbose=self.verbose)
-        pos = pos + scan_rand_std * np.random.randn(*pos.shape)
+        if scan_rand_std is not None:
+            vprint(f"Applying Gaussian distributed random displacement with std = {scan_rand_std} px to scan positions", verbose=self.verbose)
+            pos = pos + scan_rand_std * np.random.randn(*pos.shape)
         return pos
     
     ###### Private methods for initializing object ######
