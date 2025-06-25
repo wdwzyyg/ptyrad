@@ -2,7 +2,7 @@
 
 # This shell script is designed to submit multiple jobs for PtyRAD in Hypertune modes
 # So we can utilize multiple GPU workers
-# Go to the `ptyrad/` root directory and call this script with `bash ./scripts/LoopSubmit.sh`
+# Go to the `demo/` root directory and call this script with `bash ./scripts/LoopSubmit.sh`
 
 # Define parameters
 # No spaces around '=' in variable assignments
