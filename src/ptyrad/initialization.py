@@ -827,10 +827,6 @@ class Initializer:
         Returns:
             numpy.ndarray: The processed measurement array with negative values handled.
         """
-        # Check if there are negative values
-        if not (meas < 0).any():
-            vprint("No negative values found in measurements. Skipping non-neg correction.", verbose=self.verbose)
-            return meas
 
         # This correction is enforced even the neg_cfg is None (not provided by user)
         if neg_cfg is None:
@@ -839,6 +835,15 @@ class Initializer:
         # Extract configuration with defaults
         mode = neg_cfg.get('mode', 'clip_neg')  # Default to 'clip_neg'
         value = neg_cfg.get('value', None)  # Default to None
+        force = neg_cfg.get('force', False) # Default to False so it'll skip if there's no negative values
+
+        # Check if there are negative values
+        if not (meas < 0).any():
+            if not force:
+                vprint("No negative values found in measurements. Skipping non-neg correction.", verbose=self.verbose)
+                return meas
+            else:
+                vprint(f"No negative values found in measurements, but force = '{force}' so continuing measurement negative value correction", verbose=self.verbose)
 
         vprint(f"Removing negative values in measurement with method = {mode} and value = {value}", verbose=self.verbose)
 
