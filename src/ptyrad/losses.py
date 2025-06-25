@@ -173,4 +173,4 @@ def get_objp_contrast(model, indices):
         
         contrast = torch.std(objp_crop) / (torch.mean(objp_crop) + 1e-8)  # Avoid division by zero
 
-    return -contrast  # Negative for minimization
+    return contrast

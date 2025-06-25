@@ -1113,7 +1113,7 @@ def compute_optuna_error(model, indices, metric):
     Helper function to compute the current error for Optuna
     """
     if metric == 'contrast':
-        return get_objp_contrast(model, indices)
+        return -1*get_objp_contrast(model, indices) # Negative for minimization
     elif metric == 'loss':
         return model.loss_iters[-1][-1]
     else:
