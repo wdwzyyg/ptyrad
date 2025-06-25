@@ -244,7 +244,21 @@ def make_output_folder(
     verbose=True,
 ):
     """
-    Generate the output folder given indices, recon_params, model, constraint_params, and loss_params
+    Generate the output folder name based on reconstruction parameters, model attributes, constraints, and loss settings.
+
+    Args:
+        output_dir (str): Base directory where the output folder will be created.
+        indices (list): List of indices used in the reconstruction.
+        init_params (dict): Initialization parameters for the reconstruction.
+        recon_params (dict): Reconstruction parameters, including settings like prefix, postfix, and batch size.
+        model (object): Model object containing attributes such as probe, object, and optimizer parameters.
+        constraint_params (dict): Constraints applied during reconstruction, such as filters and smoothing.
+        loss_params (dict): Loss parameters used in the reconstruction process.
+        recon_dir_affixes (list): List of tags or presets to include in the folder name. Defaults to ["default"].
+        verbose (bool): Whether to print verbose messages during folder creation. Defaults to True.
+
+    Returns:
+        str: Path to the generated output folder.
     """
 
     prefix_time = recon_params.get("prefix_time", False)
