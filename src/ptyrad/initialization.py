@@ -717,13 +717,11 @@ class Initializer:
         # Operations that add realistic factors to (simulated perfect) measurements
         meas = self._meas_add_source_size(meas, self.init_params.get('meas_add_source_size'))
         meas = self._meas_add_detector_blur(meas, self.init_params.get('meas_add_detector_blur'))
-        meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) # meas need to be positive before applying poisson noise
         meas = self._meas_add_poisson_noise(meas, self.init_params.get('meas_add_poisson_noise'))
-        
-        # Final check of the measurements
-        meas = self._meas_remove_neg_values(meas, self.init_params.get('meas_remove_neg_values')) 
-        meas = self._meas_normalization(meas, self.init_params.get('meas_normalization'))
 
+        # Final guard on negative values
+        meas = self._meas_remove_neg_values(meas, {'mode': 'clip_neg'})
+        
         return meas
     
     def _meas_permute(self, meas, order):
@@ -1120,6 +1118,16 @@ class Initializer:
         except KeyError as e:
             raise KeyError(f"Missing required configuration field: {e}")
 
+        # Check negative values before applying Poisson noise
+        eps = meas.min() / np.abs(meas.mean() + 1e-12)
+        if meas.min() < 0:
+            vprint(f"Found negative values in meas, meas.min() = {meas.min():.4g}.", verbose=self.verbose)
+            if eps > -1e-5:
+                vprint(f"Negative values ({meas[meas < 0].mean():.4g}) are within relative numerical tolerance (min/mean) 1e-5 , clipping negative values to 0.", verbose=self.verbose)
+                meas[meas < 0] = 0
+            else:
+                raise ValueError(f"meas needs to be positive before applying poisson noise, got meas.min = {meas.min():.4g}. Check your 'meas_remove_neg_values'.")
+            
         # Convert units to total electrons per pattern
         if unit == 'total_e_per_pattern':
             total_electron = value
@@ -1132,10 +1140,22 @@ class Initializer:
 
         vprint(f"total electron per measurement = dose x scan_step_size^2 = {dose:.3f}(e-/Ang^2) x {scan_step_size:.3f}(Ang)^2 = {total_electron:.3f}", verbose=self.verbose)
 
-        # Normalize each DP to sum = 1 before applying Poisson noise
-        meas = meas / meas.sum((-2,-1))[:,None,None] # Make each slice of the meas to sum to 1
+        # Normalize meas to sum to ~ 1 before applying Poisson noise
+        vprint(f"Before applying Poisson noise: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
+        
+        normalization_const = meas.sum() / meas.shape[0]
+        vprint(f"Normalization constant = {normalization_const:.4f}, this makes each measurement sum to ~ 1.", verbose=self.verbose)
+        
+        meas = meas / normalization_const # Make each slice of the meas to sum to ~ 1. A global normalization constant keeps the relative intensity.
+        vprint(f"After applying normalization: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
+        vprint(f"Mean total electron per pattern = meas.sum((-2,-1)).mean(0) = ({meas.sum((-2,-1)).mean(0):.5f})", verbose=self.verbose)
+
         meas = np.random.poisson(meas * total_electron)
         vprint(f"Adding Poisson noise with a total electron per diffraction pattern of {int(total_electron)}", verbose=self.verbose)
+        vprint(f"After applying Poisson noise: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
+
+        meas = meas * normalization_const / total_electron # Un-normalize meas back to the original scale
+        vprint(f"After un-normalizing back to original scale: meausrements int. statistics (min, mean, max) = ({meas.min():.4f}, {meas.mean():.5f}, {meas.max():.4f})", verbose=self.verbose)
         
         return meas
 
