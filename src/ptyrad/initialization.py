@@ -552,6 +552,14 @@ class Initializer:
         else:
             raise ValueError(f"Found inconsistency between obj.shape[1]({obj.shape[1]}) and Nlayer({Nlayer})")
 
+        # Check object extent and probe positions
+        if (crop_pos.min(0) < 0).any():
+            raise ValueError(f"Found invalid crop position. crop_pos.min(0) {crop_pos.min(0)} must be equal or larger than 0. Please check your position and object initialization.")
+        
+        if (crop_pos.max(0) + Npix - obj.shape[-2:] > 0).any():
+            raise ValueError(f"Found invalid crop position. crop_pos.max(0) {crop_pos.max(0)} + Npix ({Npix}) = {crop_pos.max(0) + Npix} must be equal or smaller than object canvas lateral size (Ny, Nx) = {obj.shape[-2:]}. Please check your position and object initialization.")
+        vprint(f"crop positions (yx_min={crop_pos.min(0)}, yx_max={crop_pos.max(0)+Npix}) are well contained inside object canvas (Ny,Nx) = {obj.shape[-2:]}.", verbose=self.verbose)
+        
         # Check obj tilts
         if len(obj_tilts) in [1, N_scans]:
             vprint("obj_tilts is consistent with either 1 or N_scans", verbose=self.verbose)
