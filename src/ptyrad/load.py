@@ -71,26 +71,28 @@ def load_npy(file_path):
     vprint("Imported .npy data shape =", data.shape)
     return data
 
-def load_measurements(
+def load_array_from_file(
     path: str,
     key: Optional[str] = None,
+    ndims: Optional[List[int]] = None,
     shape: Optional[Tuple[int, ...]] = None,
     offset: Optional[int] = None,
     gap: Optional[int] = None,
 ) -> np.ndarray:
     """
-    Load diffraction measurements from a file. The file type is inferred from the extension.
+    Load array from a file. The file type is inferred from the extension.
     Currently supports .tif, .tiff, .npy, .mat, .h5, .hdf5, and .raw.
 
     Args:
         path (str): Path to the file.
         key (str): Key to specify the dataset (optional).
+        ndims (list): List of desired dimensions for filtering datasets.
         shape (tuple): Shape of the data for .raw files (optional).
         offset (int): Offset for .raw files (optional).
         gap (int): Gap for .raw files (optional).
 
     Returns:
-        numpy.ndarray: The loaded measurements.
+        numpy.ndarray: The loaded array.
 
     Raises:
         ValueError: If the file type is unsupported or no valid dataset is found.
@@ -113,7 +115,7 @@ def load_measurements(
         return load_npy(file_path)
 
     elif ext in [".mat", ".h5", ".hdf5"]:
-        return load_ND_with_key(file_path, key)
+        return load_ND_with_key(file_path, key, ndims)
 
     elif ext == ".raw":
         if shape is None:

@@ -15,7 +15,7 @@ import numpy as np
 from scipy.io.matlab import matfile_version as get_matfile_version
 from scipy.ndimage import gaussian_filter, zoom
 
-from ptyrad.load import load_mat, load_hdf5, load_measurements, load_ptyrad
+from ptyrad.load import load_mat, load_hdf5, load_array_from_file, load_ptyrad
 from ptyrad.save import save_array
 from ptyrad.utils import (
     compose_affine_matrix,
@@ -458,6 +458,25 @@ class Initializer:
         if tilt_source == 'custom':
             obj_tilts = tilt_params # (1,2) or (N,2) array in unit of mrad
 
+        elif tilt_source == 'file':
+            # Infer file type from extension
+            file_path = tilt_params.get('path')
+            key = tilt_params.get('key')
+            _, ext = os.path.splitext(file_path)
+            ext = ext.lower()
+            vprint(f"Detected tilt file type = '{ext}'")
+            
+            # Warning when there's no key specified
+            if ext in ('.mat', '.h5', '.hdf5') and key is None:
+                vprint(f"WARNING: Couldn't find the 'key' in 'tilt_params' with file type = '{ext}'.")
+                vprint("It is strongly recommended to provide an explicit key to better find the desired dataset, which is often much faster as well.")
+                vprint("PtyRAD will still try to find the dataset, but you may consider setting 'key': <DATASET_KEY> inside your 'tilt_params' dict.")
+            
+            if ext == '.raw':
+                raise ValueError("PtyRAD doesn't support loading object tilt from .raw file yet, please use other tilt_source.")
+            obj_tilts = np.float32(load_array_from_file(**tilt_params,  ndims=[2]))
+            vprint(f"Initialized obj_tilts with loaded obj_tilts from file, mean obj_tilts = {obj_tilts.mean(0).round(2)} (theta_y, theta_x) mrad", verbose=self.verbose)
+            
         elif tilt_source == 'PtyRAD':
             pt_path = tilt_params
             ckpt = self.cache_contents if pt_path == self.cache_path else load_ptyrad(pt_path)            
@@ -479,7 +498,7 @@ class Initializer:
                 raise ValueError(f"Tilt type {tilt_type} not implemented yet, please use either 'each', or 'all' when initializing obj_tilts with 'simu'!")
 
         else:
-            raise ValueError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', or 'simu'!")
+            raise ValueError(f"File type {tilt_source} not implemented yet, please use 'custom', 'PtyRAD', 'file', or 'simu'!")
         
         # Print summary
         self.init_variables['obj_tilts'] = obj_tilts
@@ -676,7 +695,7 @@ class Initializer:
                 meas_params['shape'] = (self.init_params['pos_N_scans'],
                                         self.init_params['meas_Npix'],
                                         self.init_params['meas_Npix'])
-            meas = load_measurements(**meas_params)
+            meas = load_array_from_file(**meas_params)
 
         else:
             raise ValueError(f"Unsupported measurement source '{meas_source}'. Use 'custom' or 'file'.")
