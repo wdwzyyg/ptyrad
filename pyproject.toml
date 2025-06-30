@@ -26,10 +26,11 @@ dependencies = [
   "jupyter",
   "matplotlib",
   "optuna",
-  "torch>=2.0,<2.7",
+  "pydantic",
   "scikit-learn",
   "scipy",
   "tifffile",
+  "torch>=2.0",
   "torchvision"
 ]
 

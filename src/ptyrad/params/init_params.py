@@ -39,7 +39,7 @@ class ObjOmodeInitOccu(BaseModel):
 class MeasPad(BaseModel):
     model_config = {"extra": "forbid"}
     
-    mode: Literal['on_the_fly', 'precompute'] = Field(default='on_the_fly', description="Padding mode for measurements. Choose between 'on_the_fly' or 'precompute'")
+    mode: Optional[Literal['on_the_fly', 'precompute']] = Field(default='on_the_fly', description="Padding mode for measurements. Choose between 'on_the_fly' or 'precompute', or None.")
     padding_type: Literal['constant', 'edge', 'linear_ramp', 'exp', 'power'] = Field(default='power', description="Padding type for measurements. Suggested type is 'power'.")
     target_Npix: int = Field(default=256, description="Target measurement number of pixels")
     value: Optional[float] = Field(default=None, description="Value used for padding background if mode='constant' or 'linear_ramp'.")
@@ -49,7 +49,7 @@ class MeasPad(BaseModel):
 class MeasResample(BaseModel):
     model_config = {"extra": "forbid"}
     
-    mode: Literal['on_the_fly', 'precompute'] = Field(default='on_the_fly', description="Resampling mode for measurements. Choose between 'on_the_fly' or 'precompute'")
+    mode: Optional[Literal['on_the_fly', 'precompute']] = Field(default='on_the_fly', description="Resampling mode for measurements. Choose between 'on_the_fly' or 'precompute', or None.")
     scale_factors: List[float] = Field(default=[2, 2], min_items=2, max_items=2, description="Resampling scale factors (2,) for measurements")
 
 

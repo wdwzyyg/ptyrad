@@ -544,7 +544,7 @@ def load_ptyrad(file_path: str) -> Dict[str, Any]:
 
 ###### These are params loading functions ######
 
-def load_params(file_path):
+def load_params(file_path: str, validate: bool = True):
     
     # Check if the file exists
     if not os.path.exists(file_path):
@@ -562,6 +562,17 @@ def load_params(file_path):
         params_dict =  load_py_params(param_path)
     else:
         raise ValueError("param_type needs to be either 'yml', 'json', or 'py'")
+    
+    # Pass into PtyRADParams (pydantic model) for default filling and validation
+    if validate:
+        from ptyrad.params import PtyRADParams
+        vprint("validate = True: Filling defaults and validating the params file...")
+        params_dict = PtyRADParams(**params_dict).model_dump()
+        vprint("Success! Params file validated and defaults applied.")
+    else:
+            vprint("WARNING: validate = False: Skipping validation and default filling.")
+            vprint("         Ensure your params file is complete and consistent.")
+            vprint("         If you encounter issues, consider enabling validation or report the bug.")
     
     # Add the file path to the params_dict while we save the params file to output folder
     params_dict['params_path'] = file_path

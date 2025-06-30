@@ -27,7 +27,7 @@ def run(args):
     accelerator = set_accelerator() 
 
     print_system_info()
-    params = load_params(args.params_path)
+    params = load_params(args.params_path, validate=not args.skip_validate)
     device = set_gpu_device(args.gpuid)
     ptycho_solver = PtyRADSolver(params, device=device, acc=accelerator, logger=logger)
     ptycho_solver.run()
@@ -87,8 +87,7 @@ def validate_params(args):
     from ptyrad.load import load_params
     
     try:
-        params = load_params(args.params_path)
-        print("Parameters are valid.")
+        _ = load_params(args.params_path, validate=True)
     except Exception as e:
         print(f"Invalid parameters: {e}")
 
@@ -108,6 +107,7 @@ def main():
     # run
     parser_run = subparsers.add_parser("run", help="Run PtyRAD reconstruction")
     parser_run.add_argument("--params_path", type=str, required=True)
+    parser_run.add_argument("--skip_validate", action="store_true", help="Skip parameter validation and default filling. Use only if your params file is complete and consistent.")
     parser_run.add_argument("--gpuid", type=str, required=False, default="0", help="GPU ID to use ('acc', 'cpu', or an integer)")
     parser_run.add_argument("--jobid", type=int, required=False, default=0, help="Unique identifier for hypertune mode with multiple GPU workers")
     parser_run.set_defaults(func=run)
@@ -128,8 +128,8 @@ def main():
     parser_export.add_argument("--append", action="store_true", help="Optionally appending the array shape to file name")
     parser_export.set_defaults(func=export_meas_init)
     
-    # validate-params (placeholder) #TODO
-    parser_validate = subparsers.add_parser("validate-params", help="Validate parameter file (not implemented)")
+    # validate-params
+    parser_validate = subparsers.add_parser("validate-params", help="Validate parameter file")
     parser_validate.add_argument("--params_path", type=str, required=True)
     parser_validate.set_defaults(func=validate_params)
 
