@@ -973,7 +973,7 @@ def optuna_objective(trial, params, init, loss_fn, constraint_fn, device='cuda',
         vparams = tune_params[vname]
         optim_name = get_optuna_suggest(trial, vparams['suggest'], vname, vparams['kwargs'])
         params['model_params']['optimizer_params']['name'] = optim_name
-        params['model_params']['optimizer_params']['configs'] = vparams['optim_configs'].get(optim_name, {}) # Update optimizer_configs if the user has specified them for each optimizer
+        params['model_params']['optimizer_params']['configs'] = vparams['kwargs']['optim_configs'].get(optim_name, {}) # Update optimizer_configs if the user has specified them for each optimizer
     
     # learning rates
     lr_to_tensor = {'plr': 'probe', 'oalr': 'obja', 'oplr': 'objp', 'slr': 'probe_pos_shifts', 'tlr': 'obj_tilts', 'dzlr': 'slice_thickness'}

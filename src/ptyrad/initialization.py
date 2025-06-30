@@ -716,7 +716,7 @@ class Initializer:
         # Note that _meas_remove_neg_values and _meas_normalization will always be executed
         # If you really want to nullify them, explictly set 
         # 'meas_remove_neg_values': {'mode': 'subtract_value', 'value': 0}
-        # 'meas_normalization': {'mode': 'divide_const', 'const': 1}
+        # 'meas_normalization': {'mode': 'divide_const', 'value': 1}
         
         # Simple geometric operations
         meas = self._meas_permute(meas, self.init_params.get('meas_permute'))
@@ -921,7 +921,7 @@ class Initializer:
             norm_cfg = {}
         
         norm_mode = norm_cfg.get('mode', 'max_at_one')  # Default to 'max_at_one'
-        norm_const = norm_cfg.get('const', None)  # Used for 'divide_const' mode
+        norm_const = norm_cfg.get('value', None)  # Used for 'divide_const' mode
 
         vprint(f"Normalizing measurements with mode = '{norm_mode}' and value = '{norm_const}'", verbose=self.verbose)
 
