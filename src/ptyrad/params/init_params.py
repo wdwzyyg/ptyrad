@@ -42,8 +42,8 @@ class MeasPad(BaseModel):
     mode: Optional[Literal['on_the_fly', 'precompute']] = Field(default='on_the_fly', description="Padding mode for measurements. Choose between 'on_the_fly' or 'precompute', or None.")
     padding_type: Literal['constant', 'edge', 'linear_ramp', 'exp', 'power'] = Field(default='power', description="Padding type for measurements. Suggested type is 'power'.")
     target_Npix: int = Field(default=256, description="Target measurement number of pixels")
-    value: Optional[float] = Field(default=None, description="Value used for padding background if mode='constant' or 'linear_ramp'.")
-    threshold: Optional[float] = Field(default=None, description="Threshold value used for fitting background if mode='power' or 'exp'.")
+    value: Optional[float] = Field(default=0, description="Value used for padding background if mode='constant' or 'linear_ramp'.")
+    threshold: Optional[float] = Field(default=70, description="Threshold value used for fitting background if mode='power' or 'exp'.")
 
 
 class MeasResample(BaseModel):

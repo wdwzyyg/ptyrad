@@ -49,7 +49,7 @@ def export_meas_init(args):
     from ptyrad.load import load_params
     
     # 1. Load init_params
-    init_params = load_params(args.params_path)['init_params']
+    init_params = load_params(args.params_path, validate=not args.skip_validate)['init_params']
     
     # 2. Parse and normalize export config from file.
     export_cfg = init_params.get('meas_export') # True, False, None, dict (could be {})
@@ -123,6 +123,7 @@ def main():
     # export-meas-init
     parser_export = subparsers.add_parser("export-meas-init", help="Export initialized measurements file to disk")
     parser_export.add_argument("--params_path", type=str, required=True)
+    parser_export.add_argument("--skip_validate", action="store_true", help="Skip parameter validation and default filling. Use only if your params file is complete and consistent.")
     parser_export.add_argument("--output", type=str, help="Optional output path / file type (.mat, .hdf5, .tif, .npy) for the exported array")
     parser_export.add_argument("--reshape", type=int, nargs="+", help="Optional new shape for the exported array, e.g. --reshape 128 128 128 128")
     parser_export.add_argument("--append", action="store_true", help="Optionally appending the array shape to file name")
