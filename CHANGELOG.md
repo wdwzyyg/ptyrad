@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b8] - 2025-07-02
+### Added
+- **Add `params/` module to enable params default filling, type check, and validation via pydantic**. This adds a new dependency (`pydantic`) but greatly enhances the robustness of PtyRAD and promotes "fail early" philosophy reggarding params configuration. Default filling makes it possible to create a minimal params file with ~ 15 fields. The validation would check for variable types, option availability, and file existence, etc.
+- Add demo `tBL_WSe2_reconstruct_minimal.yml` params file for demonstration
+- Allow `tilt_source` to take `file` option so we can load object tilts from file. This is suggested by @zb87
+- Add `meas_normalization` option to demo params files
+- Add 'force' boolean option to `meas_remove_neg_values` so that we can subtract values from measurements without negative values
+- Add versioning strings to demo params/notebooks for calrity
+- Allow fine-grained control of output folder name by adding high-level presets including 'minimal', 'default', and 'all' to `recon_dir_affixes` in `recon_params` while supporting 16 individual control options as well. **High-level presets would introduce a breaking change for previous params files.** 
+### Changed
+- Update `load_params` to include the validation logic and option
+- Update CLI `run` to include optional validation (--skip_validate)
+- Update CLI `validate-param`s command so we can simplify validate the params files in command line
+- Simplify `_process_meas` by removing unnecessary neg correction and normalization
+- Improve `_meas_add_poisson_noise` by adding built-in negative values check and switching to global normalization to maintain relative intensity between each pattern
+- Move Slurm scripts to demo/scripts for simplicity
+- Change `prefix_date` option in `recon_params` into `prefix_time` to enable more control of the time format prepended to the output folder name. Default time format is 'date' for output folder, and 'datetime' for the output log file. **This introduces a breaking change for previous params files.** 
+- Fix `_tilt` recon folder name appending when 'tilt_type' : 'each' otherwise it was appending all (N,2) values
+
 ## [0.1.0b7] - 2025-05-30
 ### Added
 - Add CLI command `ptyrad export-meas-init` to allow quick exporting initialized measurement arrays to disk with specified file types (.mat, .hdf5, .tif, .npy)
