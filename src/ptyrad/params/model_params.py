@@ -1,7 +1,8 @@
 from typing import Any, Dict, Optional, Union
 
 import torch.optim
-from pydantic import BaseModel, Field, FilePath, field_validator, model_validator
+from pydantic import BaseModel, Field, FilePath, field_validator, model_validator, model_serializer
+import pathlib
 
 
 class OptimizerParams(BaseModel):
@@ -20,6 +21,14 @@ class OptimizerParams(BaseModel):
         if not hasattr(torch.optim, v) or not callable(getattr(torch.optim, v)):
             raise ValueError(f"Optimizer name '{v}' is not a valid PyTorch optimizer")
         return v
+    
+    @model_serializer
+    def serialize_model(self):
+        """Custom serializer to convert pathlib.Path back to str."""
+        data = self.__dict__.copy()
+        if data.get('load_state') is not None and isinstance(data['load_state'], pathlib.Path):
+            data['load_state'] = str(data['load_state'])
+        return data
 
 
 class UpdateParams(BaseModel):

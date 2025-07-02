@@ -2,22 +2,23 @@ import pathlib
 from typing import Any, Dict, List, Literal, Optional, Union, get_args
 
 import numpy as np
-from pydantic import BaseModel, Field, FilePath, field_validator, model_serializer, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 
 class MeasCalibration(BaseModel):
     model_config = {"extra": "forbid"}
     
     mode: Literal['dx', 'dk', 'kMax', 'da', 'angleMax', 'n_alpha', 'RBF', 'fitRBF'] = Field(default='fitRBF', description="Mode for measurements calibration")
-    value: Optional[float] = Field(default=None, ge=0.0, description="Value for measurements calibration. Unit: Ang, Ang-1, mrad, # of alpha, px depends on modes")
+    value: Optional[float] = Field(default=None, gt=0.0, description="Value for measurements calibration. Unit: Ang, Ang-1, mrad, # of alpha, px depends on modes")
     """ Value is required for all mode except 'fitRBF """
 
     @model_validator(mode='before')
     def check_calibration_value(cls, values: dict) -> dict:
         mode = values.get('mode', 'fitRBF')
+        value = values.get('value')
         if mode == 'fitRBF' and 'value' not in values:
             values['value'] = None
-        if mode != 'fitRBF' and 'value' not in values:
+        if mode != 'fitRBF' and value is None:
             raise KeyError("'value' is required in meas_calibration if mode is not 'fitRBF'.")
         return values
 
@@ -88,7 +89,7 @@ class MeasAddPoissonNoise(BaseModel):
     model_config = {"extra": "forbid"}
     
     unit: Literal["total_e_per_pattern", "e_per_Ang2"] = Field(description="Unit of dose. Choose between 'total_e_per_pattern' or 'e-per_Ang2'.")
-    value: Union[int, float] = Field(ge=0.0, description="Dose to be added to measurements")
+    value: Union[int, float] = Field(gt=0.0, description="Dose to be added to measurements")
 
 
 class MeasExport(BaseModel):
@@ -109,7 +110,7 @@ class TiltParams(BaseModel):
 
 
 class FilePathWithKey(BaseModel):
-    path: FilePath = Field(description="File path")
+    path: pathlib.Path = Field(description="File path")
     key: Optional[str] = Field(default=None, description="key to the dataset")
 
 
@@ -120,30 +121,30 @@ SOURCE_PARAMS_MAPPING = {
     },
     'obj': {
         'simu': Union[list, None],
-        'PtyRAD': FilePath,
-        'PtyShv': FilePath, 
-        'py4DSTEM': FilePath,
+        'PtyRAD': pathlib.Path,
+        'PtyShv': pathlib.Path, 
+        'py4DSTEM': pathlib.Path,
         'custom': np.ndarray,
     },
     'probe': {
         'simu': Union[dict, None],
-        'PtyRAD': FilePath,
-        'PtyShv': FilePath, 
-        'py4DSTEM': FilePath,
+        'PtyRAD': pathlib.Path,
+        'PtyShv': pathlib.Path, 
+        'py4DSTEM': pathlib.Path,
         'custom': np.ndarray,
     },
     'pos': {
         'simu': type(None),
-        'PtyRAD': FilePath,
-        'PtyShv': FilePath, 
-        'py4DSTEM': FilePath,
-        'foldslice_hdf5': FilePath,
+        'PtyRAD': pathlib.Path,
+        'PtyShv': pathlib.Path, 
+        'py4DSTEM': pathlib.Path,
+        'foldslice_hdf5': pathlib.Path,
         'custom': np.ndarray,
     },
     'tilt': {
         'simu': TiltParams,
-        'PtyRAD': FilePathWithKey,
-        'file': FilePath,
+        'PtyRAD': pathlib.Path,
+        'file': FilePathWithKey,
         'custom': np.ndarray,
     },
 }
@@ -194,7 +195,7 @@ class InitParams(BaseModel):
     Acceleration voltage for relativistic electron wavelength calculation 
     """
     
-    probe_conv_angle: Optional[float] = Field(default=None, ge=0.0, description="Semi-convergence angle in mrad") # Required for electron
+    probe_conv_angle: Optional[float] = Field(default=None, gt=0.0, description="Semi-convergence angle in mrad") # Required for electron
     """ 
     Semi-convergence angle in mrad for probe-forming aperture 
     """
@@ -252,7 +253,7 @@ class InitParams(BaseModel):
     Number of scan position along fast scan direction. Usually it's the horizontal direction of acquisition GUI
     """
     
-    pos_scan_step_size: float = Field(ge=0.0, description="Scan step size in Angstrom") # Required
+    pos_scan_step_size: float = Field(gt=0.0, description="Scan step size in Angstrom") # Required
     """
     Step size between probe positions in a rectangular raster scan pattern
     """
@@ -303,7 +304,7 @@ class InitParams(BaseModel):
     Number of slices for multislice object
     """
     
-    obj_slice_thickness: float = Field(ge=0.0, description="Slice thickness in Angstrom") # Required
+    obj_slice_thickness: float = Field(gt=0.0, description="Slice thickness in Angstrom") # Required
     """
     Slice thickness (propagation distance) for multislice ptychography. 
     Typical values are between 1 to 20 Ang
@@ -367,7 +368,7 @@ class InitParams(BaseModel):
     'on_the_fly' resampling doesn't really affect the reconstruction time so it's suggested to always use 'on_the_fly' if you're upsampling.
     """
     
-    meas_add_source_size: Optional[float] = Field(default=None, ge=0.0, description="Gaussian blur std for spatial partial coherence in Angstrom")
+    meas_add_source_size: Optional[float] = Field(default=None, gt=0.0, description="Gaussian blur std for spatial partial coherence in Angstrom")
     """
     type: null or float, unit: Ang. 
     This adds additional spatial partial coherence to diffraction patterns by applying Gaussian blur along scan directions. 
@@ -375,7 +376,7 @@ class InitParams(BaseModel):
     Note that FWHM ~ 2.355 std, so a std of 0.34 Ang is equivalent to a source size (FWHM) of 0.8 Ang
     """
 
-    meas_add_detector_blur: Optional[float] = Field(default=None, ge=0.0, description="Gaussian blur std for detector in pixels")
+    meas_add_detector_blur: Optional[float] = Field(default=None, gt=0.0, description="Gaussian blur std for detector in pixels")
     """
     type: null or float, unit: px (k-space). 
     This adds additional detector blur to diffraction patterns to emulate the PSF on detector. 
@@ -478,7 +479,7 @@ class InitParams(BaseModel):
     Data source of the probe. Currently supporting 'simu', 'PtyRAD', 'PtyShv', 'py4DSTEM', and 'custom'
     """
     
-    probe_params: Optional[Union[Dict[str, Any], FilePath, np.ndarray]] = Field(default=None, description="Parameters for probe loading/initialization")
+    probe_params: Optional[Union[Dict[str, Any], pathlib.Path, np.ndarray]] = Field(default=None, description="Parameters for probe loading/initialization")
     """
     type: null, dict, str, or numpy array. 
     Parameters of the probe loading/initialization. 
@@ -494,7 +495,7 @@ class InitParams(BaseModel):
     Currently supporting 'simu', 'PtyRAD', 'PtyShv', 'py4DSTEM', 'foldslice_hdf5', and 'custom'
     """
     
-    pos_params: Optional[Union[FilePath, np.ndarray]] = Field(default=None, description="Parameters for probe positions loading/initialization")
+    pos_params: Optional[Union[pathlib.Path, np.ndarray]] = Field(default=None, description="Parameters for probe positions loading/initialization")
     """
     type: null, str, or numpy array. 
     Parameters of the probe positions loading/initialization. 
@@ -512,7 +513,7 @@ class InitParams(BaseModel):
     Currently supporting 'simu', 'PtyRAD', 'PtyShv', 'py4DSTEM', and 'custom'
     """
     
-    obj_params: Optional[Union[List[int], FilePath, np.ndarray]] = Field(default=None, description="Parameters for object loading/initialization")
+    obj_params: Optional[Union[List[int], pathlib.Path, np.ndarray]] = Field(default=None, description="Parameters for object loading/initialization")
     """
     type: null, list of 4 ints, str, or numpy array. 
     Parameters of the object loading/initialization. 
@@ -527,7 +528,7 @@ class InitParams(BaseModel):
     Data source of the object tilts. Currently supporting 'simu', 'PtyRAD', 'file', and 'custom'
     """
 
-    tilt_params: Union[TiltParams, FilePathWithKey, FilePath, np.ndarray] = Field(default_factory=TiltParams, description="Parameters for object tilt loading/initialization")
+    tilt_params: Union[TiltParams, FilePathWithKey, pathlib.Path, np.ndarray] = Field(default_factory=TiltParams, description="Parameters for object tilt loading/initialization")
     """
     type: dict, str, or numpy array. 
     Parameters of the object tilt loading/initialization. 
@@ -609,6 +610,97 @@ class InitParams(BaseModel):
             raise ValueError("pos_scan_affine must be None or a list of 4 floats")
         return v
         
+    # 2025.07.02 CHL    
+    # pydantic.FilePath would check the file existence during field instantiation along with type check.
+    # So it will raise ValidationError if the path is invalid.
+    # However, since XXX_params all have Union type, 
+    # pydantic would continue type check for all other types and print an individual ValidationError for each type.
+    # This makes the error message much less useful and confusing.
+    # The solution is to loosen up the type check by switching pydantic.FilePath with pathlib.Path,
+    # which only check if it's a string and path-like during field instantiation.
+    # Once we pass the field type check, we then use @field_validator to check if the path actually exist and raise FoundNotFoundError if needed.
+    # This produces much cleaner error message if the path is invalid.
+    # Note that the `validate_all_source_params` is a @model_validator)mode='after') that happens after the model instantiation,
+    # so if the source and params are not correctly matching along with an invalid path,
+    # the error message would be the FileNotFoundError coming from @field_validator.
+    # The @model_validator)mode='after') is more like a final consistency check.
+        
+    @field_validator('meas_params')    
+    @classmethod
+    def validate_meas_params(cls, v: Union[FilePathWithKey, np.ndarray], info) -> Union[FilePathWithKey, np.ndarray]:
+        if isinstance(v, FilePathWithKey):
+            if not v.__dict__['path'].is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        if isinstance(v, np.ndarray):
+            return v
+        else:
+            raise ValueError(f"{info.field_name} must be a dict, a valid file path, or a NumPy array, got {type(v).__name__}")  
+
+    @field_validator('probe_params')    
+    @classmethod
+    def validate_probe_params(cls, v: Optional[Union[Dict[str, Any], pathlib.Path, np.ndarray]], info) -> Optional[Union[Dict[str, Any], pathlib.Path, np.ndarray]]:
+        if v is None:
+            return None
+        if isinstance(v, pathlib.Path):
+            if not v.is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        if isinstance(v, (dict, np.ndarray)):
+            return v
+        else:
+            raise ValueError(f"{info.field_name} must be a dict, a valid file path, or a NumPy array, got {type(v).__name__}")
+        
+    @field_validator('pos_params')    
+    @classmethod
+    def validate_pos_params(cls, v: Optional[Union[pathlib.Path, np.ndarray]], info) -> Optional[Union[Dict[str, Any], pathlib.Path, np.ndarray]]:
+        if v is None:
+            return None
+        if isinstance(v, pathlib.Path):
+            if not v.is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        if isinstance(v, (np.ndarray)):
+            return v
+        else:
+            raise ValueError(f"{info.field_name} must be either None, a valid file path, or a NumPy array, got {type(v).__name__}")
+
+    @field_validator('obj_params')    
+    @classmethod
+    def validate_obj_params(cls, v: Optional[Union[List[int], pathlib.Path, np.ndarray]], info) -> Optional[Union[List[int], pathlib.Path, np.ndarray]]:
+        if v is None:
+            return None
+        if isinstance(v, list):
+            if len(v) != 4 or not all(isinstance(x, int) for x in v):
+                raise ValueError(f"{info.field_name} must be a List of 4 ints")
+            return v
+        if isinstance(v, pathlib.Path):
+            if not v.is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        if isinstance(v, np.ndarray):
+            return v
+        else:
+            raise ValueError(f"{info.field_name} must be either None, a List of 4 ints, a valid file path, or a NumPy array, got {type(v).__name__}")
+
+    @field_validator('tilt_params')    
+    @classmethod
+    def validate_tilt_params(cls, v: Union[TiltParams, FilePathWithKey, pathlib.Path, np.ndarray], info) -> Union[TiltParams, FilePathWithKey, pathlib.Path, np.ndarray]:
+        if v is None:
+            return None
+        if isinstance(v, (TiltParams, np.ndarray)):
+            return v
+        if isinstance(v, FilePathWithKey):
+            if not v.__dict__['path'].is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        if isinstance(v, pathlib.Path):
+            if not v.is_file():
+                raise FileNotFoundError(f"{info.field_name}: Path '{v}' does not point to a valid file")
+            return v
+        else:
+            raise ValueError(f"{info.field_name} must be a dict, a valid file path, or a NumPy array, got {type(v).__name__}")   
+
     @model_validator(mode='before')
     def infer_pos_N_scans(cls, values: dict) -> dict:
         pos_N_scans     = values.get('pos_N_scans')
@@ -667,7 +759,7 @@ class InitParams(BaseModel):
     
     @model_serializer
     def serialize_model(self):
-        """Custom serializer to convert FilePath back to str."""
+        """Custom serializer to convert pathlib.Path back to str."""
         data = self.__dict__.copy()
         fields = ['meas_params', 'probe_params', 'pos_params', 'obj_params', 'tilt_params']
         for field in fields:
