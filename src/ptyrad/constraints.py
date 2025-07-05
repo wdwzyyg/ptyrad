@@ -264,27 +264,21 @@ def orthogonalize_modes_vec(modes, sort = False):
     #   Most indexings arr converted from Matlab (start from 1) to Python (start from 0)
     #   The expected shape of `modes` input is modified into (pmode, Ny, Nx) to be consistent with ptyrad
     #   If you check the orthoganality of each mode, make sure to change the input into complex128 or to modify the default tolerance of torch.allclose.
-    #   Lastly, this operation could probably be so much faster with some proper vectorization
-    
-    # # Execute iter-wise constraints
-    # if model.opt_probe.size(0) >1 and model.optimizable_tensors['probe'].requires_grad:
-    #     with torch.no_grad():
-    #         print("Orthogonalizing probe modes")
-    #         model.opt_probe.data = orthogonalize_modes(model.opt_probe)
-
-    #input_shape = modes.shape # input_shape could be either (N,Y,X) or (N,Z,Y,X)
-    
+    #   Note that Matlab's dot(p2,p1) for complex input would implictly apply with the complex conjugate, 
+    #   so Matlab's dot() != torch.dot because torch.dot doesn't automatically apply the complex conjugate.
+    #   This is pointed out by @dong-zehao in issue #11.
+        
     orig_modes_dtype = modes.dtype
     if orig_modes_dtype != torch.complex64:
         modes = torch.complex(modes, torch.zeros_like(modes))
     input_shape = modes.shape
     modes_reshaped = modes.reshape(input_shape[0], -1) # Reshape modes to have a shape of (Nmode, X*Y)
-    A = torch.matmul(modes_reshaped, modes_reshaped.t()) # A = M M^T
+    A = torch.matmul(modes_reshaped, modes_reshaped.H) # A = M @ M^T.conj() = M @ M^H, H is the conjugate transpose
 
     _, evecs = torch.linalg.eig(A)
    
     # Matrix-multiplication version (N,N) @ (N,YX) = (N,YX)
-    ortho_modes = torch.matmul(evecs.t(), modes_reshaped).reshape(input_shape)
+    ortho_modes = torch.matmul(evecs.H, modes_reshaped).reshape(input_shape)
 
     # sort modes by their contribution
     if sort:
