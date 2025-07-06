@@ -5,6 +5,14 @@ import numpy as np
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 
+class FilePathWithKey(BaseModel):
+    path: pathlib.Path = Field(description="File path")
+    key: Optional[str] = Field(default=None, description="key to the dataset")
+    shape: Optional[List[int]] = Field(default=None, description="Shape of the dataset for loading from .raw")
+    offset: Optional[int] = Field(default=None, description="Offset of the dataset for loading from .raw")
+    gap: Optional[int] = Field(default=None, description="Gap of the dataset for loading from .raw")
+
+
 class MeasCalibration(BaseModel):
     model_config = {"extra": "forbid"}
     
@@ -107,11 +115,6 @@ class TiltParams(BaseModel):
     
     tilt_type: Literal['all', 'each'] = Field(default='all', description="Type of initial titls, can be either 'all' (1,2), or 'each' (N,2)")
     init_tilts: List[List[int]] = Field(default=[[0, 0]], description="Initial value for (N,2) object tilts")
-
-
-class FilePathWithKey(BaseModel):
-    path: pathlib.Path = Field(description="File path")
-    key: Optional[str] = Field(default=None, description="key to the dataset")
 
 
 SOURCE_PARAMS_MAPPING = {
