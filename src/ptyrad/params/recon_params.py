@@ -260,12 +260,13 @@ class ReconParams(BaseModel):
 
     selected_figs: List[
         Literal[
-            "loss", "forward", "probe_r_amp", "probe_k_amp", "probe_k_phase", "pos", "tilt", "all"
+            "loss", "forward", "probe_r_amp", "probe_k_amp", "probe_k_phase", "pos", "tilt", "tilt_avg", "slice_thickness", "all"
         ]
     ] = Field(default=["loss", "forward", "probe_r_amp", "pos"], description="Figures to plot/save")
     """
-    This list specified the selected figures that will be plotted/saved. The available strings are 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', and 'all'. 
-    The suggested value is ['loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos'].
+    This list specified the selected figures that will be plotted/saved. 
+    The available strings are 'loss', 'forward', 'probe_r_amp', 'probe_k_amp', 'probe_k_phase', 'pos', 'tilt', 'tilt_avg', 'slice_thickness', and 'all'. 
+    The suggested value is ['loss', 'forward', 'probe_r_amp', 'pos'].
     """
 
     copy_params: bool = Field(default=True, description="Copy params file to output folder")

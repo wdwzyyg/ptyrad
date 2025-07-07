@@ -776,10 +776,8 @@ def recon_step(batches, grad_accumulation, model, optimizer, loss_fn, constraint
     iter_t = time_sync() - start_iter_t
     model_instance.loss_iters.append((niter, loss_logger(batch_losses, niter, iter_t, verbose=verbose)))
     model_instance.iter_times.append(iter_t)
-    if model_instance.change_thickness:
-        model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
-    if model_instance.tilt_obj:
-        model_instance.avg_tilt_iters.append((niter, model_instance.opt_obj_tilts.detach().mean(0).cpu().numpy()))
+    model_instance.dz_iters.append((niter, model_instance.opt_slice_thickness.detach().cpu().numpy()))
+    model_instance.avg_tilt_iters.append((niter, model_instance.opt_obj_tilts.detach().mean(0).cpu().numpy()))
     return batch_losses
 
 def toggle_grad_requires(model, niter, verbose):

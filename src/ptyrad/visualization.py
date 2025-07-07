@@ -152,11 +152,18 @@ def plot_obj_tilts(pos, tilts, figsize=(16,16), show_fig=True, pass_fig=False):
     plt.title("Object tilts", fontsize=16)
     
     tilts = np.broadcast_to(tilts, shape=(len(pos),2))
-    M = np.hypot(tilts[:,0], tilts[:,1])
-    q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
-    cbar = fig.colorbar(q, shrink=0.75)
-    cbar.ax.set_ylabel('mrad')
-    cbar.ax.get_yaxis().labelpad = 15
+    if np.allclose(tilts[:,0], 0, atol=1e-3):
+        # All tilts are effectively zero; skip quiver plot and annotate
+        ax.text(
+            0.5, 0.5, "All tilts are effectively zero (<1e-3) mrad, no quiver plot",
+            ha="center", va="center", fontsize=18, color="gray", transform=ax.transAxes
+        )
+    else:
+        M = np.hypot(tilts[:,0], tilts[:,1])
+        q = ax.quiver(pos[:,1], pos[:,0], tilts[:,1], tilts[:,0], M, pivot='mid', angles='xy', scale_units='xy', label='Obj tilts')
+        cbar = fig.colorbar(q, shrink=0.75)
+        cbar.ax.set_ylabel('mrad')
+        cbar.ax.get_yaxis().labelpad = 15
     
     plt.gca().set_aspect('equal', adjustable='box')
     plt.gca().invert_yaxis()  # Flipped y-axis if there's only scatter plot
