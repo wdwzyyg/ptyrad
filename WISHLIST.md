@@ -1,7 +1,7 @@
 # New Features and Enhancements
 
 
-Last Update: 2025.05.19
+Last Update: 2025.07.08
 
 ---
 
@@ -11,15 +11,13 @@ Last Update: 2025.05.19
 
 ### Overall workflows
 
+- Apply torch.compile (WIP) for speedup 
 - Add a random seed to PtyRAD for better reproducibility
 - Add better error messages.
 - Add pyramidal approaches
     - Similar to `asize.presolve` from PtyShv to initialize from rough object with coarse sampling
     - Appending different reconstruciton engines
     - Could start from notebooks, but ultimately a wrapper class would be nice
-
-### Params generation and validation
-- Add a `params.py` module to handle the type check, default filling, and value validation. Might do it with dataclasses or pydantic.
 
 ### Initialization
 
@@ -32,6 +30,7 @@ Last Update: 2025.05.19
     - tcBF?
 - Add totoal probe intensity so we can better normalize the measurement with respect to the probe intensity
     - This should help estimate the amplitude term with total intensity variation
+- Add MeasMask (WIP) to exclude bad pixels on detector from loss calculation and updates
 
 ### Forward
 
@@ -57,7 +56,6 @@ Last Update: 2025.05.19
 ### Reconstruction
 
 - Decouple the reconstruction objective with data error so that we can reconstruct with whatever target loss, while having an independent data error metric that can be used as a standard value for comparison
-- Consider refactor or decouple the measurements initialization from Initializer so we can have more hypertunable parameters and cleaner optuna_objective by re-initializing everything except loading measurements
 
 ### Loss Functions
 
@@ -111,7 +109,6 @@ Last Update: 2025.05.19
 
 ### Output
 
-- Maybe restructure the output filename setting to allow some list concat just like Velox prefix style?
 - Write modeled CBED as an output for py4DGUI examination
 - Finish the weighted sum of `omode_occu` in `save_results` when `omode_occu != 'uniform’`
 
@@ -127,7 +124,6 @@ Last Update: 2025.05.19
 - Unify meshgrid usage, naming, and unit would be nice
 - Improve function signatures with type hints, clearer positional/keyword arguments with default values
 - Add proper doc strings (Google style) for major functions and classes
-- Setup Read the Docs
 - Run through Ruff formatter for PEP8 code style (for certain part of the PtyRAD codebase)
 
 ### Test
