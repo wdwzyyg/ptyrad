@@ -7,7 +7,7 @@ This is the PyTorch model that holds optimizable tensors and interacts with loss
 
 from math import prod
 import torch
-from torch.fft import fft2, ifft2, fftfreq
+from torch.fft import fft2, ifft2
 import torch.nn as nn
 from torchvision.transforms.functional import gaussian_blur
 
@@ -138,6 +138,9 @@ class PtychoAD(torch.nn.Module):
                 'probe_pos_shifts': self.opt_probe_pos_shifts}
             self.create_optimizable_params_dict(self.lr_params, self.verbose)
 
+            # Initialize propagator-related variables
+            self.init_propagator_vars()
+            
             vprint('### Done initializing PtychoAD model ###', verbose=verbose)
             vprint(' ', verbose=verbose)
             
@@ -151,27 +154,23 @@ class PtychoAD(torch.nn.Module):
         # Note that the Noy, Nox, roy, rox, shift_object_grid are pre-generated for potential future usage of sub-px object shifts
         # Currently (2024.04.24) only the shift_probes_grid, rpy_grid, rpx_grid are used for sub-px shifts and obj_ROI selection
         # 2024.11.18 added propagator_grid and propagator_tilt_grid for Fresnel propagator (optimizable slice thickness and tilts)
+        # 2025.07.07 removed propagator_tilt_grid and settled with the half-bin shift approach for numerical stability with sqrt ASM method
         
         device = self.device
         probe = self.get_complex_probe_view()
         Npy, Npx = probe.shape[-2:] # Number of probe pixels in y and x directions
         Noy, Nox = self.opt_objp.shape[-2:] # Number of object pixels in y and x directions, 
         
-        # Grids for Fresnel propagator
+       # Grids for Fresnel propagator
+       # Note that this grid has a half-bin shift that avoids exact 0 frequency which would generate NaNs inside sqrt.
         ygrid = (torch.arange(-Npy // 2, Npy // 2, device=device) + 0.5) / Npy
         xgrid = (torch.arange(-Npx // 2, Npx // 2, device=device) + 0.5) / Npx
-        ky = 2 * torch.pi * ygrid / self.dx
-        kx = 2 * torch.pi * xgrid / self.dx
+        ky = torch.fft.ifftshift(2 * torch.pi * ygrid / self.dx) # Use ifftshift to shift the 0 frequency to the corner
+        kx = torch.fft.ifftshift(2 * torch.pi * xgrid / self.dx)
         Ky, Kx = torch.meshgrid(ky, kx, indexing="ij")
-        self.propagator_grid = torch.stack([Ky,Kx], dim=0) # (2,Ky,Kx), k-space grid for Fresnel propagator
+        self.propagator_grid = torch.stack([Ky,Kx], dim=0) # (2,Ky,Kx), k-space grid for Fresnel propagator with 2pi absorbed
         
-        # Grids for propagator tilt (the units are different from the above grid)
-        ky = fftfreq(Npy, 1 / Npy, device=device) * self.dk # dk in 1/Ang
-        kx = fftfreq(Npx, 1 / Npx, device=device) * self.dk
-        Ky, Kx = torch.meshgrid(ky, kx, indexing='ij')
-        self.propagator_tilt_grid = torch.stack([Ky,Kx], dim=0) # (2,Ky,Kx), k-space grid for Fresnel propagator tilt
-
-        # Grids for shifting porbes and obj_ROI selection
+        # Grids for shifting probes and obj_ROI selection
         rpy, rpx = torch.meshgrid(torch.arange(Npy, dtype=torch.int32, device=device), 
                                   torch.arange(Npx, dtype=torch.int32, device=device), indexing='ij') # real space grid for probe in y and x directions
         roy, rox = torch.meshgrid(torch.arange(Noy, dtype=torch.int32, device=device), 
@@ -207,6 +206,21 @@ class PtychoAD(torch.nn.Module):
                     self.optimizable_params.append({'params': [self.optimizable_tensors[param_name]], 'lr': lr})               
         if verbose:
             self.print_model_summary()
+        
+    def init_propagator_vars(self):
+        """ Initialize propagator related variables """
+        
+        # Initialize propagator for fixed non-zero tilts and fixed thickness that could be position dependent
+        # It's better to calculate the full one during initialization and slice it later given indices so we can use torch.compile later
+        dz = self.opt_slice_thickness.detach()
+        Ky, Kx = self.propagator_grid 
+        tilts_y_full = self.opt_obj_tilts[:,0,None,None] / 1e3 # mrad, tilts_y = (N,Y,X)
+        tilts_x_full = self.opt_obj_tilts[:,1,None,None] / 1e3
+        self.H_fixed_tilts_full = self.H * torch.exp(1j * dz * (Ky * torch.tan(tilts_y_full) + Kx * torch.tan(tilts_x_full))) # (1,Y,X) or (N,Y,X)
+
+        # Initialize other relevant variables
+        self.k = 2 * torch.pi / self.lambd
+        self.Kz = torch.sqrt(self.k ** 2 - Kx ** 2 - Ky ** 2) # Upper case K indicates it's a 2D tensor (Y,X)
         
     def print_model_summary(self):
         """ Prints a summary of the model's optimizable variables and statistics. """
@@ -289,6 +303,9 @@ class PtychoAD(torch.nn.Module):
         # This function will return a single propagator (H) if self.opt_obj_tilts has shape = (1,2) (single tilt_y, tilt_x) 
         # If self.opt_obj_tilts has shape = (N,2), it'll return multiple propagtors stacked at axis 0 (N,Y,X)
         # Note that 0 tilts is numerically equivalent to the H and can be verified by "torch.allclose(model.H, model.get_propagators([0]))"
+        # The exp(2pi * i * sqrt(k^2 - kx^2 - ky^2)) approach is equivalent to the common exp(-i * pi * lambda * dz * k^2) for small angles, 
+        # see J. Goodman, Introduction to Fourier Optics (McGraw-Hill, 1968) (PDF page 88, eqn 4-20, 4-21 as attached).
+        # https://www.hlevkin.com/hlevkin/90MathPhysBioBooks/Physics/Physics/Mix/Introduction%20to%20Fourier%20Optics.pdf
         
         # If you want to expand the opt_obj_tilts from (1,2) to (N,2), use the following lines
         # model.opt_obj_tilts.data = torch.broadcast_to(model.opt_obj_tilts, [<N_scans>,2]).clone() # Replace <N_scans> with your actual N_scans
@@ -300,58 +317,51 @@ class PtychoAD(torch.nn.Module):
         # 'probe_pos_shifts': 1e-4})
         # optimizer=torch.optim.Adam(model.optimizer_params)
         
-        dz  = self.opt_slice_thickness
+        # Setup boolean flags
+        tilt_obj = self.tilt_obj                         # Whether we need to apply tilt to the Fresnel propagator
+        global_tilt = (self.opt_obj_tilts.shape[0] == 1) # 'tilt_type' = 'all' or 'each'
+        change_tilt = (self.lr_params['obj_tilts'] != 0) # Whether tilts are optimized or not
+        change_thickness = self.change_thickness         # Whether thickness is optimized or not
         
-        if self.tilt_obj is True:
+        # Setup tilts and other variables
+        dz       = self.opt_slice_thickness
+        Kz       = self.Kz # kz = torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2), k = 2pi/lambda.
+        Ky, Kx   = self.propagator_grid
+        
+        # tilts can be either (1,2) or (N,2) depends on global_tilt flag
+        if global_tilt:
+            tilts = self.opt_obj_tilts 
+        else: 
+            tilts = self.opt_obj_tilts[indices] 
+        tilts_y  = tilts[:,0,None,None] / 1e3 # mrad, tilts_y = (N,Y,X)
+        tilts_x  = tilts[:,1,None,None] / 1e3
+                
+        if tilt_obj and change_thickness:
+            # Case 1: Tilts are either non-zero or optimizing, while thickness is optimizing 
+            H_opt_dz = torch.exp(1j * dz * Kz) # H has zero frequency at the corner in k-space
+            return H_opt_dz * torch.exp(1j * dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
 
-            # Setup obj_tilts and the tilt kernel
-            if self.opt_obj_tilts.shape[0] == 1: # If there's only 1 global tilt obp_obj_tilts.shape = (1,2)
-                obj_tilts = self.opt_obj_tilts
+        elif tilt_obj and not change_thickness:
+            if change_tilt:
+                # Case 2A: Tilts are optimizing, while thickness is fixed
+                return self.H * torch.exp(1j * dz * (Ky * torch.tan(tilts_y) + Kx * torch.tan(tilts_x)))
             else:
-                obj_tilts = self.opt_obj_tilts[indices]
-            tilts_y  = obj_tilts[:,0,None,None] / 1e3 #mrad, tilts_y = (N,Y,X)
-            tilts_x  = obj_tilts[:,1,None,None] / 1e3
-            Kyt, Kxt = self.propagator_tilt_grid
-            
-            # tilt is either non-zero or optimizing, thickness is optimizing as well. Have to calculate propagators for each batch
-            if self.change_thickness is True:
-                k           = 2 * torch.pi / self.lambd
-                Ky, Kx      = self.propagator_grid
-                H_opt_dz    = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
-                phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x)) # phase_shift is (N,Ky,Kx)
-                return H_opt_dz * torch.exp(1j*phase_shift)
-
-            else: # self.change_thickness is False
-
-                # Thickness is fixed, but obj_tilts is optimizing throughout the iterations
-                if self.lr_params['obj_tilts'] != 0:
-                    phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x))
-                    return self.H * torch.exp(1j*phase_shift)
-
-                # Thickness is fixed, but obj_tilts is a fixed non-zero value throughout the iterations, so it should only be calculated once
-                else:
-                    try:
-                        return self.H_fixed_tilts
-                    except AttributeError:
-                        phase_shift = 2 * torch.pi * dz * (Kyt * torch.tan(tilts_y) + Kxt * torch.tan(tilts_x))
-                        self.H_fixed_tilts = self.H * torch.exp(1j*phase_shift)
-                    return self.H_fixed_tilts
+                # Case 2B: Tilts are fixed non-zero values (1,2) or (N,2), while thickness is fixed
+                # Propagator is pre-calculated during init_propagator_vars
+                return self.H_fixed_tilts_full if global_tilt else self.H_fixed_tilts_full[indices]
         
-        else: # self.tilt is False
-
-            if self.change_thickness is True:
-                # Thickness can be optimized, but tilt is fixed at 0
-                k        = 2 * torch.pi / self.lambd
-                Ky, Kx   = self.propagator_grid
-                H_opt_dz = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
-                return H_opt_dz[None,]
+        elif not tilt_obj and change_thickness: 
+            # Case 3: Tilt is fixed at 0 and thickness is optimizing
+            H_opt_dz = torch.exp(1j * dz * Kz)
+            return H_opt_dz[None,]
             
-            else: # self.change_thickness is False and self.tilt_obj is False:
-                return self.H[None,]
+        else: 
+            # Case 4: Tilt is fixed at 0 and thickness is fixed
+            return self.H[None,]
 
     def get_propagated_probe(self, index):
-        probe = self.get_probes(index)[0].detach() # (pmode, Ny, Nx)
-        H = self.get_propagators(index).detach() # (1, Ny, Nx)
+        probe = self.get_probes(index)[0].detach() # (pmode, Ny, Nx), just grab the probe at 1st index
+        H = self.get_propagators(index)[[0]].detach() # (1, Ny, Nx) or (N, Ny, Nx) depends on tilt_type ('all' or 'each'), so we need to grab the 1st index without reducing dimension
         n_slices = self.opt_objp.shape[1]
         probe_prop = torch.zeros((n_slices, *probe.shape), dtype=probe.dtype, device=probe.device)
         

@@ -6,8 +6,6 @@ Physics-related functions of probes, propagators, and constants, etc.
 from typing import Optional
 
 import numpy as np
-import torch
-from torch.fft import fftfreq
 
 from .common import vprint
 
@@ -489,92 +487,3 @@ def near_field_evolution(Npix_shape, dx, dz, lambd):
     H = np.fft.ifftshift(np.exp(1j * dz * np.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
 
     return H
-
-def near_field_evolution_torch(Npix_shape, dx, dz, lambd, device='cuda'):
-    """Fresnel propagator in PyTorch"""
-    # This is for testing and demonstration purpose and is never called in PtyRAD
-    # The actual optimizable Fresnel propagator is directly built inside "PtychoAD.get_propagators"
-    dx    = dx.to(device)
-    dz    = dz.to(device)
-    lambd = lambd.to(device)
-
-    ygrid = (torch.arange(-Npix_shape[0] // 2, Npix_shape[0] // 2, device=device) + 0.5) / Npix_shape[0]
-    xgrid = (torch.arange(-Npix_shape[1] // 2, Npix_shape[1] // 2, device=device) + 0.5) / Npix_shape[1]
-
-    # Standard ASM
-    k  = 2 * torch.pi / lambd
-    ky = 2 * torch.pi * ygrid / dx
-    kx = 2 * torch.pi * xgrid / dx
-    Ky, Kx = torch.meshgrid(ky, kx, indexing="ij")
-    H = torch.fft.ifftshift(torch.exp(1j * dz * torch.sqrt(k ** 2 - Kx ** 2 - Ky ** 2))) # H has zero frequency at the corner in k-space
-
-    return H
-
-def add_tilts_to_propagator(propagator, tilts, dz, dk):
-    """ Add small crystal tilts to a single propagator """
-    # After PtyRAD v0.1.0-beta3.0 this is not called anymore for efficiency
-    # The tilting is directly calculated in `PtychoAD.get_propagators`
-    
-    # Ref: https://abtem.readthedocs.io/en/latest/user_guide/walkthrough/multislice.html
-    # tilts angle should be less than 1 deg (17 mrad)
-    # tilt-induced phase shift = exp(2pi*i*dz*(kx*tan(tx)+ky*tan(ty)), note that k in 1/Ang
-    # This is a vectorized function that apply crystall tilts to a single propagator
-    # If tilts.ndim=1, then it'll return a single propagator with (1,Y,X)
-    # Note that the propagator is corner-centered at k-space
-    
-    # Create grid of coordinates
-    device         = propagator.device
-    (ny, nx)       = propagator.shape[-2:]
-    grid_y, grid_x = torch.meshgrid(fftfreq(ny, 1 / ny, device=device), fftfreq(nx, 1 / nx, device=device), indexing='ij')
-    kx             = grid_x * dk # dk in 1/Ang
-    ky             = grid_y * dk
-    
-    tilts_y        = tilts[:,0,None,None] / 1e3 #mrad, tilts_y = (N,Y,X)
-    tilts_x        = tilts[:,1,None,None] / 1e3
-    phase_shift    = 2 * torch.pi * dz * (ky * torch.tan(tilts_y) + kx * torch.tan(tilts_x)) 
-    propagators    = propagator * torch.exp(1j*phase_shift)
-    
-    return propagators
-
-def Fresnel_propagator(probe, dz_distances, lambd, extent):
-    # Positive z_distance is adding more overfocus, or letting the probe to forward propagate more
-    
-    # Example usage
-    # dfs = np.linspace(0,200,100)
-    # prop_probes = Fresnel_propagator(probe_data, dfs, lambd, extent)
-    # print(f"probe_data.shape = {probe_data.shape}, prop_probes.shape = {prop_probes.shape}")
-    # print(f"sum(abs(probe)**2) = {np.sum(np.abs(probe_data)**2)}, \nsum(abs(prop_probes)**2) = {np.sum(np.abs(prop_probes)**2, axis=(-3,-2,-1))}")
-    
-    
-    # dfs = [-3,-2,-1,0]
-    # prop_probes = Fresnel_propagator(probe_data, dfs, lambd, extent)
-    # print(f"probe_data.shape = {probe_data.shape}, prop_probes.shape = {prop_probes.shape}")
-    # print(f"sum(abs(probe)**2) = {np.sum(np.abs(probe_data)**2)}, \nsum(abs(prop_probes)**2) = {np.sum(np.abs(prop_probes)**2, axis=(-3,-2,-1))}")
-
-    # plt.figure()
-    # plt.title("probe int x-z")
-    # plt.imshow(np.abs(prop_probes[:,0,prop_probes.shape[-2]//2,:])**2, aspect=10)
-    # plt.yticks(np.arange(0, prop_probes.shape[0]), dfs)
-    # plt.ylabel('Ang along z')
-    # plt.colorbar()
-    # plt.show()
-    
-    from numpy.fft import fft2, fftshift, ifft2, ifftshift
-    
-    prop_probes = np.zeros((len(dz_distances), *probe.shape)).astype(probe.dtype)
-    for i, z_distance in enumerate(dz_distances):
-        _, H, _, _ = near_field_evolution(probe.shape[-2:], z_distance, lambd, extent, use_ASM_only=True, use_np_or_cp='np') # H is corner-centered at k-space
-        prop_probes[i] = fftshift(ifft2(H * fft2(ifftshift(probe, axes=(-2,-1)))), axes=(-2,-1))
-    
-    return prop_probes
-
-def add_const_phase_shift(cplx, phase_shift):
-    """ Add a constant phase shift to the complex input """
-    # This is a handy function to demonstrate that adding a constant phase shift to complex function has no effect to its physical properties
-    # For example, even we add a constant phase shift to the probe, it has no effect to the resulting CBED pattern
-    # If phase_shift is not a scalar but phase_shift.ndim = 1 as [phi0, phi1, phi2.....], it'll be applied to each mode of the cplx (N, Y, X)
-    
-    # torch.ones_like will copy the dtype so we make it a float before making the abs and angle
-    ones = torch.ones_like(cplx.abs())
-    phi = torch.polar(abs=ones, angle=ones * phase_shift[:,None,None])
-    return cplx*phi
