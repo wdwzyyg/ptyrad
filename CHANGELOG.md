@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0b9] - 2025-07-10
+### Changed
+- Update README with new installation guide and references to docs, youtube, and other links
+- Change the output shape of propagated probe amplitude from a binned 2D tableau into a 3D stack
+- Fix incorrect caching of H for an edge case of fixed but non-zero pos-dependent tilts; Fix incorrect indexing for `model.get_propagated_probe` of pos-dependent tilts; Refactor and improve `model.get_propagators` by unifying grid usage; Remove unused propagator-related functions from `utils.physics.py`
+- Allow `plot_obj_tilts` and `plot_slice_thickness` to savie figures even for fixed tilts and thickness by appending results to model regardless; Add a safety guard to skip quiver plot of effective 0 tilt; Update demo params files comments regarding available selected_figs; Update recon_params to add the missing figure options
+- Update `FilePathWithKey` in `init_params.py` so we can load '.raw' file with arbitrary shape, offset, and gap
+- Fix incorrect modes orthogonalization (missing .conj()) in `orthogonalize_modes_vec` in response to issue #11 as pointed out by @dong-zehao. This error doesn't negatively impact results but just produce probe modes that aren't really orthognal with each other; Update check_modes_ortho in utils.dev_tools.py so it can check complex modes as well
+
 ## [0.1.0b8] - 2025-07-02
 ### Added
 - **Add `params/` module to enable params default filling, type check, and validation via pydantic**. This adds a new dependency (`pydantic`) but greatly enhances the robustness of PtyRAD and promotes "fail early" philosophy reggarding params configuration. Default filling makes it possible to create a minimal params file with ~ 15 fields. The validation would check for variable types, option availability, and file existence, etc.
