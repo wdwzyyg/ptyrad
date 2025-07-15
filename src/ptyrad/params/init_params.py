@@ -114,7 +114,7 @@ class TiltParams(BaseModel):
     model_config = {"extra": "forbid"}
     
     tilt_type: Literal['all', 'each'] = Field(default='all', description="Type of initial titls, can be either 'all' (1,2), or 'each' (N,2)")
-    init_tilts: List[List[int]] = Field(default=[[0, 0]], description="Initial value for (N,2) object tilts")
+    init_tilts: List[List[float]] = Field(default=[[0, 0]], description="Initial value for (N,2) object tilts")
 
 
 SOURCE_PARAMS_MAPPING = {
