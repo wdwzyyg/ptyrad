@@ -217,6 +217,7 @@ def print_system_info():
     vprint("### System information ###")
     
     # Operating system information
+    vprint(f"Platform: {platform.platform()}")
     vprint(f"Operating System: {platform.system()} {platform.release()}")
     vprint(f"OS Version: {platform.version()}")
     vprint(f"Machine: {platform.machine()}")
