@@ -69,10 +69,11 @@ def set_accelerator():
         vprint(f"Accelerator.mixed_precision  = {accelerator.mixed_precision}")
         
         # Check if the number of processes exceeds available GPUs
-        if accelerator.num_processes > torch.cuda.device_count():
-            vprint(f"ERROR: The specified number of processes for 'accelerate' ({accelerator.num_processes}) exceeds the number of GPUs available ({torch.cuda.device_count()}).")
+        device_count = max(torch.cuda.device_count(), torch.mps.device_count())
+        if accelerator.num_processes > device_count:
+            vprint(f"ERROR: The specified number of processes for 'accelerate' ({accelerator.num_processes}) exceeds the number of GPUs available ({device_count}).")
             vprint("Please verify the following:")
-            vprint("  1. Check the number of GPUs available on your system using `nvidia-smi`.")
+            vprint("  1. Check the number of GPUs available on your system with `nvidia-smi` if you're using NVIDIA GPUs.")
             vprint("  2. If using a SLURM cluster, ensure your job script requests the correct number of GPUs (e.g., `--gres=gpu:<num_gpus>`).")
             vprint("  3. Ensure your environment is correctly configured to detect GPUs (e.g., CUDA drivers are installed and compatible).")
             raise ValueError("The number of processes exceeds the available GPUs. Please adjust your configuration.")
@@ -80,7 +81,7 @@ def set_accelerator():
         if accelerator.distributed_type == DistributedType.NO and accelerator.mixed_precision == "no":
             vprint("'accelerate' is available but NOT using distributed mode or mixed precision")
             vprint("If you want to utilize 'accelerate' for multiGPU or mixed precision, ")
-            vprint("Run `accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' -m ptyrad run <PTYRAD_ARGUMENTS>` in your terminal")
+            vprint("Run `accelerate launch --multi_gpu --num_processes=2 --mixed_precision='no' -m ptyrad run <PTYRAD_ARGUMENTS> --gpuid 'acc'` in your terminal")
     except ImportError:
         vprint("### HuggingFace accelerator is not available, no multi-GPU or mixed-precision ###")
         accelerator = None

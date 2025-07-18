@@ -23,7 +23,7 @@ def run(args):
 
     # Set up accelerator for multiGPU/mixed-precision setting, 
     # note that these we need to call the command as:
-    # `accelerate launch --num_processes=2 --mixed_precision=fp16 ptyrad run <ARGUMENTS>`
+    # `accelerate launch --num_processes=2 --mixed_precision=fp16 -m ptyrad run <PTYRAD_ARGUMENTS> --gpuid 'acc'`
     accelerator = set_accelerator() 
 
     print_system_info()
