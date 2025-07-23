@@ -175,7 +175,7 @@ class PtyRADSolver(object):
         vprint(" ")
         
         # Check error metric validity
-        valid_metrics = {"contrast", "loss"}
+        valid_metrics = {"contrast", "loss", "contrast_bw"}
         if error_metric not in valid_metrics:
             raise ValueError(f"Invalid error metric: '{error_metric}'. Expected one of {valid_metrics}.")
         
